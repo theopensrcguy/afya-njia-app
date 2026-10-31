@@ -84,11 +84,18 @@ The Simulator shares your Mac's network, so the default address `http://127.0.0.
 | `lib/models/` | `Staff`, `Product` | Turn JSON from the API into typed Dart objects, so typos become compile errors instead of crashes. |
 | `lib/features/auth/pin_screen.dart` | Screen 5: pick person, 4-digit PIN | The 4th digit submits automatically, saving a tap many times a day. Wrong PIN clears and shows the server's message. |
 | `lib/features/sale/cart.dart` | The basket's rules | Plain Dart, no widgets: can't add beyond stock, totals, the request body. Each basket carries a sale id made on the phone; if the network drops mid-sale the basket freezes and "Tuma tena" resends the same id, so a sale can never count twice. |
-| `lib/features/sale/counter_screen.dart` | Screen 2: search, basket, pay | Search waits for a 300 ms pause in typing (debounce). Only the basket panel redraws when the basket changes. Errors from shop rules show as red messages. |
-| `lib/features/home/home_screen.dart` | After login | Placeholder; the owner dashboard comes next. |
+| `lib/features/sale/counter_screen.dart` | Screen 2: search and add | Results get the whole screen; the basket is one slim bar at the bottom ("Kikapu · 2 bidhaa · TSh 600 · Lipa"), and rows already in it show − 2 + right on the row (tap the number to type an exact amount, e.g. 21). The list never re-orders, so the next tap always lands on the same medicine. Search waits for a 300 ms pause in typing. A misspelled search shows the closest product under "Je, ulimaanisha…?" with an amber border; it is only added when tapped. Leaving with a full basket asks first. |
+| `lib/features/sale/quantity_dialog.dart` | "How many?" keypad | Type 21 instead of tapping + 20 times. Checks stock before closing; 0 removes the item. |
+| `lib/features/sale/checkout_screen.dart` | Checkout | The full basket, quantities, discount, payment and "Kamilisha". Shares the same Cart object as the search screen. Network-uncertain sales freeze here with "Tuma tena". |
+| `lib/features/home/home_screen.dart` | After login (v0.2 "Mint Laini") | Money hidden by default (TSh ••••••) because the phone faces customers; the eye shows it and the choice is remembered. Owner: today's sales with a ring for the daily goal (tap the ring to set it), payment split, four tiles (Uza, Zamu, Muda, Kuagiza), the week/month chart and the latest 4 sales. Alerts live behind the bell; rarely used screens behind **Zaidi**, including Toka. Helper: his own sales only, Uza and Zamu. |
+| `lib/features/home/widgets/` | Home pieces | `target_ring.dart` (a CustomPainter: round-ended arc), `trend_card.dart` (loads `dashboard/trend` itself, caches week and month so switching is instant), `recent_sales_card.dart` (one card for the owner's and the helper's sales). |
+| `lib/features/sales/sales_list_screen.dart` | Today's sales | Owner sees everyone's, a helper only his own (the server decides). Tap a sale for its lines; "Futa" cancels it with a required reason. Cancelled sales stay, crossed out. |
+| `lib/features/shift/shift_screen.dart` | Shift and cash | Open with the cash in the drawer. While open: sales, payment split, cash expected in the drawer, and what needs attention. Close by counting the drawer; the gap shows live while typing and needs a reason if not zero. |
+| `lib/features/expiry/expiry_screen.dart` | Expiry alerts | Groups that don't overlap: already expired, 1–30, 31–60, 61–90 days, each with a count, the money at risk and what to do. One request, grouped on the phone. Owner only. |
+| `lib/features/stock/stock_alerts_screen.dart` | What to reorder | "Zimeisha (hazipo)" (0 in stock) kept apart from "Zinakaribia kuisha" (at or below the reorder level). Owner only. |
+| `lib/core/format.dart`, `lib/core/dialogs.dart` | Shared helpers | Times in local time, Swahili "time ago", dates and greetings, tolerant number reading; a text dialog that owns its controller (avoids the "used after disposed" crash). |
 
 ## Next steps
 
-1. Owner dashboard and helper's shift screen (screens 1 and 6)
-2. Receive stock (enter the 200 products and batches)
-3. Expiry alerts (screen 3) and shift cash check (screen 4)
+1. Receive stock screen (supplier deliveries after the first import)
+2. Server online with HTTPS, then TestFlight / APK for the pilot phones

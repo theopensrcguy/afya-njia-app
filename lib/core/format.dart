@@ -38,3 +38,30 @@ String timeAgo(DateTime d) {
 /// response()->json(null) into an empty object {}. Treat both as "none".
 Map<String, dynamic>? openShiftOrNull(dynamic data) =>
     data is Map<String, dynamic> && data.isNotEmpty ? data : null;
+
+const _weekdays = ['Jumatatu', 'Jumanne', 'Jumatano', 'Alhamisi', 'Ijumaa', 'Jumamosi', 'Jumapili'];
+const _months = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
+
+/// Short Swahili day names for chart labels, Monday first: J3 J4 J5 Al Ij J1 J2.
+const weekdayShort = ['J3', 'J4', 'J5', 'Al', 'Ij', 'J1', 'J2'];
+
+/// "Jumamosi, 31 Okt". DateTime.weekday is 1 (Monday) to 7 (Sunday).
+String swahiliDate(DateTime d) => '${_weekdays[d.weekday - 1]}, ${d.day} ${_months[d.month - 1]}';
+
+/// "Oktoba"-style month title for the chart.
+const monthNames = [
+  'Januari', 'Februari', 'Machi', 'Aprili', 'Mei', 'Juni',
+  'Julai', 'Agosti', 'Septemba', 'Oktoba', 'Novemba', 'Desemba',
+];
+
+/// Habari za asubuhi / mchana / jioni, by the phone's clock.
+String greeting([DateTime? now]) {
+  final h = (now ?? DateTime.now()).hour;
+  if (h < 12) return 'Habari za asubuhi';
+  if (h < 16) return 'Habari za mchana';
+  return 'Habari za jioni';
+}
+
+/// A sale's lines as one short line: "Paracetamol 500mg ×2, ORS ×1".
+String itemsSummary(List items) =>
+    items.map((i) => '${i['name']} ×${asInt(i['quantity'])}').join(', ');

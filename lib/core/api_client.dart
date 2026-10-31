@@ -52,6 +52,11 @@ class ApiClient {
     return _send(() => _http.post(uri, headers: _headers(), body: jsonEncode(body ?? {})));
   }
 
+  Future<dynamic> patch(String path, [Map<String, dynamic>? body]) {
+    final uri = Uri.parse('$apiBaseUrl/$path');
+    return _send(() => _http.patch(uri, headers: _headers(), body: jsonEncode(body ?? {})));
+  }
+
   Map<String, String> _headers() => {
         // Without this, Laravel answers errors with an HTML page instead of JSON.
         'Accept': 'application/json',
