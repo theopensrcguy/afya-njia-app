@@ -6,6 +6,7 @@ import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/units.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 
 /// Today's sales, newest first. The owner sees everyone's; a helper sees
@@ -29,7 +30,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
   String? _error;
 
   ApiClient get _api => widget.session.api;
-  bool get _isOwner => widget.session.user!.isOwner;
+  bool get _allSales => widget.session.user!.can(Perm.viewShopSales); // everyone's sales, or one's own
 
   @override
   void initState() {
@@ -58,7 +59,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
     final total = completed.fold<int>(0, (sum, s) => sum + asInt(s['total']));
 
     return Scaffold(
-      appBar: AppBar(title: Text(_isOwner ? 'Mauzo ya leo' : 'Mauzo yangu ya leo')),
+      appBar: AppBar(title: Text(_allSales ? 'Mauzo ya leo' : 'Mauzo yangu ya leo')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -108,7 +109,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
         subtitle: Text(
           '${soldAt != null ? formatTime(soldAt) : ''} · ${s['receipt_number']}'
           ' · ${paymentLabels[s['payment_method']] ?? s['payment_method']}'
-          '${_isOwner ? ' · $seller' : ''}'
+          '${_allSales ? ' · $seller' : ''}'
           '${voided ? '\nImefutwa: ${s['void_reason'] ?? ''}' : ''}',
           style: TextStyle(color: voided ? dangerRed : mutedText),
         ),

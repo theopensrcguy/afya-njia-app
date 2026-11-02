@@ -6,6 +6,7 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
@@ -32,6 +33,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
   String? _error;
 
   ApiClient get _api => widget.session.api;
+  bool _can(String p) => widget.session.user!.can(p);
 
   List<ProductUnit> get _units =>
       (((_p ?? const {})['units'] as List?) ?? const []).cast<Map<String, dynamic>>().map(ProductUnit.fromJson).toList();
@@ -138,6 +140,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                   const SizedBox(height: 14),
                   _historyCard(),
                   const SizedBox(height: 16),
+                  if (_can(Perm.adjustStock))
                   OutlinedButton.icon(
                     onPressed: _adjust,
                     icon: const Icon(Icons.tune),
@@ -174,7 +177,8 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
       ]),
       const SizedBox(height: 4),
       Text(describeStock(onHand, units), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-      Text('Jumla ${unitLabel(units.isEmpty ? '' : units.first.name, 2)} $onHand · thamani ${formatTsh(asInt(p['value_at_cost']))}',
+      Text('Jumla ${unitLabel(units.isEmpty ? '' : units.first.name, 2)} $onHand'
+          '${_can(Perm.viewCosts) ? ' · thamani ${formatTsh(asInt(p['value_at_cost']))}' : ''}',
           style: const TextStyle(color: mutedText, fontSize: 13)),
       const SizedBox(height: 12),
       ClipRRect(
@@ -188,7 +192,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
       ),
       const SizedBox(height: 6),
       InkWell(
-        onTap: _editReorderLevel,
+        onTap: _can(Perm.editPrices) ? _editReorderLevel : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(children: [
@@ -196,7 +200,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
               child: Text('Kiwango cha kuagiza: ${describeStock(reorder, units)}',
                   style: const TextStyle(fontSize: 13, color: mutedText)),
             ),
-            const Icon(Icons.edit_outlined, size: 18, color: mutedText),
+            if (_can(Perm.editPrices)) const Icon(Icons.edit_outlined, size: 18, color: mutedText),
           ]),
         ),
       ),
@@ -215,7 +219,8 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     return _card(children: [
       Row(children: [
         const Expanded(child: Text('Vipimo na bei', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-        TextButton.icon(onPressed: _editUnits, icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('Badilisha')),
+        if (_can(Perm.editPrices))
+          TextButton.icon(onPressed: _editUnits, icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('Badilisha')),
       ]),
       // Selling price against buying price, per unit. The cost is the last
       // delivery's cost × the unit's size; a red margin means selling at a loss.

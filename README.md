@@ -102,6 +102,9 @@ The Simulator shares your Mac's network, so the default address `http://127.0.0.
 | `lib/features/purchases/receive_line_screen.dart` | One delivered item | Product, then the packaging this delivery came in (the product's units, last time's packaging, or "+ Nyingine"), how many, batch, expiry as month + year chips, and the price per pack. Pre-filled from what this supplier sent last time; warns on short expiry and on buying above the selling price. |
 | `lib/features/purchases/purchases_screen.dart` | Mizigo | Owner: deliveries waiting for confirmation, each with lines, totals vs invoice, the invoice photo (pinch to zoom), and **Kataa** (reason) / **Thibitisha**. Helper: his own deliveries and their status. |
 
+| `lib/features/staff/staff_permissions_screen.dart` | Wafanyakazi na ruhusa (owner) | Each staff member with their permissions. A switch per permission, grouped (Mauzo, Mizigo, Hisa, Fedha, Simu). Switching one on asks **"mpaka lini?"**: today, 3 days, a week, a month, or until changed. One-tap bundles (Msaidizi, Msimamizi) and the full history. |
+| `lib/core/permissions.dart`, `lib/models/staff.dart` | Who may do what | `session.user!.can(Perm.viewStock)` decides which tiles, menu items and buttons appear. The list is re-read from `GET me` on every home load. The server enforces everything; the app only hides. |
+
 ### Invoice photo setup (once)
 `flutter pub add image_picker`, then add the camera permission text to `ios/Runner/Info.plist` (see the v0.4 install notes).
 

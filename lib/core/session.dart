@@ -88,6 +88,22 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-read who I am and what I may do now (the owner may have granted or
+  /// revoked something, or a "until Saturday" grant may have ended).
+  /// Quiet on failure: the old list stays and the server still enforces.
+  Future<void> refreshMe() async {
+    if (!isLoggedIn) return;
+    try {
+      final fresh = Staff.fromJson(await api.get('me') as Map<String, dynamic>);
+      final changed = fresh.permissions.join(',') != user?.permissions.join(',');
+      user = fresh;
+      await _storage.write(key: _userKey, value: jsonEncode(fresh.toJson()));
+      if (changed) notifyListeners(); // screens redraw with the new buttons
+    } on ApiException {
+      // offline or similar: keep what we had
+    }
+  }
+
   Future<void> logout() async {
     try {
       await api.post('logout');

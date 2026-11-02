@@ -58,6 +58,11 @@ class ApiClient {
     return _send(() => _http.patch(uri, headers: _headers(), body: jsonEncode(body ?? {})));
   }
 
+  Future<dynamic> delete(String path) {
+    final uri = Uri.parse('$apiBaseUrl/$path');
+    return _send(() => _http.delete(uri, headers: _headers()));
+  }
+
   Future<dynamic> put(String path, [Map<String, dynamic>? body]) {
     final uri = Uri.parse('$apiBaseUrl/$path');
     return _send(() => _http.put(uri, headers: _headers(), body: jsonEncode(body ?? {})));

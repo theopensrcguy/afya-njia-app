@@ -10,6 +10,7 @@ import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/ids.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import 'receive_line.dart';
 import 'receive_line_screen.dart';
@@ -44,7 +45,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   final String _deliveryId = randomId();
 
   ApiClient get _api => widget.session.api;
-  bool get _isOwner => widget.session.user!.isOwner;
+  /// Does my delivery count at once, or wait for someone to confirm it?
+  bool get _countsNow => widget.session.user!.can(Perm.receiveUnconfirmed);
   int get _total => _lines.fold(0, (t, l) => t + l.total);
 
   @override
@@ -110,13 +112,47 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     });
   }
 
+  /// Camera, or a photo already taken (the invoice may have been photographed
+  /// earlier; also the only way on the iOS Simulator, which has no camera).
   Future<void> _takePhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: cardColor,
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Piga picha sasa'),
+            onTap: () => Navigator.of(sheet).pop(ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Chagua kutoka picha'),
+            onTap: () => Navigator.of(sheet).pop(ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (source == null) return;
+
     try {
-      // Smaller than the camera's full size: readable, and quick on mobile data.
-      final file = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 60, maxWidth: 1600);
+      // Smaller than full size: still readable, and quick on mobile data.
+      final file = await ImagePicker().pickImage(source: source, imageQuality: 60, maxWidth: 1600);
       if (file != null && mounted) setState(() => _photoPath = file.path);
-    } on PlatformException {
-      _toast('Kamera haipatikani. Ruhusu kamera kwenye Settings.', error: true);
+    } on MissingPluginException {
+      // The camera is native code: added packages need a full rebuild, not hot restart.
+      _toast('Kamera haijawekwa kwenye app hii bado. Simamisha app (q) na uendeshe "flutter run" upya.', error: true);
+    } on PlatformException catch (e) {
+      _toast(
+        e.code.contains('access_denied')
+            ? 'Ruhusa ya kamera/picha imekataliwa. Fungua Settings › Afya Njia na uiruhusu.'
+            : 'Kamera haipatikani (${e.code}). Jaribu "Chagua kutoka picha".',
+        error: true,
+      );
+    } catch (e) {
+      // Never fail silently: say what happened.
+      _toast('Imeshindwa kupata picha: $e', error: true);
     }
   }
 
@@ -160,10 +196,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         context: context,
         builder: (dialog) => AlertDialog(
           icon: Icon(pending ? Icons.schedule_send : Icons.check_circle, color: brandGreen, size: 40),
-          title: Text(pending ? 'Imetumwa kwa mmiliki' : 'Mzigo umehifadhiwa'),
+          title: Text(pending ? 'Imetumwa kwa uthibitisho' : 'Mzigo umehifadhiwa'),
           content: Text([
             pending
-                ? 'Hisa itaongezeka baada ya mmiliki kuthibitisha.'
+                ? 'Hisa itaongezeka baada ya kuthibitishwa.'
                 : 'Hisa imeongezeka: bidhaa ${_lines.length}, ${formatTsh(_total)}.',
             if (photoFailed) 'Picha ya ankara haikutumwa (mtandao).',
           ].join('\n')),
@@ -245,13 +281,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(_isOwner ? 'Hisa inaongezeka mara moja.' : 'Hisa itaongezeka baada ya mmiliki kuthibitisha.',
+                Text(_countsNow ? 'Hisa inaongezeka mara moja.' : 'Hisa itaongezeka baada ya mzigo kuthibitishwa.',
                     style: const TextStyle(fontSize: 12, color: mutedText)),
                 const SizedBox(height: 6),
                 FilledButton(
                   onPressed: _saving || _lines.isEmpty ? null : _submit,
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-                  child: Text(_saving ? 'Inatuma…' : (_isOwner ? 'Hifadhi mzigo' : 'Tuma kwa mmiliki athibitishe')),
+                  child: Text(_saving ? 'Inatuma…' : (_countsNow ? 'Hifadhi mzigo' : 'Tuma uthibitishwe')),
                 ),
               ]),
             ),

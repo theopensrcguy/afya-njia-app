@@ -6,6 +6,7 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../devices/devices_screen.dart';
 import '../expiry/expiry_screen.dart';
@@ -14,6 +15,7 @@ import '../purchases/receive_screen.dart';
 import '../sale/counter_screen.dart';
 import '../sales/sales_list_screen.dart';
 import '../shift/shift_screen.dart';
+import '../staff/staff_permissions_screen.dart';
 import '../stock/stock_screen.dart';
 import 'widgets/recent_sales_card.dart';
 import 'widgets/target_ring.dart';
@@ -48,7 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tick = 0; // goes up on every refresh, so the chart reloads too
 
   ApiClient get _api => widget.session.api;
-  bool get _isOwner => widget.session.user!.isOwner;
+  /// What this person may do (the owner: everything). Buttons follow it;
+  /// the server enforces it.
+  bool _can(String permission) => widget.session.user!.can(permission);
+
+  /// The shop-wide view (today's total, goal ring, chart, alerts) or one's own.
+  bool get _shopView => _can(Perm.viewShopSales);
 
   @override
   void initState() {
@@ -64,13 +71,15 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _error = null);
     try {
       // Both requests at once: the screen waits for the slower one, not for both in a row.
+      // Permissions may have changed since last time (granted, revoked, expired).
+      await widget.session.refreshMe();
       final results = await Future.wait([
-        _isOwner ? _api.get('dashboard/today') : _api.get('sales'),
+        _shopView ? _api.get('dashboard/today') : _api.get('sales'),
         _api.get('shifts/current'),
       ]);
       if (!mounted) return;
       setState(() {
-        if (_isOwner) {
+        if (_shopView) {
           _today = results[0] as Map<String, dynamic>;
         } else {
           _mySales = (results[0] as List).cast<Map<String, dynamic>>();
@@ -118,10 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 18),
                     if (_error != null) _errorBox(),
                     if (_shift == null) _noShiftBanner(),
-                    _isOwner ? _ownerTodayCard() : _helperTodayCard(),
+                    _shopView ? _ownerTodayCard() : _helperTodayCard(),
                     const SizedBox(height: 14),
                     _tiles(),
-                    if (_isOwner) ...[
+                    if (_shopView) ...[
                       const SizedBox(height: 14),
                       TrendCard(api: _api, hidden: _hidden, refreshTick: _tick),
                     ],
@@ -150,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        if (_isOwner) _bell(),
+        if (_shopView) _bell(),
       ],
     );
   }
@@ -288,7 +297,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 progress: _hidden || target == null || target == 0 ? 0 : total / target,
                 centerText: target == null ? 'Weka' : (_hidden ? '••' : '$pct%'),
                 caption: target == null ? 'lengo' : 'ya lengo',
-                onTap: () => _setTarget(target),
+                // The daily goal is the owner's call (pharmacy settings are never delegated).
+                onTap: widget.session.user!.isOwner ? () => _setTarget(target) : null,
               ),
               const SizedBox(width: 18),
               Expanded(
@@ -381,15 +391,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final reorder = ((t['low_stock'] as List?) ?? const []).length;
 
     final tiles = <Widget>[
-      _tile(Icons.add_rounded, 'Uza sasa', () => _open(CounterScreen(session: widget.session)), primary: true),
+      if (_can(Perm.sell))
+        _tile(Icons.add_rounded, 'Uza sasa', () => _open(CounterScreen(session: widget.session)), primary: true),
       // Deliveries come in every week: stock in is as important as stock out.
-      _tile(Icons.local_shipping_outlined, 'Pokea mzigo', () => _open(ReceiveScreen(session: widget.session)),
-          color: const Color(0xFF7A5BC7)),
-      if (!_isOwner) ...[
+      if (_can(Perm.receive))
+        _tile(Icons.local_shipping_outlined, 'Pokea mzigo', () => _open(ReceiveScreen(session: widget.session)),
+            color: const Color(0xFF7A5BC7)),
+      if (!_shopView) ...[
         _tile(Icons.point_of_sale_outlined, 'Zamu', () => _open(ShiftScreen(session: widget.session)), color: brandGreen),
-        _tile(Icons.inventory_outlined, 'Mizigo yangu', () => _open(PurchasesScreen(session: widget.session)), color: brandGreen),
+        if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
+          _tile(Icons.inventory_outlined, _can(Perm.confirmDeliveries) ? 'Mizigo' : 'Mizigo yangu',
+              () => _open(PurchasesScreen(session: widget.session)), color: brandGreen),
       ],
-      if (_isOwner) ...[
+      if (_can(Perm.viewStock)) ...[
         _tile(Icons.hourglass_bottom_rounded, expiring > 0 ? 'Muda · $expiring' : 'Muda wa kuisha',
             () => _open(ExpiryScreen(session: widget.session)), color: const Color(0xFFD0533C)),
         _tile(Icons.inventory_2_outlined, reorder > 0 ? 'Kuagiza · $reorder' : 'Hisa',
@@ -454,7 +468,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _recentSales() {
     final List<Map<String, dynamic>> sales;
     final int count;
-    if (_isOwner) {
+    if (_shopView) {
       sales = (((_today ?? const {})['recent_sales'] as List?) ?? const []).cast<Map<String, dynamic>>();
       count = asInt(_today?['sales_count']);
     } else {
@@ -591,9 +605,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           children: [
             item(Icons.home_rounded, 'Nyumbani', null, active: true),
-            item(Icons.receipt_long_outlined, _isOwner ? 'Mauzo' : 'Mauzo yangu', () => _open(SalesListScreen(session: widget.session))),
+            item(Icons.receipt_long_outlined, _shopView ? 'Mauzo' : 'Mauzo yangu', () => _open(SalesListScreen(session: widget.session))),
             // Stock is used every day, next to sales; reports live under Zaidi.
-            if (_isOwner) item(Icons.inventory_2_outlined, 'Hisa', () => _open(StockScreen(session: widget.session))),
+            if (_can(Perm.viewStock)) item(Icons.inventory_2_outlined, 'Hisa', () => _open(StockScreen(session: widget.session))),
             item(Icons.more_horiz_rounded, 'Zaidi', _showMore),
           ],
         ),
@@ -621,17 +635,19 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Zamu na hesabu ya fedha'),
               onTap: () => go(sheet, ShiftScreen(session: widget.session)),
             ),
-            ListTile(
-              leading: const Icon(Icons.local_shipping_outlined),
-              title: Text(_isOwner ? 'Mizigo inayosubiri' : 'Mizigo yangu'),
-              onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
-            ),
-            if (_isOwner) ...[
+            if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
+              ListTile(
+                leading: const Icon(Icons.local_shipping_outlined),
+                title: Text(_can(Perm.confirmDeliveries) ? 'Mizigo inayosubiri' : 'Mizigo yangu'),
+                onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
+              ),
+            if (_can(Perm.viewStock))
               ListTile(
                 leading: const Icon(Icons.hourglass_bottom_rounded),
                 title: const Text('Muda wa kuisha'),
                 onTap: () => go(sheet, ExpiryScreen(session: widget.session)),
               ),
+            if (_can(Perm.viewShopSales))
               ListTile(
                 leading: const Icon(Icons.bar_chart_rounded),
                 title: const Text('Ripoti'),
@@ -641,12 +657,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ripoti zinakuja hivi karibuni.')));
                 },
               ),
+            if (_can(Perm.manageDevices))
               ListTile(
                 leading: const Icon(Icons.phonelink_lock),
                 title: const Text('Simu zinazoruhusiwa'),
                 onTap: () => go(sheet, DevicesScreen(session: widget.session)),
               ),
-            ],
+            // Never delegable: only the owner decides who may do what.
+            if (widget.session.user!.isOwner)
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined),
+                title: const Text('Wafanyakazi na ruhusa'),
+                subtitle: const Text('Toa au ondoa ruhusa, kwa muda au kudumu'),
+                onTap: () => go(sheet, StaffPermissionsScreen(session: widget.session)),
+              ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: dangerRed),

@@ -5,6 +5,7 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 
@@ -30,7 +31,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   bool _loading = true;
   String? _error;
 
-  bool get _isOwner => widget.session.user!.isOwner;
+  /// Whoever may confirm sees the waiting ones; others see their own.
+  bool get _canConfirm => widget.session.user!.can(Perm.confirmDeliveries);
 
   @override
   void initState() {
@@ -40,7 +42,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Future<void> _load() async {
     try {
-      final data = await widget.session.api.get('purchases', query: {if (_isOwner) 'status': 'pending'}) as List;
+      final data = await widget.session.api.get('purchases', query: {if (_canConfirm) 'status': 'pending'}) as List;
       if (mounted) setState(() => _items = data.cast<Map<String, dynamic>>());
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -59,7 +61,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isOwner ? 'Mizigo inayosubiri' : 'Mizigo yangu'), backgroundColor: pageBackground),
+      appBar: AppBar(title: Text(_canConfirm ? 'Mizigo inayosubiri' : 'Mizigo yangu'), backgroundColor: pageBackground),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -71,7 +73,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   if (_items.isEmpty && _error == null)
                     Padding(
                       padding: const EdgeInsets.only(top: 48),
-                      child: Text(_isOwner ? 'Hakuna mzigo unaosubiri.' : 'Bado hujarekodi mzigo.',
+                      child: Text(_canConfirm ? 'Hakuna mzigo unaosubiri.' : 'Bado hujarekodi mzigo.',
                           textAlign: TextAlign.center, style: const TextStyle(color: mutedText)),
                     ),
                   for (final p in _items) _card(p),
@@ -139,13 +141,16 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
   bool _busy = false;
 
   ApiClient get _api => widget.session.api;
-  bool get _isOwner => widget.session.user!.isOwner;
+  bool get _canConfirm => widget.session.user!.can(Perm.confirmDeliveries);
+
+  /// Four eyes: nobody confirms a delivery they recorded (the server refuses too).
+  bool get _mine => asInt(_p['received_by_id']) == widget.session.user!.id;
 
   @override
   void initState() {
     super.initState();
     // The photo is private on the server: fetched with the token, owner only.
-    if (_isOwner && _p['has_photo'] == true) _photo = _api.getBytes('purchases/${_p['id']}/photo');
+    if (_canConfirm && _p['has_photo'] == true) _photo = _api.getBytes('purchases/${_p['id']}/photo');
   }
 
   Future<void> _decide(bool accept) async {
@@ -237,7 +242,13 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                 ),
             ]),
           ),
-          if (_isOwner && pending) ...[
+          if (_canConfirm && pending && _mine)
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: Text('Huu ni mzigo uliourekodi mwenyewe: mtu mwingine ndiye athibitishe.',
+                  textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
+            ),
+          if (_canConfirm && pending && !_mine) ...[
             const SizedBox(height: 20),
             Row(children: [
               Expanded(

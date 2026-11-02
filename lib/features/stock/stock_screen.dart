@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
@@ -34,6 +35,10 @@ class _StockScreenState extends State<StockScreen> {
   String? _error;
 
   ApiClient get _api => widget.session.api;
+
+  /// Buying prices and stock value only with this permission (the server
+  /// leaves those fields out otherwise).
+  bool get _costs => widget.session.user!.can(Perm.viewCosts);
 
   // The search box sits under the big green card. When it's tapped, scroll it
   // to the top so the keyboard doesn't hide the results.
@@ -108,7 +113,7 @@ class _StockScreenState extends State<StockScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Hisa'), backgroundColor: pageBackground),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: !widget.session.user!.can(Perm.receive) ? null : FloatingActionButton.extended(
         onPressed: () async {
           final saved = await Navigator.of(context).push<bool>(
             MaterialPageRoute(builder: (_) => ReceiveScreen(session: widget.session)),
@@ -179,7 +184,8 @@ class _StockScreenState extends State<StockScreen> {
       'muda' => ('Hatarini: inaisha ndani ya siku 30 · bidhaa ${rows.length}', _sum(rows, 'expiring_value')),
       _ => ('Thamani ya hisa (bei ya kununua)', _sum(rows, 'value_at_cost')),
     };
-    final hazipo = _filter == 'hazipo';
+    // Without "Kuona gharama na faida" the big number is a count, not money.
+    final hazipo = _filter == 'hazipo' || !_costs;
 
     Widget stat(String value, String label, String filter) => Expanded(
           child: InkWell(
@@ -339,7 +345,7 @@ class _StockScreenState extends State<StockScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(describeStock(onHand, units), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-                Text(formatTsh(asInt(p['value_at_cost'])), style: const TextStyle(fontSize: 11, color: mutedText)),
+                if (_costs) Text(formatTsh(asInt(p['value_at_cost'])), style: const TextStyle(fontSize: 11, color: mutedText)),
               ],
             ),
           ],
