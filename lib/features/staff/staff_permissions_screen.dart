@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
+import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/session.dart';
 
@@ -38,18 +39,54 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
     }
   }
 
+  /// Name, then a PIN typed twice. They start as a helper with the defaults;
+  /// on the shop's phone they can sign in at once, on their own phone it
+  /// waits for approval under Simu (as for any new phone).
+  Future<void> _addPerson() async {
+    final name = await askText(context, title: 'Mfanyakazi mpya', label: 'Jina (litaonekana kwenye skrini ya PIN)', required: true);
+    if (name == null || !mounted) return;
+    final pin = await askText(context,
+        title: 'PIN ya $name', label: 'Tarakimu 4', helper: 'Si 1111 wala 1234', digitsOnly: true, required: true);
+    if (pin == null || !mounted) return;
+    final again = await askText(context, title: 'Rudia PIN', label: 'Tarakimu 4 tena', digitsOnly: true, required: true);
+    if (again == null || !mounted) return;
+    if (pin.length != 4 || pin != again) {
+      _toast(pin.length != 4 ? 'PIN lazima iwe tarakimu 4.' : 'PIN hazilingani. Jaribu tena.', error: true);
+      return;
+    }
+    try {
+      await widget.session.api.post('staff', {'name': name, 'pin': pin});
+      _toast('$name ameongezwa. Mwambie PIN yake mwenyewe, usiiandike popote.');
+      _load();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
+  void _toast(String text, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? dangerRed : null));
+  }
+
   @override
   Widget build(BuildContext context) {
     final staff = (((_data ?? const {})['staff'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final labels = _labels(_data);
     return Scaffold(
       appBar: AppBar(title: const Text('Wafanyakazi na ruhusa'), backgroundColor: pageBackground),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addPerson,
+        backgroundColor: brandGreen,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_alt_1),
+        label: const Text('Ongeza mfanyakazi'),
+      ),
       body: _data == null
           ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 96),
                 children: [
                   const Text(
                     'Mmiliki ana ruhusa zote daima. Hapa unawapa wafanyakazi ruhusa, kwa muda au kudumu, na kuziondoa wakati wowote.',
@@ -76,7 +113,15 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
                             padding: const EdgeInsets.all(14),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Row(children: [
-                                Expanded(child: Text('${s['name']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                                Expanded(
+                                  child: Text('${s['name']}',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: s['is_active'] == false ? mutedText : inkColor,
+                                      )),
+                                ),
+                                if (s['is_active'] == false) _grantChip('Amesimamishwa', false),
                                 const Icon(Icons.chevron_right),
                               ]),
                               const SizedBox(height: 6),
@@ -218,6 +263,74 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
     );
   }
 
+  bool get _activeNow => _person['is_active'] != false;
+
+  Future<void> _changePin() async {
+    final pin = await askText(context,
+        title: 'PIN mpya ya ${_person['name']}', label: 'Tarakimu 4', helper: 'Si 1111 wala 1234', digitsOnly: true, required: true);
+    if (pin == null || !mounted) return;
+    if (pin.length != 4) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN lazima iwe tarakimu 4.'), backgroundColor: dangerRed));
+      return;
+    }
+    await _run(() => _api.patch('staff/${widget.staffId}/pin', {'pin': pin}), 'PIN imebadilishwa.');
+  }
+
+  /// Someone leaves: no sign-in anywhere, signed out on every phone now,
+  /// permissions ended, and the phones the owner ticks removed. Their own
+  /// phones are ticked; a phone others also use (the counter phone) is not.
+  Future<void> _deactivate() async {
+    final phones = (await _api.get('staff/${widget.staffId}/devices') as List)
+        .cast<Map<String, dynamic>>()
+        .where((d) => d['status'] != 'revoked')
+        .toList();
+    if (!mounted) return;
+    final remove = {for (final d in phones) if (d['shared'] != true) asInt(d['id'])};
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, setLocal) => AlertDialog(
+          title: Text('Simamisha ${_person['name']}?'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Hataweza kuingia, na atatolewa kwenye simu zote sasa hivi. Ruhusa zake zinaisha. '
+                  'Mauzo na historia yake vinabaki.'),
+              if (phones.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Ondoa pia simu hizi kwenye simu zinazoruhusiwa:', style: TextStyle(fontWeight: FontWeight.w700)),
+                for (final p in phones)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: remove.contains(asInt(p['id'])),
+                    onChanged: (v) => setLocal(() => v == true ? remove.add(asInt(p['id'])) : remove.remove(asInt(p['id']))),
+                    title: Text('${p['name']}'),
+                    subtitle: p['shared'] == true ? const Text('Inatumiwa na wengine pia (mf. simu ya duka)') : null,
+                  ),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(d).pop(false), child: const Text('Ghairi')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: dangerRed),
+              onPressed: () => Navigator.of(d).pop(true),
+              child: const Text('Simamisha'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await _run(
+      () => _api.post('staff/${widget.staffId}/deactivate', {'revoke_device_ids': remove.toList()}),
+      '${_person['name']} amesimamishwa.',
+    );
+  }
+
+  Future<void> _activate() =>
+      _run(() => _api.post('staff/${widget.staffId}/activate'), '${_person['name']} amerudi kazini (ruhusa za msaidizi).');
+
   Future<void> _history() async {
     final rows = (await _api.get('staff/${widget.staffId}/permission-history') as List).cast<Map<String, dynamic>>();
     if (!mounted) return;
@@ -267,13 +380,40 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
       appBar: AppBar(
         title: Text('${_person['name']}'),
         backgroundColor: pageBackground,
-        actions: [IconButton(tooltip: 'Historia', onPressed: _history, icon: const Icon(Icons.history))],
+        actions: [
+          IconButton(tooltip: 'Historia', onPressed: _history, icon: const Icon(Icons.history)),
+          PopupMenuButton<String>(
+            onSelected: (v) => switch (v) {
+              'pin' => _changePin(),
+              'off' => _deactivate(),
+              _ => _activate(),
+            },
+            itemBuilder: (_) => [
+              if (_activeNow) const PopupMenuItem(value: 'pin', child: Text('Badilisha PIN')),
+              if (_activeNow)
+                const PopupMenuItem(value: 'off', child: Text('Simamisha (ameondoka)', style: TextStyle(color: dangerRed)))
+              else
+                const PopupMenuItem(value: 'on', child: Text('Rudisha kazini')),
+            ],
+          ),
+        ],
       ),
       body: AbsorbPointer(
-        absorbing: _busy, // one change at a time
+        absorbing: _busy || !_activeNow, // one change at a time; nothing to switch while deactivated
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
           children: [
+            if (!_activeNow)
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: const Color(0xFFFDE7E4), borderRadius: BorderRadius.circular(16)),
+                child: const Text(
+                  'Amesimamishwa: hawezi kuingia kwenye simu yoyote. Historia yake yote imebaki. '
+                  'Menyu (⋮) › Rudisha kazini kumrudisha.',
+                  style: TextStyle(color: Color(0xFF8F1D14), fontWeight: FontWeight.w700),
+                ),
+              ),
             const Text('Weka kwa haraka', style: TextStyle(color: mutedText)),
             const SizedBox(height: 8),
             Row(children: [

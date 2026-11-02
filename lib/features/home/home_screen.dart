@@ -626,8 +626,12 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: cardColor,
       showDragHandle: true,
+      // By default a sheet stops at ~56% of the screen; the menu grew past
+      // that ("overflowed"). Let it take what it needs, and scroll on small phones.
+      isScrollControlled: true,
       builder: (sheet) => SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
@@ -681,6 +685,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ],
+         ),
         ),
       ),
     );
