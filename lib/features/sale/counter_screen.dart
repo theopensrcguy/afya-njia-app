@@ -229,6 +229,8 @@ class _CounterScreenState extends State<CounterScreen> {
     final offset = suggesting ? 1 : 0;
 
     return ListView.separated(
+      // Scrolling the results closes the keyboard, so the whole list is visible.
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: _results.length + offset,
       separatorBuilder: (context, index) => const SizedBox(height: 8),

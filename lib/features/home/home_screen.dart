@@ -9,6 +9,8 @@ import '../../core/money.dart';
 import '../../core/session.dart';
 import '../devices/devices_screen.dart';
 import '../expiry/expiry_screen.dart';
+import '../purchases/purchases_screen.dart';
+import '../purchases/receive_screen.dart';
 import '../sale/counter_screen.dart';
 import '../sales/sales_list_screen.dart';
 import '../shift/shift_screen.dart';
@@ -380,7 +382,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final tiles = <Widget>[
       _tile(Icons.add_rounded, 'Uza sasa', () => _open(CounterScreen(session: widget.session)), primary: true),
-      _tile(Icons.point_of_sale_outlined, 'Zamu', () => _open(ShiftScreen(session: widget.session)), color: brandGreen),
+      // Deliveries come in every week: stock in is as important as stock out.
+      _tile(Icons.local_shipping_outlined, 'Pokea mzigo', () => _open(ReceiveScreen(session: widget.session)),
+          color: const Color(0xFF7A5BC7)),
+      if (!_isOwner) ...[
+        _tile(Icons.point_of_sale_outlined, 'Zamu', () => _open(ShiftScreen(session: widget.session)), color: brandGreen),
+        _tile(Icons.inventory_outlined, 'Mizigo yangu', () => _open(PurchasesScreen(session: widget.session)), color: brandGreen),
+      ],
       if (_isOwner) ...[
         _tile(Icons.hourglass_bottom_rounded, expiring > 0 ? 'Muda · $expiring' : 'Muda wa kuisha',
             () => _open(ExpiryScreen(session: widget.session)), color: const Color(0xFFD0533C)),
@@ -479,7 +487,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final sales = SalesListScreen(session: widget.session);
     final stock = StockScreen(session: widget.session, initialFilter: 'chache');
 
+    final waiting = asInt(t['pending_purchases']);
+
     return [
+      // First: stock that arrived but isn't counted until the owner says so.
+      if (waiting > 0)
+        (
+          icon: Icons.local_shipping_outlined,
+          color: const Color(0xFF7A5BC7),
+          title: 'Mizigo $waiting inasubiri uthibitisho',
+          subtitle: 'Hisa yake bado haijaongezwa. Ithibitishe au ikatae.',
+          screen: PurchasesScreen(session: widget.session),
+        ),
       if (outOfStock.isNotEmpty)
         (icon: Icons.remove_shopping_cart_outlined, color: dangerRed, title: 'Bidhaa ${outOfStock.length} zimeisha (hazipo)', subtitle: _names(outOfStock), screen: stock),
       if (expiringBatches > 0)
@@ -601,6 +620,11 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.point_of_sale_outlined),
               title: const Text('Zamu na hesabu ya fedha'),
               onTap: () => go(sheet, ShiftScreen(session: widget.session)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.local_shipping_outlined),
+              title: Text(_isOwner ? 'Mizigo inayosubiri' : 'Mizigo yangu'),
+              onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
             ),
             if (_isOwner) ...[
               ListTile(

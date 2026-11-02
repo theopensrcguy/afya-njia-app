@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -69,10 +70,34 @@ class ApiClient {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
-  Future<dynamic> _send(Future<http.Response> Function() request) async {
-    final http.Response res;
+  /// Send one file as a form upload (the invoice photo). A longer timeout:
+  /// a photo on a slow connection takes much more than 15 seconds.
+  Future<dynamic> upload(String path, String field, String filePath) {
+    final uri = Uri.parse('$apiBaseUrl/$path');
+    return _send(() async {
+      final req = http.MultipartRequest('POST', uri)
+        // No JSON Content-Type here: MultipartRequest sets its own.
+        ..headers.addAll({'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'})
+        ..files.add(await http.MultipartFile.fromPath(field, filePath));
+      return http.Response.fromStream(await _http.send(req));
+    }, timeout: const Duration(seconds: 60));
+  }
+
+  /// Raw bytes, for files the server keeps private (the invoice photo): they
+  /// need the token, so Image.network can't fetch them by itself.
+  Future<Uint8List> getBytes(String path) async {
+    final uri = Uri.parse('$apiBaseUrl/$path');
+    final res = await _sendRaw(() => _http.get(uri, headers: {if (token != null) 'Authorization': 'Bearer $token'}),
+        const Duration(seconds: 30));
+    if (res.statusCode == 200) return res.bodyBytes;
+    if (res.statusCode == 401) onUnauthorized?.call();
+    throw ApiException('Imeshindwa kupakua faili (${res.statusCode}).', status: res.statusCode);
+  }
+
+  /// The network part shared by _send and getBytes: no internet, timeout.
+  Future<http.Response> _sendRaw(Future<http.Response> Function() request, Duration timeout) async {
     try {
-      res = await request().timeout(const Duration(seconds: 15));
+      return await request().timeout(timeout);
     } on SocketException {
       throw ApiException('Hakuna mtandao. Angalia Wi-Fi au data.', code: 'offline');
     } on TimeoutException {
@@ -80,6 +105,10 @@ class ApiClient {
     } on http.ClientException {
       throw ApiException('Imeshindwa kufikia seva.', code: 'offline');
     }
+  }
+
+  Future<dynamic> _send(Future<http.Response> Function() request, {Duration timeout = const Duration(seconds: 15)}) async {
+    final res = await _sendRaw(request, timeout);
 
     final dynamic data = res.body.isEmpty ? null : _tryDecode(res.body);
 

@@ -31,8 +31,12 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Afya Njia inatumia kamera kupiga picha ya ankara ya mzigo.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Afya Njia inaunganisha na seva ya duka kwenye mtandao huu.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Afya Njia inahifadhi picha ya ankara ya mzigo.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

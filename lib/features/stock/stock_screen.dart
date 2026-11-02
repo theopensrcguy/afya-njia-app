@@ -7,6 +7,7 @@ import '../../core/money.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
+import '../purchases/receive_screen.dart';
 import 'product_stock_screen.dart';
 
 /// "Hisa": every product, what's on the shelf and what it's worth.
@@ -34,10 +35,35 @@ class _StockScreenState extends State<StockScreen> {
 
   ApiClient get _api => widget.session.api;
 
+  // The search box sits under the big green card. When it's tapped, scroll it
+  // to the top so the keyboard doesn't hide the results.
+  final _searchKey = GlobalKey();
+  final _searchFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _searchToTop() {
+    // Wait for the keyboard to finish opening (the screen shrinks), then scroll.
+    Future.delayed(const Duration(milliseconds: 300), () {
+      final ctx = _searchKey.currentContext;
+      // After a wait, check the context we're about to use is still on screen.
+      if (ctx == null || !ctx.mounted || !_searchFocus.hasFocus) return;
+      Scrollable.ensureVisible(ctx, alignment: 0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    _searchFocus.addListener(() {
+      setState(() {}); // the bottom space below depends on focus
+      if (_searchFocus.hasFocus) _searchToTop();
+    });
   }
 
   Future<void> _load() async {
@@ -82,12 +108,28 @@ class _StockScreenState extends State<StockScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Hisa'), backgroundColor: pageBackground),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final saved = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => ReceiveScreen(session: widget.session)),
+          );
+          if (saved == true && mounted) _load();
+        },
+        backgroundColor: brandGreen,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.local_shipping_outlined),
+        label: const Text('Pokea mzigo'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                // Scrolling the list closes the keyboard, like most apps.
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                // While searching, room at the bottom so even 1 result can be
+                // scrolled up under the search box.
+                padding: EdgeInsets.fromLTRB(20, 4, 20, _searchFocus.hasFocus ? MediaQuery.of(context).size.height * 0.6 : 96),
                 children: [
                   if (_error != null)
                     Padding(
@@ -99,9 +141,22 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                   if (_data != null) _summary(),
                   const SizedBox(height: 14),
-                  TextField(
-                    onChanged: (v) => setState(() => _query = v),
-                    decoration: const InputDecoration(labelText: 'Tafuta dawa', prefixIcon: Icon(Icons.search)),
+                  // The key is on this padding, not the TextField: scrolling to it
+                  // leaves 12px above the box for the floating "Tafuta dawa" label,
+                  // which sits half above the box's top edge and was being cut off.
+                  Padding(
+                    key: _searchKey,
+                    padding: const EdgeInsets.only(top: 12),
+                    child: TextField(
+                        focusNode: _searchFocus,
+                        textInputAction: TextInputAction.search,
+                        onChanged: (v) {
+                          setState(() => _query = v);
+                          // Fewer results = shorter list: keep the box at the top.
+                          _searchToTop();
+                        },
+                        decoration: const InputDecoration(labelText: 'Tafuta dawa', prefixIcon: Icon(Icons.search)),
+                      ),
                   ),
                   const SizedBox(height: 12),
                   _chips(),
@@ -223,9 +278,14 @@ class _StockScreenState extends State<StockScreen> {
   Widget _list() {
     final rows = _rows;
     if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Text('Hakuna bidhaa hapa.', textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
+      final q = _query.trim();
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Text(
+          q.isEmpty ? 'Hakuna bidhaa hapa.' : 'Hakuna "$q"${_filter == 'zote' ? '' : ' kwenye kundi hili'}.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: mutedText),
+        ),
       );
     }
     return Container(

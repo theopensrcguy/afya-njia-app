@@ -98,6 +98,13 @@ The Simulator shares your Mac's network, so the default address `http://127.0.0.
 | `lib/core/units.dart` | Units helpers | Swahili unit names (tablet → kidonge/vidonge), `describeStock` ("33 kadi + 6"), and joining a sale's batch pieces back into what was sold ("2 kadi"). |
 | `lib/core/format.dart`, `lib/core/dialogs.dart` | Shared helpers | Times in local time, Swahili "time ago", dates and greetings, tolerant number reading; a text dialog that owns its controller (avoids the "used after disposed" crash). |
 
+| `lib/features/purchases/receive_screen.dart` | Pokea mzigo | Supplier chips (+ Mpya), optional invoice number and photo, the items, and the total checked against the invoice's total. The owner's delivery counts at once; the helper's is sent for confirmation. A delivery id made on the phone means pressing save again after a network drop never records it twice. |
+| `lib/features/purchases/receive_line_screen.dart` | One delivered item | Product, then the packaging this delivery came in (the product's units, last time's packaging, or "+ Nyingine"), how many, batch, expiry as month + year chips, and the price per pack. Pre-filled from what this supplier sent last time; warns on short expiry and on buying above the selling price. |
+| `lib/features/purchases/purchases_screen.dart` | Mizigo | Owner: deliveries waiting for confirmation, each with lines, totals vs invoice, the invoice photo (pinch to zoom), and **Kataa** (reason) / **Thibitisha**. Helper: his own deliveries and their status. |
+
+### Invoice photo setup (once)
+`flutter pub add image_picker`, then add the camera permission text to `ios/Runner/Info.plist` (see the v0.4 install notes).
+
 ## Next steps
 
 1. Receive stock screen (supplier deliveries after the first import)

@@ -37,6 +37,15 @@ class AfyaNjiaApp extends StatelessWidget {
       title: 'Afya Njia',
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
+      // Tap anywhere outside a text box to close the keyboard, on every screen.
+      // (iPhone number keyboards have no "Done" key, so without this the only
+      // way out was the back button.) Buttons still get their taps: the
+      // innermost widget wins the tap, this only sees taps on empty space.
+      builder: (context, child) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: child,
+      ),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: brandGreen, primary: brandGreen),
