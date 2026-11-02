@@ -1,5 +1,7 @@
 // Small helpers for showing server data, shared by every screen.
 
+import 'units.dart';
+
 const paymentLabels = {'cash': 'Taslimu', 'mobile': 'Simu', 'insurance': 'Bima'};
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -62,6 +64,12 @@ String greeting([DateTime? now]) {
   return 'Habari za jioni';
 }
 
-/// A sale's lines as one short line: "Paracetamol 500mg ×2, ORS ×1".
-String itemsSummary(List items) =>
-    items.map((i) => '${i['name']} ×${asInt(i['quantity'])}').join(', ');
+/// A sale's lines as one short line: "Paracetamol 500mg ×2 kadi, ORS ×1".
+/// Items are {name, quantity, unit?}; the unit is left out when it's the base
+/// unit's default "tablet"-type name, to keep the line short.
+String itemsSummary(List items) => items.map((i) {
+      final q = asInt(i['quantity']);
+      final unit = '${i['unit'] ?? ''}'.toLowerCase();
+      final plain = unit.isEmpty || const {'tablet', 'capsule', 'kidonge'}.contains(unit);
+      return '${i['name']} ×$q${plain ? '' : ' ${unitLabel(unit, q)}'}';
+    }).join(', ');

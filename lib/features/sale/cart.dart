@@ -3,13 +3,19 @@ import 'package:flutter/foundation.dart';
 import '../../core/ids.dart';
 import '../../models/product.dart';
 
+/// One product in the basket, sold in ONE unit (kidonge, kadi or boksi).
+/// [quantity] counts that unit: 2 kadi, not 20 tablets.
 class CartLine {
-  CartLine(this.product, this.quantity);
+  CartLine(this.product, this.unit, this.quantity);
 
   final Product product;
+  ProductUnit unit;
   int quantity;
 
-  int get lineTotal => product.unitPrice * quantity;
+  int get lineTotal => unit.price * quantity;
+
+  /// What leaves the shelf, in base units: 2 kadi of 10 = 20.
+  int get baseQuantity => unit.baseQuantity * quantity;
 }
 
 /// The basket for one sale, kept OUT of the screen on purpose.
@@ -47,14 +53,38 @@ class Cart extends ChangeNotifier {
   int get subtotal => _lines.values.fold(0, (sum, line) => sum + line.lineTotal);
   int get total => (subtotal - discount).clamp(0, subtotal);
 
+  /// How many of the line's unit (2 kadi = 2). 0 if not in the basket.
   int quantityOf(int productId) => _lines[productId]?.quantity ?? 0;
+
+  /// The unit this product is being sold in (null if not in the basket).
+  ProductUnit? unitOf(int productId) => _lines[productId]?.unit;
+
+  /// Most of [unit] the shelf allows: 336 tablets = 33 kadi of 10.
+  static int maxOf(Product product, ProductUnit unit) => product.onHand ~/ unit.baseQuantity;
 
   /// Returns false if there isn't enough stock to add one more (or the basket is frozen).
   bool add(Product product, [int qty = 1]) {
     if (!canEdit) return false;
-    final current = quantityOf(product.id);
-    if (current + qty > product.onHand) return false;
-    _lines[product.id] = CartLine(product, current + qty);
+    final line = _lines[product.id];
+    final unit = line?.unit ?? product.defaultUnit;
+    final next = (line?.quantity ?? 0) + qty;
+    if (next > maxOf(product, unit)) return false;
+    _lines[product.id] = CartLine(product, unit, next);
+    notifyListeners();
+    return true;
+  }
+
+  /// Switch kidonge ↔ kadi ↔ boksi. Keeps the number if the shelf allows it,
+  /// otherwise lowers it to what's there. False if not even one fits.
+  bool setUnit(int productId, ProductUnit unit) {
+    if (!canEdit) return false;
+    final line = _lines[productId];
+    if (line == null) return false;
+    final max = maxOf(line.product, unit);
+    if (max == 0) return false;
+    line.unit = unit;
+    line.quantity = line.quantity.clamp(1, max);
+    _clampDiscount();
     notifyListeners();
     return true;
   }
@@ -66,7 +96,7 @@ class Cart extends ChangeNotifier {
     if (line == null) return false;
     if (qty <= 0) {
       _lines.remove(productId);
-    } else if (qty > line.product.onHand) {
+    } else if (qty > maxOf(line.product, line.unit)) {
       return false;
     } else {
       line.quantity = qty;
@@ -120,7 +150,13 @@ class Cart extends ChangeNotifier {
   Map<String, dynamic> toRequest() => {
         'client_uuid': saleId,
         'items': [
-          for (final line in _lines.values) {'product_id': line.product.id, 'quantity': line.quantity},
+          for (final line in _lines.values)
+            {
+              'product_id': line.product.id,
+              'quantity': line.quantity,
+              // The server charges this unit's price and takes quantity × size from stock.
+              if (line.unit.id != null) 'unit_id': line.unit.id,
+            },
         ],
         'payment_method': paymentMethod,
         'discount': discount,

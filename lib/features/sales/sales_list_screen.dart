@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
+import '../../core/units.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
 
@@ -120,7 +121,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   void _showDetail(Map<String, dynamic> s) {
     final voided = _isVoided(s);
-    final items = ((s['items'] as List?) ?? const []).cast<Map>();
+    // One line per batch on the server; shown as sold: "Paracetamol × 2 kadi".
+    final items = mergeSaleItems((s['items'] as List?) ?? const []);
     final discount = asInt(s['discount']);
 
     showModalBottomSheet<void>(
@@ -138,13 +140,12 @@ class _SalesListScreenState extends State<SalesListScreen> {
               Text('Na ${(s['user'] as Map?)?['name'] ?? ''} · ${paymentLabels[s['payment_method']] ?? s['payment_method']}',
                   style: const TextStyle(color: mutedText)),
               const Divider(height: 24),
-              // One line per batch on the server; show it as the helper thinks of it.
               for (final i in items)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      Expanded(child: Text('${(i['product'] as Map?)?['name'] ?? ''}  × ${asInt(i['quantity'])}')),
+                      Expanded(child: Text('${i['name']}  × ${i['quantity']} ${unitLabel(i['unit'] as String?, i['quantity'] as int)}')),
                       Text(formatTsh(asInt(i['line_total']))),
                     ],
                   ),

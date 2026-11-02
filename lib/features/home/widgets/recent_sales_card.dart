@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/brand.dart';
 import '../../../core/format.dart';
 import '../../../core/money.dart';
+import '../../../core/units.dart';
 
 /// "Mauzo ya karibuni": the last few sales, newest first.
 ///
@@ -25,20 +26,13 @@ class RecentSalesCard extends StatelessWidget {
 
   /// GET sales returns full sales (items with nested product); make them
   /// look like dashboard/today's recent_sales so one card draws both.
-  static Map<String, dynamic> fromSaleJson(Map<String, dynamic> s) {
-    final byName = <String, int>{};
-    for (final line in ((s['items'] as List?) ?? const []).cast<Map>()) {
-      final name = '${(line['product'] as Map?)?['name'] ?? '?'}';
-      byName[name] = (byName[name] ?? 0) + asInt(line['quantity']);
-    }
-    return {
-      'sold_at': s['sold_at'],
-      'total': s['total'],
-      'payment_method': s['payment_method'],
-      'user': (s['user'] as Map?)?['name'] ?? '',
-      'items': [for (final e in byName.entries) {'name': e.key, 'quantity': e.value}],
-    };
-  }
+  static Map<String, dynamic> fromSaleJson(Map<String, dynamic> s) => {
+        'sold_at': s['sold_at'],
+        'total': s['total'],
+        'payment_method': s['payment_method'],
+        'user': (s['user'] as Map?)?['name'] ?? '',
+        'items': mergeSaleItems((s['items'] as List?) ?? const []),
+      };
 
   @override
   Widget build(BuildContext context) {

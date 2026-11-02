@@ -7,6 +7,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/units.dart';
 import '../../models/product.dart';
 import 'cart.dart';
 import 'checkout_screen.dart';
@@ -89,7 +90,13 @@ class _CounterScreenState extends State<CounterScreen> {
     if (_cart.add(product)) {
       HapticFeedback.selectionClick(); // feel the tap without looking up
     } else {
-      _showMessage('Hisa haitoshi: ${product.name} (zilizopo ${product.onHand}).', isError: true);
+      _showMessage('Hisa haitoshi: ${product.name} (zilizopo ${describeStock(product.onHand, product.units)}).', isError: true);
+    }
+  }
+
+  void _changeUnit(Product p, ProductUnit unit) {
+    if (!_cart.setUnit(p.id, unit)) {
+      _showMessage('Hakuna ${unitLabel(unit.name)} nzima ya ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).', isError: true);
     }
   }
 
@@ -242,10 +249,12 @@ class _CounterScreenState extends State<CounterScreen> {
         final outOfStock = p.onHand == 0;
         final stockText = outOfStock
             ? 'Hazipo (zimeisha)'
-            : 'Hisa: ${p.onHand}${p.lowStock ? ' · chini' : ''}'
+            : 'Hisa: ${describeStock(p.onHand, p.units)}${p.lowStock ? ' · chini' : ''}'
                 '${p.nextExpiry != null ? ' · inaisha ${_monthYear(p.nextExpiry!)}' : ''}';
 
         final inBasket = _cart.quantityOf(p.id);
+        // The price shown is for the unit being sold (or the one a tap would add).
+        final unit = _cart.unitOf(p.id) ?? p.defaultUnit;
 
         return Material(
           color: Colors.white,
@@ -275,7 +284,8 @@ class _CounterScreenState extends State<CounterScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: Text(formatTsh(p.unitPrice), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        child: Text('${formatTsh(unit.price)} / ${unitLabel(unit.name)}',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ],
                   ),
@@ -294,12 +304,36 @@ class _CounterScreenState extends State<CounterScreen> {
                       if (inBasket > 0) _stepper(p, inBasket),
                     ],
                   ),
+                  // In the basket and sold in more than one way: pick kidonge / kadi / boksi.
+                  if (inBasket > 0 && p.units.length > 1) _unitChips(p, unit),
                 ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// [Kidonge 50] [Kadi 500] [Boksi 4,500]: each unit with its own price.
+  Widget _unitChips(Product p, ProductUnit current) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, right: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          for (final u in p.units)
+            ChoiceChip(
+              label: Text('${unitLabel(u.name)} · ${formatTsh(u.price)}'),
+              selected: u.sameAs(current),
+              selectedColor: mintSoft,
+              showCheckmark: false,
+              labelStyle: TextStyle(fontWeight: u.sameAs(current) ? FontWeight.w800 : FontWeight.w500),
+              onSelected: _cart.canEdit ? (_) => _changeUnit(p, u) : null,
+            ),
+        ],
+      ),
     );
   }
 
@@ -339,10 +373,10 @@ class _CounterScreenState extends State<CounterScreen> {
   }
 
   Future<void> _typeQuantity(Product p, int current) async {
-    final value = await askQuantity(context, p, current);
+    final value = await askQuantity(context, p, current, unit: _cart.unitOf(p.id));
     if (value == null || !mounted) return;
     if (!_cart.setQuantity(p.id, value)) {
-      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${p.onHand}).', isError: true);
+      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).', isError: true);
     }
   }
 

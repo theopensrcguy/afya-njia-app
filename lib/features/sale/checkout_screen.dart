@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/money.dart';
+import '../../core/units.dart';
 import 'cart.dart';
 import 'quantity_dialog.dart';
 
@@ -100,10 +101,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _typeQuantity(CartLine line) async {
-    final value = await askQuantity(context, line.product, line.quantity);
+    final value = await askQuantity(context, line.product, line.quantity, unit: line.unit);
     if (value == null || !mounted) return;
     if (!_cart.setQuantity(line.product.id, value)) {
-      _showMessage('Hisa haitoshi: ${line.product.name} (zilizopo ${line.product.onHand}).');
+      _showMessage('Hisa haitoshi: ${line.product.name} (zilizopo ${describeStock(line.product.onHand, line.product.units)}).');
     }
   }
 
@@ -186,7 +187,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text('${formatTsh(p.unitPrice)} × ${line.quantity}', style: const TextStyle(fontSize: 12, color: mutedText)),
+                Text('${formatTsh(line.unit.price)} × ${line.quantity} ${unitLabel(line.unit.name, line.quantity)}',
+                    style: const TextStyle(fontSize: 12, color: mutedText)),
               ],
             ),
           ),
@@ -211,7 +213,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             onPressed: _cart.canEdit
                 ? () {
                     if (!_cart.setQuantity(p.id, line.quantity + 1)) {
-                      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${p.onHand}).');
+                      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).');
                     }
                   }
                 : null,

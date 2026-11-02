@@ -12,7 +12,7 @@ import '../expiry/expiry_screen.dart';
 import '../sale/counter_screen.dart';
 import '../sales/sales_list_screen.dart';
 import '../shift/shift_screen.dart';
-import '../stock/stock_alerts_screen.dart';
+import '../stock/stock_screen.dart';
 import 'widgets/recent_sales_card.dart';
 import 'widgets/target_ring.dart';
 import 'widgets/trend_card.dart';
@@ -385,7 +385,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _tile(Icons.hourglass_bottom_rounded, expiring > 0 ? 'Muda · $expiring' : 'Muda wa kuisha',
             () => _open(ExpiryScreen(session: widget.session)), color: const Color(0xFFD0533C)),
         _tile(Icons.inventory_2_outlined, reorder > 0 ? 'Kuagiza · $reorder' : 'Hisa',
-            () => _open(StockAlertsScreen(session: widget.session)), color: const Color(0xFFC98A00)),
+            () => _open(StockScreen(session: widget.session, initialFilter: reorder > 0 ? 'chache' : 'zote')),
+            color: const Color(0xFFC98A00)),
       ],
     ];
 
@@ -476,7 +477,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final expiring = (t['expiring_30_days'] as Map?) ?? const {};
     final expiringBatches = asInt(expiring['batches']);
     final sales = SalesListScreen(session: widget.session);
-    final stock = StockAlertsScreen(session: widget.session);
+    final stock = StockScreen(session: widget.session, initialFilter: 'chache');
 
     return [
       if (outOfStock.isNotEmpty)
@@ -572,12 +573,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             item(Icons.home_rounded, 'Nyumbani', null, active: true),
             item(Icons.receipt_long_outlined, _isOwner ? 'Mauzo' : 'Mauzo yangu', () => _open(SalesListScreen(session: widget.session))),
-            if (_isOwner)
-              item(Icons.bar_chart_rounded, 'Ripoti', () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Ripoti zinakuja hivi karibuni.')),
-                );
-              }),
+            // Stock is used every day, next to sales; reports live under Zaidi.
+            if (_isOwner) item(Icons.inventory_2_outlined, 'Hisa', () => _open(StockScreen(session: widget.session))),
             item(Icons.more_horiz_rounded, 'Zaidi', _showMore),
           ],
         ),
@@ -612,9 +609,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => go(sheet, ExpiryScreen(session: widget.session)),
               ),
               ListTile(
-                leading: const Icon(Icons.inventory_2_outlined),
-                title: const Text('Hisa za kuagiza'),
-                onTap: () => go(sheet, StockAlertsScreen(session: widget.session)),
+                leading: const Icon(Icons.bar_chart_rounded),
+                title: const Text('Ripoti'),
+                subtitle: const Text('Inakuja hivi karibuni'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ripoti zinakuja hivi karibuni.')));
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.phonelink_lock),

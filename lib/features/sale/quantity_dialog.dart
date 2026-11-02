@@ -2,26 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/brand.dart';
+import '../../core/units.dart';
 import '../../models/product.dart';
+import 'cart.dart';
 
 /// "How many?" with a number keypad: for quantities like 21 capsules (a 7-day
 /// course), where tapping + twenty times is slow and easy to get wrong.
 ///
-/// Checks stock before closing, so the basket never holds more than is on the
-/// shelf. Returns the new quantity (0 = remove), or null if cancelled.
-/// Used by both the search screen and the checkout screen.
-Future<int?> askQuantity(BuildContext context, Product product, int current) {
+/// The number is in [unit] (kadi, boksi…). Checks stock before closing, so the
+/// basket never holds more than is on the shelf. Returns the new quantity
+/// (0 = remove), or null if cancelled. Used by the search and checkout screens.
+Future<int?> askQuantity(BuildContext context, Product product, int current, {ProductUnit? unit}) {
   return showDialog<int>(
     context: context,
-    builder: (context) => _QuantityDialog(product: product, current: current),
+    builder: (context) => _QuantityDialog(product: product, current: current, unit: unit ?? product.defaultUnit),
   );
 }
 
 class _QuantityDialog extends StatefulWidget {
-  const _QuantityDialog({required this.product, required this.current});
+  const _QuantityDialog({required this.product, required this.current, required this.unit});
 
   final Product product;
   final int current;
+  final ProductUnit unit;
 
   @override
   State<_QuantityDialog> createState() => _QuantityDialogState();
@@ -46,8 +49,9 @@ class _QuantityDialogState extends State<_QuantityDialog> {
 
   void _save() {
     final value = int.tryParse(_controller.text.trim()) ?? 0;
-    if (value > widget.product.onHand) {
-      setState(() => _error = 'Zilizopo ni ${widget.product.onHand} tu.');
+    final max = Cart.maxOf(widget.product, widget.unit);
+    if (value > max) {
+      setState(() => _error = 'Zinapatikana $max ${unitLabel(widget.unit.name, max)} tu.');
       return;
     }
     Navigator.of(context).pop(value);
@@ -56,6 +60,7 @@ class _QuantityDialogState extends State<_QuantityDialog> {
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
+    final u = widget.unit;
     return AlertDialog(
       title: Text(p.name),
       content: TextField(
@@ -70,8 +75,8 @@ class _QuantityDialogState extends State<_QuantityDialog> {
           if (_error != null) setState(() => _error = null);
         },
         decoration: InputDecoration(
-          labelText: 'Idadi (${p.baseUnit})',
-          helperText: 'Zilizopo: ${p.onHand} · 0 = ondoa',
+          labelText: 'Idadi (${unitLabel(u.name, 2)})',
+          helperText: 'Zilizopo: ${describeStock(p.onHand, p.units)} · 0 = ondoa',
           errorText: _error,
           errorStyle: const TextStyle(color: dangerRed),
         ),
