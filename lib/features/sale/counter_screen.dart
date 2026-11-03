@@ -394,13 +394,18 @@ class _CounterScreenState extends State<CounterScreen> {
           Text('zinazouzwa sana ${_parts[_part] ?? 'sasa'}', style: const TextStyle(fontSize: 12, color: mutedText)),
         ]),
         const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 3,
+        GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 1.35,
+          // A fixed height that grows with the phone's text size (Settings ›
+          // Display › Text Size), instead of a width:height ratio: with bigger
+          // text, a ratio left the price no room ("overflowed by 1.8 pixels").
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            mainAxisExtent: MediaQuery.textScalerOf(context).scale(96),
+          ),
           children: [
             for (final (p, usual) in _haraka)
               Builder(builder: (context) {
