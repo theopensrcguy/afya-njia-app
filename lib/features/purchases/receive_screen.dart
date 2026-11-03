@@ -12,6 +12,7 @@ import '../../core/ids.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import 'new_product.dart';
 import 'receive_line.dart';
 import 'receive_line_screen.dart';
 
@@ -46,7 +47,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   ApiClient get _api => widget.session.api;
   /// Does my delivery count at once, or wait for someone to confirm it?
-  bool get _countsNow => widget.session.user!.can(Perm.receiveUnconfirmed);
+  /// A new product I may not create on my own (create_products + edit_prices)
+  /// makes it wait too: it is checked together with the stock (the server decides the same way).
+  bool get _countsNow {
+    final me = widget.session.user!;
+    final mayCreate = me.can(Perm.createProducts) && me.can(Perm.editPrices);
+    return me.can(Perm.receiveUnconfirmed) && (mayCreate || _drafts.isEmpty);
+  }
+
+  /// New products on this delivery, once each (two batches share one).
+  List<NewProductDraft> get _drafts {
+    final seen = <NewProductDraft>{};
+    return [for (final l in _lines) if (l.newProduct != null && seen.add(l.newProduct!)) l.newProduct!];
+  }
   int get _total => _lines.fold(0, (t, l) => t + l.total);
 
   @override
@@ -100,6 +113,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         supplierId: _supplierId,
         supplierName: _supplierName,
         initial: index == null ? null : _lines[index],
+        canPrice: widget.session.user!.can(Perm.editPrices),
+        drafts: _drafts,
       ),
     ));
     if (line == null || !mounted) return;
@@ -199,7 +214,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           title: Text(pending ? 'Imetumwa kwa uthibitisho' : 'Mzigo umehifadhiwa'),
           content: Text([
             pending
-                ? 'Hisa itaongezeka baada ya kuthibitishwa.'
+                ? (_drafts.isEmpty
+                    ? 'Hisa itaongezeka baada ya kuthibitishwa.'
+                    : 'Hisa itaongezeka baada ya kuthibitishwa. Bidhaa mpya ${_drafts.length} zitaanza kuuzwa zikithibitishwa.')
                 : 'Hisa imeongezeka: bidhaa ${_lines.length}, ${formatTsh(_total)}.',
             if (photoFailed) 'Picha ya ankara haikutumwa (mtandao).',
           ].join('\n')),
@@ -374,6 +391,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 Text(l.describe(), style: const TextStyle(fontSize: 13)),
                 const SizedBox(height: 6),
                 Wrap(spacing: 6, runSpacing: 4, children: [
+                  if (l.newProduct != null) tag(l.newProduct!.hasPrices ? 'Bidhaa mpya' : 'Bidhaa mpya · bila bei'),
                   tag('Batch ${l.batch}'),
                   tag('Inaisha ${l.expiryText}'),
                   tag('${formatTsh(l.packCost)} kila moja'),
