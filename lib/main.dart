@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/api_client.dart';
 import 'core/brand.dart';
 import 'core/session.dart';
+import 'features/auth/change_pin_screen.dart';
 import 'features/auth/pin_screen.dart';
 import 'features/home/home_screen.dart';
 
@@ -64,7 +65,12 @@ class AfyaNjiaApp extends StatelessWidget {
           if (!session.restored) {
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
-          return session.isLoggedIn ? HomeScreen(session: session) : PinScreen(session: session);
+          if (!session.isLoggedIn) return PinScreen(session: session);
+          // A PIN someone else set (new staff, owner reset) is only for getting
+          // in once: choose your own before anything else. The server refuses
+          // everything else too, so this can't be skipped.
+          if (session.user!.mustChangePin) return ChangePinScreen(session: session, forced: true);
+          return HomeScreen(session: session);
         },
       ),
     );

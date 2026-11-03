@@ -95,13 +95,22 @@ class Session extends ChangeNotifier {
     if (!isLoggedIn) return;
     try {
       final fresh = Staff.fromJson(await api.get('me') as Map<String, dynamic>);
-      final changed = fresh.permissions.join(',') != user?.permissions.join(',');
+      final changed = fresh.permissions.join(',') != user?.permissions.join(',') || fresh.mustChangePin != user?.mustChangePin;
       user = fresh;
       await _storage.write(key: _userKey, value: jsonEncode(fresh.toJson()));
       if (changed) notifyListeners(); // screens redraw with the new buttons
     } on ApiException {
       // offline or similar: keep what we had
     }
+  }
+
+  /// Change my own PIN. Throws ApiException ('bad_pin' = current PIN wrong;
+  /// 422 with a message for an easy or unchanged new PIN).
+  Future<void> changeOwnPin(String current, String fresh) async {
+    final data = await api.post('me/pin', {'current_pin': current, 'new_pin': fresh}) as Map<String, dynamic>;
+    user = Staff.fromJson(data);
+    await _storage.write(key: _userKey, value: jsonEncode(user!.toJson()));
+    notifyListeners(); // a forced change is done: the gate now shows the home screen
   }
 
   Future<void> logout() async {

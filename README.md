@@ -105,6 +105,11 @@ The Simulator shares your Mac's network, so the default address `http://127.0.0.
 | `lib/features/staff/staff_permissions_screen.dart` | Wafanyakazi na ruhusa (owner) | Each staff member with their permissions. A switch per permission, grouped (Mauzo, Mizigo, Hisa, Fedha, Simu). Switching one on asks **"mpaka lini?"**: today, 3 days, a week, a month, or until changed. One-tap bundles (Msaidizi, Msimamizi) and the full history. **+ Ongeza mfanyakazi** (name + PIN twice); per person ⋮ › Badilisha PIN / Simamisha (signed out everywhere, permissions ended, chosen phones removed; the shop's shared phone is unticked) / Rudisha kazini. |
 | `lib/core/permissions.dart`, `lib/models/staff.dart` | Who may do what | `session.user!.can(Perm.viewStock)` decides which tiles, menu items and buttons appear. The list is re-read from `GET me` on every home load. The server enforces everything; the app only hides. |
 
+| `lib/features/auth/change_pin_screen.dart` | Chagua / Badilisha PIN | Forced right after signing in with a temporary PIN (set by the owner); there's no back button, only Toka. Otherwise reachable from Zaidi › Badilisha PIN yangu. Needs the current PIN. |
+
+| `lib/features/staff/staff_profile.dart` | Taarifa binafsi | On each staff page (owner): phone, emergency contact, area, start date, NIDA masked with **Onyesha** (owner's PIN again; logged), consent, "Nani ameangalia?". Form with the consent checkbox; "Futa taarifa binafsi" after someone leaves. **Zaidi › Taarifa zangu** for staff: their own record and who accessed it. |
+| `lib/core/pin_fields.dart` | PIN boxes | Max 4 digits, auto-advance, live ✓ Zinalingana / ✗ Hazilingani, easy-PIN warning; `askNewPin` for the owner's temporary PINs. |
+
 ### Invoice photo setup (once)
 `flutter pub add image_picker`, then add the camera permission text to `ios/Runner/Info.plist` (see the v0.4 install notes).
 

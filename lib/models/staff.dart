@@ -1,6 +1,6 @@
 /// A person who can sign in on the counter phone: the owner or a helper.
 class Staff {
-  const Staff({required this.id, required this.name, required this.role, this.permissions = const []});
+  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false});
 
   final int id;
   final String name;
@@ -10,6 +10,10 @@ class Staff {
   /// server decides and enforces; the app uses this only to show or hide
   /// buttons, and re-reads it on every home load (GET me).
   final List<String> permissions;
+
+  /// True when the PIN was set by someone else (the owner): it's temporary,
+  /// and the person must choose their own before doing anything else.
+  final bool mustChangePin;
 
   bool get isOwner => role == 'owner';
 
@@ -21,7 +25,9 @@ class Staff {
         name: json['name'] as String,
         role: json['role'] as String,
         permissions: ((json['permissions'] as List?) ?? const []).cast<String>(),
+        mustChangePin: json['must_change_pin'] == true,
       );
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'role': role, 'permissions': permissions};
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin};
 }

@@ -8,6 +8,7 @@ import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../auth/change_pin_screen.dart';
 import '../devices/devices_screen.dart';
 import '../expiry/expiry_screen.dart';
 import '../purchases/purchases_screen.dart';
@@ -16,6 +17,7 @@ import '../sale/counter_screen.dart';
 import '../sales/sales_list_screen.dart';
 import '../shift/shift_screen.dart';
 import '../staff/staff_permissions_screen.dart';
+import '../staff/staff_profile.dart';
 import '../stock/stock_screen.dart';
 import 'widgets/recent_sales_card.dart';
 import 'widgets/target_ring.dart';
@@ -675,6 +677,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 subtitle: const Text('Toa au ondoa ruhusa, kwa muda au kudumu'),
                 onTap: () => go(sheet, StaffPermissionsScreen(session: widget.session)),
               ),
+            if (!widget.session.user!.isOwner)
+              ListTile(
+                leading: const Icon(Icons.badge_outlined),
+                title: const Text('Taarifa zangu'),
+                subtitle: const Text('Duka limehifadhi nini kukuhusu, na nani ameangalia'),
+                onTap: () => go(sheet, MyProfileScreen(session: widget.session)),
+              ),
+            ListTile(
+              leading: const Icon(Icons.pin_outlined),
+              title: const Text('Badilisha PIN yangu'),
+              onTap: () => go(sheet, ChangePinScreen(session: widget.session)),
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: dangerRed),

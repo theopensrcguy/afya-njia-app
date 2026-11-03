@@ -4,7 +4,9 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
+import '../../core/pin_fields.dart';
 import '../../core/session.dart';
+import 'staff_profile.dart';
 
 /// Owner only: who may do what, and until when.
 ///
@@ -45,18 +47,12 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
   Future<void> _addPerson() async {
     final name = await askText(context, title: 'Mfanyakazi mpya', label: 'Jina (litaonekana kwenye skrini ya PIN)', required: true);
     if (name == null || !mounted) return;
-    final pin = await askText(context,
-        title: 'PIN ya $name', label: 'Tarakimu 4', helper: 'Si 1111 wala 1234', digitsOnly: true, required: true);
+    final pin = await askNewPin(context,
+        title: 'PIN ya muda ya $name', message: 'Ataitumia mara moja tu kuingia, kisha atachagua PIN yake mwenyewe.');
     if (pin == null || !mounted) return;
-    final again = await askText(context, title: 'Rudia PIN', label: 'Tarakimu 4 tena', digitsOnly: true, required: true);
-    if (again == null || !mounted) return;
-    if (pin.length != 4 || pin != again) {
-      _toast(pin.length != 4 ? 'PIN lazima iwe tarakimu 4.' : 'PIN hazilingani. Jaribu tena.', error: true);
-      return;
-    }
     try {
       await widget.session.api.post('staff', {'name': name, 'pin': pin});
-      _toast('$name ameongezwa. Mwambie PIN yake mwenyewe, usiiandike popote.');
+      _toast('$name ameongezwa. PIN hii ni ya muda: akiingia mara ya kwanza atachagua yake mwenyewe.');
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -266,14 +262,13 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
   bool get _activeNow => _person['is_active'] != false;
 
   Future<void> _changePin() async {
-    final pin = await askText(context,
-        title: 'PIN mpya ya ${_person['name']}', label: 'Tarakimu 4', helper: 'Si 1111 wala 1234', digitsOnly: true, required: true);
+    final pin = await askNewPin(context,
+        title: 'Weka upya PIN ya ${_person['name']}',
+        message: 'Kwa PIN iliyosahauliwa au iliyoonekana. Atatolewa kwenye simu zote sasa hivi, '
+            'na akiingia kwa PIN hii ya muda atachagua yake mwenyewe.');
     if (pin == null || !mounted) return;
-    if (pin.length != 4) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN lazima iwe tarakimu 4.'), backgroundColor: dangerRed));
-      return;
-    }
-    await _run(() => _api.patch('staff/${widget.staffId}/pin', {'pin': pin}), 'PIN imebadilishwa.');
+    await _run(() => _api.patch('staff/${widget.staffId}/pin', {'pin': pin}),
+        'PIN imewekwa upya. ${_person['name']} ametolewa kwenye simu zote.');
   }
 
   /// Someone leaves: no sign-in anywhere, signed out on every phone now,
@@ -389,7 +384,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
               _ => _activate(),
             },
             itemBuilder: (_) => [
-              if (_activeNow) const PopupMenuItem(value: 'pin', child: Text('Badilisha PIN')),
+              if (_activeNow) const PopupMenuItem(value: 'pin', child: Text('Weka upya PIN')),
               if (_activeNow)
                 const PopupMenuItem(value: 'off', child: Text('Simamisha (ameondoka)', style: TextStyle(color: dangerRed)))
               else
@@ -399,7 +394,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
         ],
       ),
       body: AbsorbPointer(
-        absorbing: _busy || !_activeNow, // one change at a time; nothing to switch while deactivated
+        absorbing: _busy, // one change at a time
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
           children: [
@@ -414,6 +409,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                   style: TextStyle(color: Color(0xFF8F1D14), fontWeight: FontWeight.w700),
                 ),
               ),
+            StaffProfileCard(api: _api, staffId: widget.staffId, active: _activeNow),
             const Text('Weka kwa haraka', style: TextStyle(color: mutedText)),
             const SizedBox(height: 8),
             Row(children: [
@@ -422,7 +418,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                   child: Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: OutlinedButton(
-                      onPressed: () => _bundle(b),
+                      onPressed: _activeNow ? () => _bundle(b) : null, // nothing to switch while deactivated
                       style: OutlinedButton.styleFrom(backgroundColor: cardColor, minimumSize: const Size.fromHeight(46)),
                       child: Text('${b['label']}'),
                     ),
@@ -451,7 +447,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                             : '${c['description']}',
                         style: TextStyle(fontSize: 12, color: active[c['key']] != null ? warnAmber : mutedText),
                       ),
-                      onChanged: (on) => _toggle('${c['key']}', '${c['label']}', on),
+                      onChanged: _activeNow ? (on) => _toggle('${c['key']}', '${c['label']}', on) : null,
                     ),
                 ]),
               ),
