@@ -91,7 +91,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
 
   /// Remove stock that isn't on the shelf any more: damaged, lost, expired,
   /// returned. Always with a reason; the owner sees it in the history.
-  Future<void> _adjust() async {
+  Future<void> _adjust({Map<String, dynamic>? expiredBatch}) async {
     final batches = ((_p!['batches'] as List?) ?? const []).cast<Map<String, dynamic>>();
     if (batches.isEmpty) {
       _toast('Hakuna batch yenye hisa ya kurekebisha.');
@@ -102,10 +102,10 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: cardColor,
-      builder: (_) => _AdjustSheet(api: _api, batches: batches, units: _units),
+      builder: (_) => _AdjustSheet(api: _api, batches: batches, units: _units, expiredBatch: expiredBatch),
     );
     if (done == true) {
-      _toast('Hisa imerekebishwa.');
+      _toast(expiredBatch != null ? 'Imeandikwa kama hasara.' : 'Hisa imerekebishwa.');
       _load();
     }
   }
@@ -325,9 +325,25 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                 ]),
                 Text(_expiryText(batches[i]),
                     style: TextStyle(fontSize: 12, color: batches[i]['is_expired'] == true ? dangerRed : mutedText)),
+                // Expired: one tap to write it off, everything filled in.
+                if (batches[i]['is_expired'] == true && _can(Perm.adjustStock))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _adjust(expiredBatch: batches[i]),
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                      label: const Text('Andika kama hasara'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: dangerRed,
+                        side: const BorderSide(color: dangerRed),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
               ]),
             ),
-            Text(describeStock(asInt(batches[i]['quantity']), units), style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(describeStock(asInt(batches[i]['quantity']), units),
+                style: TextStyle(fontWeight: FontWeight.w800, color: batches[i]['is_expired'] == true ? dangerRed : null)),
           ]),
         ),
     ]);
@@ -402,11 +418,15 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
 
 /// Remove stock from one batch, with a reason.
 class _AdjustSheet extends StatefulWidget {
-  const _AdjustSheet({required this.api, required this.batches, required this.units});
+  const _AdjustSheet({required this.api, required this.batches, required this.units, this.expiredBatch});
 
   final ApiClient api;
   final List<Map<String, dynamic>> batches;
   final List<ProductUnit> units;
+
+  /// "Andika kama hasara": open on this batch, reason "Imeisha muda",
+  /// the whole quantity filled in. The person only checks and saves.
+  final Map<String, dynamic>? expiredBatch;
 
   @override
   State<_AdjustSheet> createState() => _AdjustSheetState();
@@ -420,9 +440,14 @@ class _AdjustSheetState extends State<_AdjustSheet> {
     ('return_to_supplier', 'Imerudishwa kwa msambazaji'),
   ];
 
-  late Map<String, dynamic> _batch = widget.batches.first;
-  int _reason = 0;
-  final _qty = TextEditingController();
+  late Map<String, dynamic> _batch = widget.batches.firstWhere(
+    (b) => b['id'] == widget.expiredBatch?['id'],
+    orElse: () => widget.batches.first,
+  );
+  late int _reason = widget.expiredBatch != null ? 2 : 0;
+  late final _qty = TextEditingController(
+    text: widget.expiredBatch != null ? '${asInt(widget.expiredBatch!['quantity'])}' : '',
+  );
   final _note = TextEditingController();
   bool _saving = false;
   String? _error;
@@ -474,7 +499,14 @@ class _AdjustSheetState extends State<_AdjustSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Rekebisha hisa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(widget.expiredBatch != null ? 'Andika kama hasara' : 'Rekebisha hisa',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          if (widget.expiredBatch != null)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text('Dawa iliyoisha muda haiuzwi. Ukihifadhi, inatoka kwenye hisa na kuonekana kama hasara kwenye historia.',
+                  style: TextStyle(fontSize: 13, color: mutedText)),
+            ),
           const SizedBox(height: 12),
           const Text('Batch', style: TextStyle(color: mutedText, fontSize: 13)),
           const SizedBox(height: 6),

@@ -92,7 +92,9 @@ class _StockScreenState extends State<StockScreen> {
         // "Chache" = needs ordering: out of stock first, then running low.
         'chache' => p['is_out'] == true || p['is_low'] == true,
         'hazipo' => p['is_out'] == true,
+        // Expiring soon but still sellable → sell first. Already expired → write off.
         'muda' => p['is_expiring'] == true,
+        'zimeisha' => _expired(p) > 0,
         _ => true,
       };
     }).toList();
@@ -182,6 +184,7 @@ class _StockScreenState extends State<StockScreen> {
       'chache' => ('Za kuagiza · bidhaa ${rows.length} (thamani iliyobaki)', _sum(rows, 'value_at_cost')),
       'hazipo' => ('Hazipo kabisa · bidhaa ${rows.length}', 0),
       'muda' => ('Hatarini: inaisha ndani ya siku 30 · bidhaa ${rows.length}', _sum(rows, 'expiring_value')),
+      'zimeisha' => ('Hasara: zimeisha muda · bidhaa ${rows.length}', _sum(rows, 'expired_value')),
       _ => ('Thamani ya hisa (bei ya kununua)', _sum(rows, 'value_at_cost')),
     };
     // Without "Kuona gharama na faida" the big number is a count, not money.
@@ -230,14 +233,14 @@ class _StockScreenState extends State<StockScreen> {
         ),
         // Expired stock is not "stock": it can't be sold. Its cost is a loss,
         // shown in red so it's never hidden inside the total above.
-        if (lost > 0) ...[
+        if (lost > 0 && _filter != 'zimeisha') ...[
           const SizedBox(height: 10),
           Material(
             color: const Color(0xFFFDE7E4),
             borderRadius: BorderRadius.circular(18),
             child: InkWell(
               borderRadius: BorderRadius.circular(18),
-              onTap: () => setState(() => _filter = 'muda'),
+              onTap: () => setState(() => _filter = 'zimeisha'),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Row(children: [
@@ -247,7 +250,8 @@ class _StockScreenState extends State<StockScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Hasara: ${formatTsh(lost)}',
                           style: const TextStyle(color: dangerRed, fontSize: 16, fontWeight: FontWeight.w800)),
-                      Text('Bidhaa ${asInt(s['expired_products'])} zimeisha muda bado ziko kwenye hisa. Ziondoe kwenye rafu.',
+                      Text('Bidhaa ${asInt(s['expired_products'])} zimeisha muda. Zitoe kwenye rafu ya kuuzia, '
+                          'kisha uziandike kama hasara (gusa hapa).',
                           style: const TextStyle(color: Color(0xFF8F1D14), fontSize: 12)),
                     ]),
                   ),
@@ -263,18 +267,32 @@ class _StockScreenState extends State<StockScreen> {
 
   int _sum(List<Map<String, dynamic>> rows, String key) => rows.fold(0, (t, r) => t + asInt(r[key]));
 
+  /// Expired stock still on record for this product (base units).
+  static int _expired(Map<String, dynamic> p) => asInt(p['expired_quantity']);
+
   Widget _chips() {
-    const defs = [('zote', 'Zote'), ('chache', 'Chache'), ('hazipo', 'Hazipo'), ('muda', 'Muda')];
+    final anyExpired = asInt(((_data ?? const {})['summary'] as Map?)?['expired_products']) > 0 ||
+        (((_data ?? const {})['products'] as List?) ?? const []).cast<Map<String, dynamic>>().any((p) => _expired(p) > 0);
+    final defs = [
+      ('zote', 'Zote'),
+      ('chache', 'Chache'),
+      ('hazipo', 'Hazipo'),
+      ('muda', 'Muda'),
+      if (anyExpired || _filter == 'zimeisha') ('zimeisha', 'Zimeisha muda'),
+    ];
     return Wrap(
       spacing: 8,
+      runSpacing: 6,
       children: [
         for (final (id, label) in defs)
           ChoiceChip(
             label: Text(label),
             selected: _filter == id,
             showCheckmark: false,
-            selectedColor: brandGreen,
-            labelStyle: TextStyle(color: _filter == id ? Colors.white : inkColor, fontWeight: FontWeight.w700),
+            selectedColor: id == 'zimeisha' ? dangerRed : brandGreen,
+            labelStyle: TextStyle(
+                color: _filter == id ? Colors.white : (id == 'zimeisha' ? dangerRed : inkColor),
+                fontWeight: FontWeight.w700),
             onSelected: (_) => setState(() => _filter = id),
           ),
       ],
@@ -312,10 +330,17 @@ class _StockScreenState extends State<StockScreen> {
     final expiredQty = asInt(p['expired_quantity']);
     final next = parseDate(p['next_expiry']);
 
-    final (Color dot, String note, Color noteColor) = out
-        ? (dangerRed, 'Hazipo · kiwango ${describeStock(asInt(p['reorder_level']), units)}', dangerRed)
-        : expiredQty > 0
-            ? (dangerRed, '${describeStock(expiredQty, units)} zimeisha muda (hazijauzwa)', dangerRed)
+    // Expired first: it's the one that needs action (off the shelf, write off),
+    // even when nothing sellable is left ("Hazipo" would hide it).
+    final (Color dot, String note, Color noteColor) = expiredQty > 0
+        ? (
+            dangerRed,
+            '${describeStock(expiredQty, units)} zimeisha muda'
+                '${_costs ? ' · hasara ${formatTsh(asInt(p['expired_value']))}' : ''}',
+            dangerRed,
+          )
+        : out
+            ? (dangerRed, 'Hazipo · kiwango ${describeStock(asInt(p['reorder_level']), units)}', dangerRed)
             : expiring && next != null
                 ? (const Color(0xFFD0533C), 'Inaisha ${next.day}/${next.month}/${next.year}', dangerRed)
                 : low
@@ -344,8 +369,15 @@ class _StockScreenState extends State<StockScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(describeStock(onHand, units), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-                if (_costs) Text(formatTsh(asInt(p['value_at_cost'])), style: const TextStyle(fontSize: 11, color: mutedText)),
+                if (_filter == 'zimeisha') ...[
+                  Text(describeStock(expiredQty, units),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: dangerRed)),
+                  if (_costs)
+                    Text(formatTsh(asInt(p['expired_value'])), style: const TextStyle(fontSize: 11, color: dangerRed)),
+                ] else ...[
+                  Text(describeStock(onHand, units), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                  if (_costs) Text(formatTsh(asInt(p['value_at_cost'])), style: const TextStyle(fontSize: 11, color: mutedText)),
+                ],
               ],
             ),
           ],
