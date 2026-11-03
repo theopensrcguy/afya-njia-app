@@ -12,6 +12,8 @@ import '../../models/product.dart';
 import 'cart.dart';
 import 'checkout_screen.dart';
 import 'quantity_dialog.dart';
+import 'scan_screen.dart';
+import 'sell_unit.dart';
 
 /// Screen 2 of the mockups: search and add to the basket.
 ///
@@ -37,6 +39,10 @@ class _CounterScreenState extends State<CounterScreen> {
   bool _searching = false;
   String? _searchError;
 
+  /// The Haraka tiles: (product, the unit it usually sells in).
+  List<(Product, String?)> _haraka = [];
+  String? _part; // asubuhi | mchana | jioni
+
   ApiClient get _api => widget.session.api;
 
   @override
@@ -44,7 +50,51 @@ class _CounterScreenState extends State<CounterScreen> {
     super.initState();
     // Show the catalog straight away. Wait for the first frame: setState()
     // is not allowed while the screen is still being created.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _search(''));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _search('');
+      _loadHaraka();
+    });
+  }
+
+  /// What sells most at this time of day. Optional: without it the counter
+  /// works as before (an older server, no sales yet, no network).
+  Future<void> _loadHaraka() async {
+    try {
+      final res = await _api.get('products/haraka') as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _part = res['part'] as String?;
+        _haraka = [
+          for (final e in ((res['products'] as List?) ?? const []).cast<Map<String, dynamic>>())
+            (Product.fromJson(e), e['usual_unit'] as String?),
+        ];
+      });
+    } on ApiException {
+      // no tiles, nothing lost
+    }
+  }
+
+  void _tapTile(Product p, String? usual) {
+    if (!_cart.canEdit) {
+      _showMessage('Tuma mauzo yaliyopita kwanza ("Tuma tena").', isError: true);
+      return;
+    }
+    // Same unit as already in the basket, or the usual one.
+    final unit = _cart.unitOf(p.id) ?? pickSellUnit(p, usual: usual);
+    if (_cart.addIn(p, unit)) {
+      HapticFeedback.selectionClick();
+    } else {
+      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).', isError: true);
+    }
+  }
+
+  Future<void> _openScanner() async {
+    FocusScope.of(context).unfocus();
+    if (!_cart.canEdit) {
+      _showMessage('Tuma mauzo yaliyopita kwanza ("Tuma tena").', isError: true);
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ScanScreen(api: _api, cart: _cart)));
   }
 
   @override
@@ -109,6 +159,7 @@ class _CounterScreenState extends State<CounterScreen> {
     // Stock changed after a sale (or a stock error at checkout): refresh the numbers.
     if (completed == true) _searchController.clear();
     _search(_searchController.text);
+    _loadHaraka(); // stock changed; tiles skip what's run out
   }
 
   /// Leaving with items in the basket would lose them: ask first.
@@ -185,7 +236,11 @@ class _CounterScreenState extends State<CounterScreen> {
                         child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     : _searchController.text.isEmpty
-                        ? null
+                        ? IconButton(
+                            tooltip: 'Skani barcode',
+                            icon: const Icon(Icons.qr_code_scanner, color: brandGreen),
+                            onPressed: _openScanner,
+                          )
                         : IconButton(
                             tooltip: 'Futa',
                             icon: const Icon(Icons.close),
@@ -198,7 +253,16 @@ class _CounterScreenState extends State<CounterScreen> {
             ),
           ),
           // The results also listen to the cart, to show "×2" on items already in it.
-          Expanded(child: ListenableBuilder(listenable: _cart, builder: (context, _) => _buildResults())),
+          Expanded(
+            child: ListenableBuilder(
+              listenable: _cart,
+              builder: (context, _) => Column(children: [
+                // Haraka only while not searching: typing means you know what you want.
+                if (_searchController.text.trim().isEmpty && _haraka.isNotEmpty) _buildHaraka(),
+                Expanded(child: _buildResults()),
+              ]),
+            ),
+          ),
           ListenableBuilder(listenable: _cart, builder: (context, _) => _buildCartBar()),
         ],
       ),
@@ -314,6 +378,75 @@ class _CounterScreenState extends State<CounterScreen> {
           ),
         );
       },
+    );
+  }
+
+  static const _parts = {'asubuhi': 'asubuhi', 'mchana': 'mchana', 'jioni': 'jioni'};
+
+  /// Up to 9 one-tap tiles: one tap = one of the usual unit. Hold for an exact number.
+  Widget _buildHaraka() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('Haraka', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          const Spacer(),
+          Text('zinazouzwa sana ${_parts[_part] ?? 'sasa'}', style: const TextStyle(fontSize: 12, color: mutedText)),
+        ]),
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 1.35,
+          children: [
+            for (final (p, usual) in _haraka)
+              Builder(builder: (context) {
+                final unit = _cart.unitOf(p.id) ?? pickSellUnit(p, usual: usual);
+                final n = _cart.quantityOf(p.id);
+                return Material(
+                  color: n > 0 ? const Color(0xFFDDF3EA) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => _tapTile(p, usual),
+                    onLongPress: () async {
+                      if (n == 0) _tapTile(p, usual);
+                      if (_cart.quantityOf(p.id) > 0) await _typeQuantity(p, _cart.quantityOf(p.id));
+                    },
+                    child: Stack(children: [
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, height: 1.2)),
+                          const Spacer(),
+                          Text(unitLabel(unit.name), style: const TextStyle(fontSize: 11, color: mutedText, fontWeight: FontWeight.w700)),
+                          Text(formatTsh(unit.price), style: const TextStyle(fontSize: 13, color: brandGreen, fontWeight: FontWeight.w800)),
+                        ]),
+                      ),
+                      if (n > 0)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 24),
+                            height: 24,
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(color: brandGreen, borderRadius: BorderRadius.circular(12)),
+                            child: Text('$n', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                          ),
+                        ),
+                    ]),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ]),
     );
   }
 

@@ -8,6 +8,7 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
+import '../../core/scan_once.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'new_product.dart';
@@ -68,6 +69,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   // ---- the line
   Product? _product;
   NewProductDraft? _draft; // set when this product arrives for the first time
+  String? _barcode; // scanned on the box: learned for the counter
   int? _linkId; // "Ndiyo, ni hiyo": link this catalogue entry to the existing product
   String? _linkVariant;
   Map<String, dynamic>? _last; // what was delivered last time (packaging, price)
@@ -89,6 +91,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       _draft = l.newProduct;
       _linkId = l.linkCatalogueItemId;
       _linkVariant = l.linkVariant;
+      _barcode = l.barcode;
       _buildPacks();
       _pack = _packs.firstWhere((p) => p.same(_Pack(l.packName, l.packSize)), orElse: () {
         final custom = _Pack(l.packName, l.packSize);
@@ -141,6 +144,27 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  /// Scan the box: a known code picks the product; an unknown one is kept
+  /// and learned for whatever product is chosen next.
+  Future<void> _scan() async {
+    final code = await scanOnce(context);
+    if (code == null || !mounted) return;
+    _barcode = code;
+    try {
+      final res = await widget.api.get('products/barcode/$code') as Map<String, dynamic>;
+      if (!mounted) return;
+      await _choose(Product.fromJson(res));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.code == 'unknown_barcode' ? null : e.message);
+      if (e.code == 'unknown_barcode') {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Barcode mpya: chagua au ongeza bidhaa yake. Itakumbukwa kwa kaunta.'),
+        ));
+      }
     }
   }
 
@@ -302,6 +326,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       expiryYear: _year!,
       expiryMonth: _month!,
       newProduct: _draft,
+      barcode: _barcode,
       linkCatalogueItemId: _linkId,
       linkVariant: _linkVariant,
     ));
@@ -337,9 +362,10 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
           decoration: InputDecoration(
             labelText: 'Tafuta dawa iliyokuja',
             prefixIcon: const Icon(Icons.search),
+            helperText: _barcode == null ? null : 'Barcode $_barcode itaunganishwa na bidhaa utakayochagua',
             suffixIcon: _searching
                 ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                : null,
+                : IconButton(tooltip: 'Skani boksi', onPressed: _scan, icon: const Icon(Icons.qr_code_scanner, color: brandGreen)),
           ),
         ),
       ),

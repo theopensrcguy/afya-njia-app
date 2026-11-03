@@ -20,7 +20,11 @@ class ReceiveLine {
     this.newProduct,
     this.linkCatalogueItemId,
     this.linkVariant,
+    this.barcode,
   });
+
+  /// Scanned on the box while receiving: the counter will know it next time.
+  final String? barcode;
 
   /// The product picked on the line (for a new product, its first stand-in).
   final Product chosenProduct;
@@ -66,6 +70,7 @@ class ReceiveLine {
         if (newProduct != null) 'new_product': newProduct!.toJson() else 'product_id': product.id,
         if (linkCatalogueItemId != null) 'link_catalogue_item_id': linkCatalogueItemId,
         if (linkVariant != null) 'link_variant': linkVariant,
+        if (barcode != null) 'barcode': barcode,
         'batch_number': batch,
         // As printed on the box: the server stores the last day of that month.
         'expiry_month': '$expiryYear-${expiryMonth.toString().padLeft(2, '0')}',

@@ -74,6 +74,21 @@ class Cart extends ChangeNotifier {
     return true;
   }
 
+  /// Add [qty] of a chosen unit (a scan, a Haraka tile). If the product is
+  /// already in the basket in another unit, that line switches to this unit
+  /// and adds up, as long as the shelf allows it.
+  bool addIn(Product product, ProductUnit unit, [int qty = 1]) {
+    if (!canEdit) return false;
+    final line = _lines[product.id];
+    final same = line != null && line.unit.sameAs(unit);
+    final next = (same ? line.quantity : 0) + qty;
+    if (next > maxOf(product, unit)) return false;
+    _lines[product.id] = CartLine(product, unit, next);
+    _clampDiscount();
+    notifyListeners();
+    return true;
+  }
+
   /// Switch kidonge ↔ kadi ↔ boksi. Keeps the number if the shelf allows it,
   /// otherwise lowers it to what's there. False if not even one fits.
   bool setUnit(int productId, ProductUnit unit) {

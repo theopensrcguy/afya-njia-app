@@ -392,6 +392,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 const SizedBox(height: 6),
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   if (l.newProduct != null) tag(l.newProduct!.hasPrices ? 'Bidhaa mpya' : 'Bidhaa mpya · bila bei'),
+                  if (l.barcode != null) tag('Barcode imefunzwa'),
                   tag('Batch ${l.batch}'),
                   tag('Inaisha ${l.expiryText}'),
                   tag('${formatTsh(l.packCost)} kila moja'),
