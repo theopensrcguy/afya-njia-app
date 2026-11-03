@@ -10,6 +10,8 @@ import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
+import 'new_product.dart';
+import 'new_product_screen.dart';
 import 'receive_line.dart';
 
 /// One packaging choice for this delivery: "Boksi · 100".
@@ -26,9 +28,25 @@ class _Pack {
 /// Most of it is filled in from what this supplier sent last time, so the
 /// usual line is: product → number of packs → batch → expiry → done.
 class ReceiveLineScreen extends StatefulWidget {
-  const ReceiveLineScreen({super.key, required this.api, this.supplierId, this.supplierName, this.initial});
+  const ReceiveLineScreen({
+    super.key,
+    required this.api,
+    this.supplierId,
+    this.supplierName,
+    this.initial,
+    this.canPrice = false,
+    this.drafts = const [],
+  });
 
   final ApiClient api;
+
+  /// May set selling prices (edit_prices). Without it, a new product's
+  /// prices are left for whoever confirms the delivery.
+  final bool canPrice;
+
+  /// New products already on this delivery: a second batch of one picks it
+  /// from here instead of creating it twice.
+  final List<NewProductDraft> drafts;
   final int? supplierId;
   final String? supplierName;
 
@@ -44,10 +62,14 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   final _search = TextEditingController();
   Timer? _debounce;
   List<Product> _results = [];
+  List<(Map<String, dynamic>, Map<String, dynamic>)> _catalogue = []; // (entry, variant) the shop doesn't have yet
   bool _searching = false;
 
   // ---- the line
   Product? _product;
+  NewProductDraft? _draft; // set when this product arrives for the first time
+  int? _linkId; // "Ndiyo, ni hiyo": link this catalogue entry to the existing product
+  String? _linkVariant;
   Map<String, dynamic>? _last; // what was delivered last time (packaging, price)
   final List<_Pack> _packs = [];
   _Pack? _pack;
@@ -64,6 +86,9 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final l = widget.initial;
     if (l != null) {
       _product = l.product;
+      _draft = l.newProduct;
+      _linkId = l.linkCatalogueItemId;
+      _linkVariant = l.linkVariant;
       _buildPacks();
       _pack = _packs.firstWhere((p) => p.same(_Pack(l.packName, l.packSize)), orElse: () {
         final custom = _Pack(l.packName, l.packSize);
@@ -99,9 +124,19 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   Future<void> _runSearch(String q) async {
     setState(() => _searching = true);
     try {
+      // 1. the shop's own products; 2. the catalogue, for what it doesn't have yet.
       final data = await widget.api.get('products', query: {'q': q}) as List;
+      final cat = q.trim().length >= 2 ? await widget.api.get('catalogue', query: {'q': q.trim()}) as Map<String, dynamic> : null;
       if (!mounted || q != _search.text) return;
-      setState(() => _results = data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList());
+      setState(() {
+        _results = data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+        _catalogue = [
+          for (final item in ((cat?['results'] as List?) ?? const []).cast<Map<String, dynamic>>())
+            for (final v in ((item['variants'] as List?) ?? const []).cast<Map<String, dynamic>>())
+              // "unayo": already one of the shop's products, so it shows above instead.
+              if (v['own_product_id'] == null) (item, v),
+        ];
+      });
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -109,9 +144,63 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     }
   }
 
-  Future<void> _choose(Product p) async {
+  /// A product arriving for the first time: from the catalogue, or typed.
+  Future<void> _newProduct({Map<String, dynamic>? item, Map<String, dynamic>? variant, String? typed}) async {
+    FocusScope.of(context).unfocus();
+    final choice = await Navigator.of(context).push<NewProductChoice>(MaterialPageRoute(
+      builder: (_) => NewProductScreen(api: widget.api, canPrice: widget.canPrice, item: item, variant: variant, typedName: typed),
+    ));
+    if (choice == null || !mounted) return;
+    _apply(choice);
+  }
+
+  Future<void> _editDraft() async {
+    final choice = await Navigator.of(context).push<NewProductChoice>(MaterialPageRoute(
+      builder: (_) => NewProductScreen(api: widget.api, canPrice: widget.canPrice, initial: _draft),
+    ));
+    if (choice?.draft == null || !mounted) return;
+    setState(() {
+      final keep = _pack;
+      _product = _draft!.asProduct();
+      _buildPacks();
+      if (keep != null && !_packs.any((x) => x.same(keep))) _packs.add(keep);
+      _pack = keep ?? _packs.last;
+    });
+  }
+
+  void _apply(NewProductChoice choice) {
+    if (choice.existing != null) {
+      // "Ndiyo, ni hiyo": no new product; the catalogue name becomes its official one.
+      _linkId = choice.linkCatalogueItemId;
+      _linkVariant = choice.linkVariant;
+      _choose(choice.existing!, keepLink: true);
+      return;
+    }
+    _chooseDraft(choice.draft!);
+  }
+
+  void _chooseDraft(NewProductDraft d) {
     FocusScope.of(context).unfocus();
     setState(() {
+      _draft = d;
+      _linkId = null;
+      _linkVariant = null;
+      _last = null;
+      _product = d.asProduct();
+      _error = null;
+      _buildPacks();
+      _pack = _packs.last; // deliveries usually come in the biggest pack
+    });
+  }
+
+  Future<void> _choose(Product p, {bool keepLink = false}) async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _draft = null;
+      if (!keepLink) {
+        _linkId = null;
+        _linkVariant = null;
+      }
       _product = p;
       _error = null;
       _buildPacks();
@@ -204,7 +293,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       return;
     }
     Navigator.of(context).pop(ReceiveLine(
-      product: _product!,
+      chosenProduct: _product!,
       packName: _pack!.name,
       packSize: _pack!.size,
       packs: _count,
@@ -212,6 +301,9 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       batch: batch,
       expiryYear: _year!,
       expiryMonth: _month!,
+      newProduct: _draft,
+      linkCatalogueItemId: _linkId,
+      linkVariant: _linkVariant,
     ));
   }
 
@@ -253,34 +345,102 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       ),
       if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed)),
       Expanded(
-        child: ListView.separated(
+        child: ListView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          itemCount: _results.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, i) {
-            final p = _results[i];
-            return Material(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(14),
-              child: ListTile(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('Iliyopo: ${describeStock(p.onHand, p.units)}'),
-                trailing: const Icon(Icons.chevron_right),
+          children: [
+            // New products already on this delivery (a second batch of one).
+            if (widget.drafts.isNotEmpty) ...[
+              _section('MPYA KWENYE MZIGO HUU'),
+              for (final d in widget.drafts)
+                _tile(
+                  title: d.name,
+                  subtitle: 'Bidhaa mpya · ${d.units.map((u) => unitLabel(u.name)).join(', ')}',
+                  badge: 'mpya',
+                  onTap: () => _chooseDraft(d),
+                ),
+            ],
+            // 1. The shop's own products always come first.
+            if (_results.isNotEmpty) _section('BIDHAA ZAKO'),
+            for (final p in _results)
+              _tile(
+                title: p.name,
+                subtitle: 'Iliyopo: ${describeStock(p.onHand, p.units)}',
                 onTap: () => _choose(p),
               ),
-            );
-          },
+            // 2. Then the catalogue: correct names for what isn't in stock yet.
+            if (_catalogue.isNotEmpty) ...[
+              _section('KATALOGI · BADO HUNA HIZI'),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('Ukichagua, bidhaa mpya inaundwa kwa jina sahihi.', style: TextStyle(fontSize: 12, color: mutedText)),
+              ),
+              for (final (item, v) in _catalogue)
+                _tile(
+                  title: '${v['name']}',
+                  subtitle: _catalogueLine(item),
+                  badge: '+ Mpya',
+                  onTap: () => _newProduct(item: item, variant: v),
+                ),
+            ],
+            // 3. Last resort: typed by hand, flagged for the owner.
+            if (_search.text.trim().length >= 2) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF9CC9B8)),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Haipo kwenye katalogi pia?', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Text('Kwa vitu visivyo dawa (vipodozi, glovu, pamba). Mwenye duka ataona alama "nje ya katalogi".',
+                      style: TextStyle(fontSize: 12, color: mutedText)),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () => _newProduct(typed: _search.text.trim()),
+                    child: Text('Ongeza "${_search.text.trim()}" kama bidhaa mpya'),
+                  ),
+                ]),
+              ),
+            ],
+          ],
         ),
-      ),
-      const Padding(
-        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
-        child: Text('Haipo kwenye orodha? Mmiliki aiongeze kwanza kwenye Hisa.',
-            textAlign: TextAlign.center, style: TextStyle(color: mutedText, fontSize: 12)),
       ),
     ]);
   }
+
+  String _catalogueLine(Map<String, dynamic> item) {
+    const sources = {'tmda': 'TMDA', 'nemlit': 'NEMLIT', 'supplies': 'Vifaa tiba'};
+    final brandOf = item['source'] == 'tmda' && item['ingredient'] != null ? ' · ${item['ingredient']}' : '';
+    return '${sources[item['source']] ?? item['source']}$brandOf';
+  }
+
+  Widget _section(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+        child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: mutedText, letterSpacing: 0.4)),
+      );
+
+  Widget _tile({required String title, required String subtitle, String? badge, required VoidCallback onTap}) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(14),
+          child: ListTile(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text(subtitle),
+            trailing: badge == null
+                ? const Icon(Icons.chevron_right)
+                : Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: const Color(0xFFDDF3EA), borderRadius: BorderRadius.circular(10)),
+                    child: Text(badge, style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ),
+            onTap: onTap,
+          ),
+        ),
+      );
 
   Widget _card(List<Widget> children) => Container(
         margin: const EdgeInsets.only(bottom: 14),
@@ -307,12 +467,34 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
               Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (_draft != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFFDDF3EA), borderRadius: BorderRadius.circular(8)),
+                        child: Text(_draft!.offCatalogue ? 'BIDHAA MPYA · nje ya katalogi' : 'BIDHAA MPYA',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: brandGreen)),
+                      ),
                     Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text('Iliyopo: ${describeStock(p.onHand, p.units)}', style: const TextStyle(fontSize: 12, color: mutedText)),
+                    Text(
+                      _draft != null
+                          ? (_draft!.hasPrices ? 'Itaundwa mzigo ukihifadhiwa' : 'Bei ya kuuza: mwenye duka ataiweka akithibitisha')
+                          : 'Iliyopo: ${describeStock(p.onHand, p.units)}',
+                      style: const TextStyle(fontSize: 12, color: mutedText),
+                    ),
                   ]),
                 ),
+                if (_draft != null) TextButton(onPressed: _editDraft, child: const Text('Hariri')),
                 if (widget.initial == null)
-                  TextButton(onPressed: () => setState(() => _product = null), child: const Text('Badilisha')),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _product = null;
+                      _draft = null;
+                      _linkId = null;
+                      _linkVariant = null;
+                    }),
+                    child: const Text('Badilisha'),
+                  ),
               ]),
             ]),
 
@@ -447,7 +629,9 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final perBase = cost / pack.size;
     final sell = _product!.units.first.price;
     final base = unitLabel(_product!.units.first.name);
-    final hint = 'TSh ${perBase.toStringAsFixed(perBase < 10 ? 1 : 0)} kwa $base · unauza TSh $sell';
+    final cost1 = 'TSh ${perBase.toStringAsFixed(perBase < 10 ? 1 : 0)} kwa $base';
+    if (sell == 0) return cost1; // new product, price set by the owner later
+    final hint = '$cost1 · unauza TSh $sell';
     return perBase >= sell ? '$hint · HASARA!' : hint;
   }
 
