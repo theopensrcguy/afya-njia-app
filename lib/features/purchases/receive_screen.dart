@@ -6,12 +6,12 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
-import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/ids.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../suppliers/supplier_form.dart';
 import 'new_product.dart';
 import 'receive_line.dart';
 import 'receive_line_screen.dart';
@@ -85,18 +85,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   Future<void> _addSupplier() async {
-    final name = await askText(context, title: 'Msambazaji mpya', label: 'Jina la msambazaji', required: true);
-    if (name == null || !mounted) return;
-    try {
-      final s = await _api.post('suppliers', {'name': name}) as Map<String, dynamic>;
-      if (!mounted) return;
-      setState(() {
-        _suppliers = [..._suppliers, s]..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
-        _supplierId = asInt(s['id']);
-      });
-    } on ApiException catch (e) {
-      _toast(e.message, error: true);
-    }
+    // Name is enough; phone, location, TIN... can be added now or later.
+    final s = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(builder: (_) => SupplierFormScreen(api: _api)));
+    if (s == null || !mounted) return;
+    setState(() {
+      _suppliers = [..._suppliers, s]..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+      _supplierId = asInt(s['id']);
+    });
   }
 
   String? get _supplierName {

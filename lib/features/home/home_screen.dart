@@ -12,6 +12,7 @@ import '../auth/change_pin_screen.dart';
 import '../devices/devices_screen.dart';
 import '../expiry/expiry_screen.dart';
 import '../orders/reorder_screen.dart';
+import '../suppliers/suppliers_screen.dart';
 import '../purchases/purchases_screen.dart';
 import '../purchases/receive_screen.dart';
 import '../sale/counter_screen.dart';
@@ -654,6 +655,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const Text('Agiza mzigo'),
                 subtitle: const Text('Zitakazoisha kabla mzigo ujao'),
                 onTap: () => go(sheet, ReorderScreen(session: widget.session)),
+              ),
+            if (_can(Perm.receive) || _can(Perm.prepareOrders))
+              ListTile(
+                leading: const Icon(Icons.storefront_outlined),
+                title: const Text('Wasambazaji'),
+                onTap: () => go(sheet, SuppliersScreen(session: widget.session)),
               ),
             if (_can(Perm.viewStock))
               ListTile(
