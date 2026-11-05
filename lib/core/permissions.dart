@@ -14,4 +14,5 @@ abstract final class Perm {
   static const bigDiscount = 'big_discount';
   static const viewShopSales = 'view_shop_sales';
   static const manageDevices = 'manage_devices';
+  static const prepareOrders = 'prepare_orders';
 }
