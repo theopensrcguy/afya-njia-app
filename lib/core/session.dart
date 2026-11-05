@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../config.dart';
 import '../models/staff.dart';
 import 'api_client.dart';
 import 'ids.dart';
@@ -47,10 +46,18 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// People shown on the PIN screen.
-  Future<List<Staff>> loadStaff() async {
-    final data = await api.get('pharmacies/$pharmacyId/staff') as List<dynamic>;
-    return data.map((e) => Staff.fromJson(e as Map<String, dynamic>)).toList();
+  /// What the sign-in screen may show on THIS device. The server only tells
+  /// an approved device any names:
+  ///   personal → [SignInInfo.lastUser]: "Karibu tena, Hamisi" + PIN
+  ///   shared   → [SignInInfo.staff]: the counter phone, most recent first
+  ///   new      → nothing: phone number + PIN
+  Future<SignInInfo> loadSignIn() async {
+    final d = await api.post('login/device', {'device_uid': await deviceUid()}) as Map<String, dynamic>;
+    return SignInInfo(
+      mode: '${d['mode']}',
+      lastUser: d['last_user'] == null ? null : Staff.fromJson(d['last_user'] as Map<String, dynamic>),
+      staff: [for (final s in ((d['staff'] as List?) ?? const [])) Staff.fromJson(s as Map<String, dynamic>)],
+    );
   }
 
   /// This phone's permanent id, created the first time the app runs.
@@ -73,12 +80,16 @@ class Session extends ChangeNotifier {
   ///   'device_pending' – right PIN, but the owner hasn't approved this phone yet
   ///                      (e.data['pairing_code'] is the number to show him)
   ///   'device_revoked' – the owner removed this phone
-  Future<void> login(Staff staff, String pin) async {
+  ///
+  /// Either [staff] (picked on an approved device) or [phone] (typed on a new one).
+  Future<void> login(Staff? staff, String pin, {String? phone}) async {
+    final who = staff?.name ?? 'mpya';
     final data = await api.post('login/pin', {
-      'user_id': staff.id,
+      if (staff != null) 'user_id': staff.id else 'phone': phone,
       'pin': pin,
       'device_uid': await deviceUid(),
-      'device_name': 'Simu ya ${staff.name}',
+      // A browser is a device too: the owner approves it like a phone.
+      'device_name': kIsWeb ? 'Kivinjari ($who)' : 'Simu ($who)',
     }) as Map<String, dynamic>;
 
     api.token = data['token'] as String;
@@ -129,4 +140,13 @@ class Session extends ChangeNotifier {
     await _storage.delete(key: _userKey);
     notifyListeners();
   }
+}
+
+/// What the sign-in screen shows on this device (see [Session.loadSignIn]).
+class SignInInfo {
+  const SignInInfo({required this.mode, this.lastUser, this.staff = const []});
+
+  final String mode; // personal | shared | new
+  final Staff? lastUser;
+  final List<Staff> staff;
 }

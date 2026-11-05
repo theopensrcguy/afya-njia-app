@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -77,13 +76,15 @@ class ApiClient {
 
   /// Send one file as a form upload (the invoice photo). A longer timeout:
   /// a photo on a slow connection takes much more than 15 seconds.
-  Future<dynamic> upload(String path, String field, String filePath) {
+  ///
+  /// Bytes, not a file path: a browser has no file system path (web build).
+  Future<dynamic> upload(String path, String field, Uint8List bytes, String filename) {
     final uri = Uri.parse('$apiBaseUrl/$path');
     return _send(() async {
       final req = http.MultipartRequest('POST', uri)
         // No JSON Content-Type here: MultipartRequest sets its own.
         ..headers.addAll({'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'})
-        ..files.add(await http.MultipartFile.fromPath(field, filePath));
+        ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
       return http.Response.fromStream(await _http.send(req));
     }, timeout: const Duration(seconds: 60));
   }
@@ -103,12 +104,12 @@ class ApiClient {
   Future<http.Response> _sendRaw(Future<http.Response> Function() request, Duration timeout) async {
     try {
       return await request().timeout(timeout);
-    } on SocketException {
-      throw ApiException('Hakuna mtandao. Angalia Wi-Fi au data.', code: 'offline');
     } on TimeoutException {
       throw ApiException('Seva haijajibu. Jaribu tena.', code: 'timeout');
     } on http.ClientException {
-      throw ApiException('Imeshindwa kufikia seva.', code: 'offline');
+      // No internet, server down, or (in a browser) the server refusing this
+      // website (CORS). One message: the person can't fix the difference.
+      throw ApiException('Hakuna mtandao au seva haipatikani. Angalia Wi-Fi au data.', code: 'offline');
     }
   }
 

@@ -50,8 +50,15 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
     final pin = await askNewPin(context,
         title: 'PIN ya muda ya $name', message: 'Ataitumia mara moja tu kuingia, kisha atachagua PIN yake mwenyewe.');
     if (pin == null || !mounted) return;
+    // How they sign in on a new phone or a computer, where no names are shown.
+    final phone = await askText(context,
+        title: 'Namba ya simu ya $name',
+        label: 'Namba ya simu (si lazima sasa)',
+        hint: '0712 345 678',
+        helper: 'Ataingia nayo kwenye simu mpya au kompyuta');
+    if (!mounted) return;
     try {
-      await widget.session.api.post('staff', {'name': name, 'pin': pin});
+      await widget.session.api.post('staff', {'name': name, 'pin': pin, if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim()});
       _toast('$name ameongezwa. PIN hii ni ya muda: akiingia mara ya kwanza atachagua yake mwenyewe.');
       _load();
     } on ApiException catch (e) {
@@ -89,6 +96,26 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
                     style: TextStyle(color: mutedText, fontSize: 13),
                   ),
                   const SizedBox(height: 14),
+                  // The owner's own sign-in number (new phone, computer).
+                  if (_data!['owner'] is Map)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: softCard(radius: 18),
+                      child: ListTile(
+                        leading: const Icon(Icons.verified_user_outlined, color: brandGreen),
+                        title: const Text('Wewe (mmiliki)', style: TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text((_data!['owner'] as Map)['phone'] == null
+                            ? 'Weka namba yako: utaihitaji kuingia kwenye simu mpya au kompyuta'
+                            : 'Namba ya kuingia: ${(_data!['owner'] as Map)['phone']}'),
+                        trailing: TextButton(
+                          onPressed: () async {
+                            final o = (_data!['owner'] as Map).cast<String, dynamic>();
+                            if (await editSignInPhone(context, widget.session.api, asInt(o['id']), 'yako', o['phone'] as String?)) _load();
+                          },
+                          child: const Text('Badilisha'),
+                        ),
+                      ),
+                    ),
                   if (staff.isEmpty)
                     const Padding(padding: EdgeInsets.only(top: 32), child: Text('Hakuna wafanyakazi bado.', textAlign: TextAlign.center)),
                   for (final s in staff)
@@ -120,6 +147,10 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
                                 if (s['is_active'] == false) _grantChip('Amesimamishwa', false),
                                 const Icon(Icons.chevron_right),
                               ]),
+                              Text(
+                                s['phone'] == null ? 'Hana namba ya kuingia (simu mpya / kompyuta)' : 'Namba: ${s['phone']}',
+                                style: TextStyle(fontSize: 12, color: s['phone'] == null ? warnAmber : mutedText),
+                              ),
                               const SizedBox(height: 6),
                               Wrap(spacing: 6, runSpacing: 4, children: [
                                 for (final g in (s['grants'] as List).cast<Map<String, dynamic>>())
@@ -261,6 +292,12 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
 
   bool get _activeNow => _person['is_active'] != false;
 
+  Future<void> _phone() async {
+    if (await editSignInPhone(context, _api, widget.staffId, 'ya ${_person['name']}', _person['phone'] as String?)) {
+      _reload();
+    }
+  }
+
   Future<void> _changePin() async {
     final pin = await askNewPin(context,
         title: 'Weka upya PIN ya ${_person['name']}',
@@ -380,11 +417,13 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
           PopupMenuButton<String>(
             onSelected: (v) => switch (v) {
               'pin' => _changePin(),
+              'phone' => _phone(),
               'off' => _deactivate(),
               _ => _activate(),
             },
             itemBuilder: (_) => [
               if (_activeNow) const PopupMenuItem(value: 'pin', child: Text('Weka upya PIN')),
+              if (_activeNow) const PopupMenuItem(value: 'phone', child: Text('Namba ya kuingia')),
               if (_activeNow)
                 const PopupMenuItem(value: 'off', child: Text('Simamisha (ameondoka)', style: TextStyle(color: dangerRed)))
               else
@@ -460,5 +499,26 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
         ),
       ),
     );
+  }
+}
+
+/// The number someone signs in with on a new phone or a computer (where the
+/// sign-in screen shows no names). Returns true when it changed.
+Future<bool> editSignInPhone(BuildContext context, ApiClient api, int userId, String whose, String? current) async {
+  final v = await askText(context,
+      title: 'Namba ya kuingia $whose',
+      label: 'Namba ya simu',
+      hint: '0712 345 678',
+      initial: current ?? '',
+      helper: 'Kwenye simu mpya au kompyuta: namba hii + PIN');
+  if (v == null || !context.mounted) return false;
+  try {
+    await api.patch('staff/$userId/phone', {'phone': v.trim()});
+    return true;
+  } on ApiException catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: dangerRed));
+    }
+    return false;
   }
 }

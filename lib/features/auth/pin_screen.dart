@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
 import '../../models/staff.dart';
 
-/// Screen 5 of the mockups: pick who you are, type a 4-digit PIN.
+/// Sign in: who you are, then a 4-digit PIN.
 ///
-/// It is a StatefulWidget because it remembers things while you use it:
-/// the staff list, who is selected, the digits typed so far, and whether
-/// a login is in progress. Changing them inside setState() redraws the screen.
+/// What it shows depends on the device (the server decides, see
+/// Session.loadSignIn), so a stranger's phone or browser learns nothing:
+///   personal: "Karibu tena, Hamisi" and the PIN pad. "Si wewe?" for anyone else.
+///   shared:   the counter phone: round initials, most recent first.
+///   new:      phone number + PIN; the device then waits for the owner's approval.
 class PinScreen extends StatefulWidget {
   const PinScreen({super.key, required this.session});
 
@@ -22,48 +25,64 @@ class PinScreen extends StatefulWidget {
 class _PinScreenState extends State<PinScreen> {
   static const _pinLength = 4;
 
-  List<Staff> _staff = [];
+  SignInInfo? _info;
+  bool _byPhone = false; // new device, or "Si wewe?"
+  final _phone = TextEditingController();
+  final _phoneFocus = FocusNode();
   Staff? _selected;
   String _pin = '';
-  bool _loading = true; // loading the staff list
-  bool _signingIn = false; // waiting for the server to check the PIN
+  bool _loading = true;
+  bool _signingIn = false;
   String? _error;
 
-  // Set when the PIN was right but this phone isn't approved yet.
+  // Set when the PIN was right but this device isn't approved yet.
   // The PIN is kept in memory only while waiting, so "Jaribu tena" doesn't
-  // make the helper type it again. It's cleared when he leaves this view.
+  // make the person type it again. It's cleared when they leave this view.
   String? _pairingCode;
   String _pendingPin = '';
 
   @override
   void initState() {
     super.initState();
-    // setState() isn't allowed while the screen is still being created,
-    // so start loading right after the first frame is drawn.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStaff());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _loadStaff() async {
+  @override
+  void dispose() {
+    _phone.dispose();
+    _phoneFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final staff = await widget.session.loadStaff();
+      final info = await widget.session.loadSignIn();
+      if (!mounted) return;
       setState(() {
-        _staff = staff;
-        // Preselect the helper: they sign in more often at the counter.
-        _selected = staff.where((s) => !s.isOwner).firstOrNull ?? staff.firstOrNull;
+        _info = info;
+        _byPhone = info.mode == 'new' || (info.mode == 'shared' && info.staff.isEmpty);
+        _selected = info.mode == 'personal' ? info.lastUser : (info.staff.isEmpty ? null : info.staff.first);
       });
+      if (_byPhone) _phoneFocus.requestFocus();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  bool get _phoneReady => _phone.text.replaceAll(RegExp(r'[^0-9]'), '').length >= 9;
+
   void _tapDigit(String digit) {
     if (_signingIn || _pin.length >= _pinLength) return;
+    if (_byPhone && !_phoneReady) {
+      setState(() => _error = 'Andika namba yako ya simu kwanza.');
+      return;
+    }
     setState(() {
       _pin += digit;
       _error = null;
@@ -78,21 +97,19 @@ class _PinScreenState extends State<PinScreen> {
   }
 
   Future<void> _submit([String? pin]) async {
-    final staff = _selected;
-    if (staff == null) return;
+    if (!_byPhone && _selected == null) return;
     final pinToSend = pin ?? _pin;
     setState(() => _signingIn = true);
     try {
-      await widget.session.login(staff, pinToSend);
+      await widget.session.login(_byPhone ? null : _selected, pinToSend, phone: _byPhone ? _phone.text.trim() : null);
       // Success: Session notifies main.dart, which swaps to HomeScreen.
-      // This screen is removed, so we don't touch its state afterwards.
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _pin = '';
         _signingIn = false;
         if (e.code == 'device_pending') {
-          // Right PIN, new phone: switch to the "show the owner this number" view.
+          // Right PIN, new device: show the owner this number.
           final wasWaiting = _pairingCode != null;
           _pairingCode = e.data['pairing_code'] as String?;
           _pendingPin = pinToSend;
@@ -114,20 +131,53 @@ class _PinScreenState extends State<PinScreen> {
     });
   }
 
+  void _usePhone() {
+    setState(() {
+      _byPhone = true;
+      _pin = '';
+      _error = null;
+    });
+    _phoneFocus.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: brandGreen,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: _loading
-              ? const Center(child: CircularProgressIndicator(color: Colors.white))
-              : _staff.isEmpty
-                  ? _buildLoadError()
-                  : _pairingCode != null
-                      ? _buildWaitingForApproval()
-                      : _buildPinPad(),
+        // On a laptop the keyboard types the PIN too (digits, Backspace),
+        // except while the phone-number field is being typed in.
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent || _pairingCode != null || _phoneFocus.hasFocus) return KeyEventResult.ignored;
+            final ch = event.character;
+            if (ch != null && RegExp(r'^[0-9]$').hasMatch(ch)) {
+              _tapDigit(ch);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.backspace) {
+              _backspace();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          // Phone-sized in the middle of a wide screen.
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420, maxHeight: 820),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                    : _info == null
+                        ? _buildLoadError()
+                        : _pairingCode != null
+                            ? _buildWaitingForApproval()
+                            : _buildPinPad(),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -202,12 +252,12 @@ class _PinScreenState extends State<PinScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            _error ?? 'Hakuna watumiaji.',
+            _error ?? 'Imeshindwa kufungua.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white, fontSize: 16),
           ),
           const SizedBox(height: 16),
-          FilledButton.tonal(onPressed: _loadStaff, child: const Text('Jaribu tena')),
+          FilledButton.tonal(onPressed: _load, child: const Text('Jaribu tena')),
         ],
       ),
     );
@@ -219,32 +269,7 @@ class _PinScreenState extends State<PinScreen> {
         const SizedBox(height: 16),
         const Text('AFYA NJIA', style: TextStyle(color: Colors.white70, letterSpacing: 2, fontSize: 13)),
         const SizedBox(height: 8),
-        const Text('Nani anaingia?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 24),
-
-        // Who is signing in
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.center,
-          children: [
-            for (final s in _staff)
-              ChoiceChip(
-                label: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  child: Text('${s.name}\n${s.isOwner ? 'Mmiliki' : 'Mhudumu'}', textAlign: TextAlign.center),
-                ),
-                selected: _selected?.id == s.id,
-                onSelected: _signingIn
-                    ? null
-                    : (_) => setState(() {
-                          _selected = s;
-                          _pin = '';
-                          _error = null;
-                        }),
-              ),
-          ],
-        ),
+        ..._who(),
         const SizedBox(height: 32),
 
         // The four dots
@@ -302,6 +327,108 @@ class _PinScreenState extends State<PinScreen> {
           style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
+    );
+  }
+
+  /// The top part: depends on the device.
+  List<Widget> _who() {
+    final info = _info!;
+    if (_byPhone) {
+      return [
+        const Text('Ingia', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        const Text('Namba yako ya simu na PIN', style: TextStyle(color: Colors.white70)),
+        const SizedBox(height: 18),
+        TextField(
+          controller: _phone,
+          focusNode: _phoneFocus,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.done,
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]')), LengthLimitingTextInputFormatter(16)],
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: inkColor),
+          onChanged: (_) => setState(() => _error = null),
+          // Enter: on to the PIN (the keypad, or the keyboard's digits).
+          onSubmitted: (_) => _phoneFocus.unfocus(),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            hintText: '0712 345 678',
+            prefixIcon: const Icon(Icons.phone_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          ),
+        ),
+        if (info.mode != 'new')
+          TextButton(
+            onPressed: () => setState(() {
+              _byPhone = false;
+              _pin = '';
+              _error = null;
+            }),
+            child: const Text('Rudi', style: TextStyle(color: Colors.white)),
+          ),
+      ];
+    }
+    if (info.mode == 'personal' && _selected != null) {
+      return [
+        _avatar(_selected!, size: 64, selected: true),
+        const SizedBox(height: 12),
+        Text('Karibu tena, ${_selected!.name.split(' ').first}',
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+        TextButton(onPressed: _usePhone, child: const Text('Si wewe?', style: TextStyle(color: Colors.white70))),
+      ];
+    }
+    // The shared counter phone: who uses it, most recent first.
+    return [
+      const Text('Nani anaingia?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 18),
+      Wrap(
+        spacing: 14,
+        runSpacing: 12,
+        alignment: WrapAlignment.center,
+        children: [
+          for (final s in info.staff)
+            InkWell(
+              borderRadius: BorderRadius.circular(40),
+              onTap: _signingIn
+                  ? null
+                  : () => setState(() {
+                        _selected = s;
+                        _pin = '';
+                        _error = null;
+                      }),
+              child: SizedBox(
+                width: 72,
+                child: Column(children: [
+                  _avatar(s, size: 52, selected: _selected?.id == s.id),
+                  const SizedBox(height: 6),
+                  Text(s.name.split(' ').first,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white, fontWeight: _selected?.id == s.id ? FontWeight.w800 : FontWeight.w500)),
+                ]),
+              ),
+            ),
+        ],
+      ),
+      TextButton(onPressed: _usePhone, child: const Text('Siko kwenye orodha', style: TextStyle(color: Colors.white70))),
+    ];
+  }
+
+  /// Round initials: quicker to spot than a list of names.
+  Widget _avatar(Staff s, {required double size, required bool selected}) {
+    final parts = s.name.trim().split(RegExp(r'\s+'));
+    final initials = (parts.first.isEmpty ? '?' : parts.first[0]) + (parts.length > 1 && parts.last.isNotEmpty ? parts.last[0] : '');
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? Colors.white : Colors.white.withAlpha(40),
+        border: Border.all(color: Colors.white, width: selected ? 3 : 1),
+      ),
+      child: Text(initials.toUpperCase(),
+          style: TextStyle(fontSize: size * 0.36, fontWeight: FontWeight.w800, color: selected ? brandGreen : Colors.white)),
     );
   }
 

@@ -11,6 +11,7 @@ import '../../core/session.dart';
 import '../auth/change_pin_screen.dart';
 import '../devices/devices_screen.dart';
 import '../expiry/expiry_screen.dart';
+import '../bulk/bulk_entry_screen.dart';
 import '../orders/reorder_screen.dart';
 import '../suppliers/suppliers_screen.dart';
 import '../purchases/purchases_screen.dart';
@@ -648,6 +649,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 leading: const Icon(Icons.local_shipping_outlined),
                 title: Text(_can(Perm.confirmDeliveries) ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu'),
                 onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
+              ),
+            // Made for a laptop (web): many lines with a keyboard. On a phone it
+            // still works, but Pokea mzigo is the phone's way.
+            if (_can(Perm.receive))
+              ListTile(
+                leading: const Icon(Icons.table_chart_outlined),
+                title: const Text('Ingiza kwa wingi'),
+                subtitle: Text(MediaQuery.of(sheet).size.width >= 900 ? 'Hisa ya mwanzo, mizigo mikubwa' : 'Bora kwenye kompyuta'),
+                onTap: () => go(sheet, BulkEntryScreen(session: widget.session)),
               ),
             if (_can(Perm.prepareOrders))
               ListTile(

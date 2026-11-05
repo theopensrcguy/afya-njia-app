@@ -45,6 +45,18 @@ class _DevicesScreenState extends State<DevicesScreen> {
     }
   }
 
+  Future<void> _setMode(Map<String, dynamic> device, bool shared) async {
+    setState(() => _busyId = device['id']);
+    try {
+      await widget.session.api.patch('devices/${device['id']}/mode', {'mode': shared ? 'shared' : 'personal'});
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
   Future<void> _approve(Map<String, dynamic> device) async {
     await _act(device, 'approve', 'Simu imeidhinishwa.');
   }
@@ -151,7 +163,21 @@ class _DevicesScreenState extends State<DevicesScreen> {
               ],
             ),
             const SizedBox(height: 4),
-            Text('Imeombwa na ${d['requested_by']}', style: const TextStyle(color: mutedText, fontSize: 13)),
+            Text(
+              'Imeombwa na ${d['requested_by']}${d['last_user'] != null ? ' · aliyetumia mwisho: ${d['last_user']}' : ''}',
+              style: const TextStyle(color: mutedText, fontSize: 13),
+            ),
+            // What its sign-in screen shows: one person's PIN, or the counter list.
+            if (status == 'approved')
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: d['mode'] == 'shared',
+                title: const Text('Simu ya pamoja (kaunta)', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(d['mode'] == 'shared'
+                    ? 'Skrini ya kuingia inaonyesha wanaoitumia'
+                    : 'Inauliza PIN ya ${d['last_user'] ?? 'mtumiaji wake'} tu'),
+                onChanged: busy ? null : (on) => _setMode(d, on),
+              ),
             if (status == 'pending') ...[
               const SizedBox(height: 12),
               const Text('Hakikisha namba hii inalingana na iliyo kwenye simu yake:', style: TextStyle(fontSize: 13)),

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -36,7 +34,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   final _invoice = TextEditingController();
   final _invoiceTotal = TextEditingController();
   final List<ReceiveLine> _lines = [];
-  String? _photoPath;
+  // Bytes, not a path: works on the phone and in a browser alike.
+  Uint8List? _photoBytes;
+  String _photoName = 'ankara.jpg';
   bool _saving = false;
   String? _error;
 
@@ -150,7 +150,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     try {
       // Smaller than full size: still readable, and quick on mobile data.
       final file = await ImagePicker().pickImage(source: source, imageQuality: 60, maxWidth: 1600);
-      if (file != null && mounted) setState(() => _photoPath = file.path);
+      if (file != null) {
+        final bytes = await file.readAsBytes();
+        if (mounted) {
+          setState(() {
+            _photoBytes = bytes;
+            _photoName = file.name;
+          });
+        }
+      }
     } on MissingPluginException {
       // The camera is native code: added packages need a full rebuild, not hot restart.
       _toast('Kamera haijawekwa kwenye app hii bado. Simamisha app (q) na uendeshe "flutter run" upya.', error: true);
@@ -193,9 +201,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       // The delivery is saved. The photo is extra: if it fails, say so but
       // don't lose the delivery.
       var photoFailed = false;
-      if (_photoPath != null) {
+      if (_photoBytes != null) {
         try {
-          await _api.upload('purchases/${res['id']}/photo', 'photo', _photoPath!);
+          await _api.upload('purchases/${res['id']}/photo', 'photo', _photoBytes!, _photoName);
         } on ApiException {
           photoFailed = true;
         }
@@ -338,12 +346,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         const SizedBox(height: 12),
         Row(children: [
           const Expanded(child: Text('Picha ya ankara (si lazima)', style: TextStyle(color: mutedText))),
-          if (_photoPath != null) ...[
+          if (_photoBytes != null) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.file(File(_photoPath!), width: 44, height: 44, fit: BoxFit.cover),
+              child: Image.memory(_photoBytes!, width: 44, height: 44, fit: BoxFit.cover),
             ),
-            IconButton(tooltip: 'Ondoa picha', onPressed: () => setState(() => _photoPath = null), icon: const Icon(Icons.close)),
+            IconButton(tooltip: 'Ondoa picha', onPressed: () => setState(() => _photoBytes = null), icon: const Icon(Icons.close)),
           ] else
             FilledButton.tonalIcon(onPressed: _takePhoto, icon: const Icon(Icons.photo_camera_outlined), label: const Text('Piga picha')),
         ]),
