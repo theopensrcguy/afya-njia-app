@@ -284,7 +284,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
             const Text('Maagizo yanayosubiriwa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const Text(
               'Agizo linafungwa lenyewe ukipokea (Pokea mzigo) bidhaa yake yoyote kutoka kwa msambazaji huyo. '
-              'Lisilokuja, lifunge hapa.',
+              'Lisilokuja (msambazaji hana mzigo, au umenunua kwingine), ghairi hapa.',
               style: TextStyle(fontSize: 12, color: mutedText),
             ),
             for (final o in _open)
@@ -314,7 +314,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
                           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
                         }
                       },
-                      child: const Text('Funga: halitakuja', style: TextStyle(color: dangerRed)),
+                      child: const Text('Ghairi agizo: halitakuja', style: TextStyle(color: dangerRed)),
                     ),
                   ),
                 ]),
@@ -376,8 +376,8 @@ class _ReorderScreenState extends State<ReorderScreen> {
                   child: ListTile(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     leading: const Icon(Icons.local_shipping_outlined, color: brandGreen),
-                    title: Text('Maagizo ${_open.length} yanasubiriwa', style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('Hayaagizwi tena. Gusa kuona'),
+                    title: Text('Maagizo ${_open.length} yametumwa, yanasubiri kufika', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('Bidhaa zake hazitapendekezwa tena mpaka mzigo ufike · gusa kuona'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _showOpen,
                   ),

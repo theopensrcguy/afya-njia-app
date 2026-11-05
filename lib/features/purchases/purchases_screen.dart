@@ -62,7 +62,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_canConfirm ? 'Mizigo inayosubiri' : 'Mizigo yangu'), backgroundColor: pageBackground),
+      appBar: AppBar(title: Text(_canConfirm ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu'), backgroundColor: pageBackground),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

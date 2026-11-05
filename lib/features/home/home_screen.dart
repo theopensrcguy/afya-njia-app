@@ -404,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!_shopView) ...[
         _tile(Icons.point_of_sale_outlined, 'Zamu', () => _open(ShiftScreen(session: widget.session)), color: brandGreen),
         if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
-          _tile(Icons.inventory_outlined, _can(Perm.confirmDeliveries) ? 'Mizigo' : 'Mizigo yangu',
+          _tile(Icons.inventory_outlined, _can(Perm.confirmDeliveries) ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu',
               () => _open(PurchasesScreen(session: widget.session)), color: brandGreen),
       ],
       if (_can(Perm.viewStock)) ...[
@@ -513,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
         (
           icon: Icons.local_shipping_outlined,
           color: const Color(0xFF7A5BC7),
-          title: 'Mizigo $waiting inasubiri uthibitisho',
+          title: 'Mizigo $waiting ya kuthibitisha',
           subtitle: 'Hisa yake bado haijaongezwa. Ithibitishe au ikatae.',
           screen: PurchasesScreen(session: widget.session),
         ),
@@ -646,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
               ListTile(
                 leading: const Icon(Icons.local_shipping_outlined),
-                title: Text(_can(Perm.confirmDeliveries) ? 'Mizigo inayosubiri' : 'Mizigo yangu'),
+                title: Text(_can(Perm.confirmDeliveries) ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu'),
                 onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
               ),
             if (_can(Perm.prepareOrders))
