@@ -14,6 +14,7 @@ import '../../models/product.dart';
 import 'new_product.dart';
 import 'new_product_screen.dart';
 import 'receive_line.dart';
+import '../../core/i18n.dart';
 
 /// One packaging choice for this delivery: "Boksi · 100".
 class _Pack {
@@ -162,7 +163,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       setState(() => _error = e.code == 'unknown_barcode' ? null : e.message);
       if (e.code == 'unknown_barcode') {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Barcode mpya: chagua au ongeza bidhaa yake. Itakumbukwa kwa kaunta.'),
+          content: T('Barcode mpya: chagua au ongeza bidhaa yake. Itakumbukwa kwa kaunta.'),
         ));
       }
     }
@@ -284,7 +285,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     if (name == null || !mounted) return;
     final base = unitLabel(_product!.units.first.name, 2);
     final size = await askText(context,
-        title: '${unitLabel(name)} moja ina $base ngapi?', label: 'Idadi ya $base', digitsOnly: true, required: true);
+        title: tr(':a moja ina :base ngapi?', {'a': unitLabel(name), 'base': base}), label: tr('Idadi ya :base', {'base': base}), digitsOnly: true, required: true);
     final n = int.tryParse(size ?? '') ?? 0;
     if (n < 1 || !mounted) return;
     setState(() {
@@ -302,15 +303,15 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final cost = int.tryParse(_cost.text.trim());
     String? error;
     if (_pack == null) {
-      error = 'Chagua kimekuja kwa kifungashio gani.';
+      error = tr('Chagua kimekuja kwa kifungashio gani.');
     } else if (batch.isEmpty) {
-      error = 'Andika namba ya batch (iko kwenye boksi).';
+      error = tr('Andika namba ya batch (iko kwenye boksi).');
     } else if (_year == null || _month == null) {
-      error = 'Chagua mwezi na mwaka wa kuisha (EXP).';
+      error = tr('Chagua mwezi na mwaka wa kuisha (EXP).');
     } else if (_monthsLeft() < 0) {
-      error = 'Batch hii imeshaisha muda. Haipokelewi.';
+      error = tr('Batch hii imeshaisha muda. Haipokelewi.');
     } else if (cost == null) {
-      error = 'Weka bei ya kununua kwa ${unitLabel(_pack!.name)}.';
+      error = tr('Weka bei ya kununua kwa :a.', {'a': unitLabel(_pack!.name)});
     }
     if (error != null) {
       setState(() => _error = error);
@@ -344,7 +345,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.initial == null ? 'Ongeza bidhaa' : 'Badilisha bidhaa'),
+        title: Text(widget.initial == null ? tr('Ongeza bidhaa') : tr('Badilisha bidhaa')),
         backgroundColor: pageBackground,
       ),
       body: _product == null ? _searchView() : _form(),
@@ -360,12 +361,12 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
           autofocus: true,
           onChanged: _onSearch,
           decoration: InputDecoration(
-            labelText: 'Tafuta dawa iliyokuja',
+            labelText: tr('Tafuta dawa iliyokuja'),
             prefixIcon: const Icon(Icons.search),
-            helperText: _barcode == null ? null : 'Barcode $_barcode itaunganishwa na bidhaa utakayochagua',
+            helperText: _barcode == null ? null : tr('Barcode :barcode itaunganishwa na bidhaa utakayochagua', {'barcode': _barcode}),
             suffixIcon: _searching
                 ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                : IconButton(tooltip: 'Skani boksi', onPressed: _scan, icon: const Icon(Icons.qr_code_scanner, color: brandGreen)),
+                : IconButton(tooltip: tr('Skani boksi'), onPressed: _scan, icon: const Icon(Icons.qr_code_scanner, color: brandGreen)),
           ),
         ),
       ),
@@ -377,35 +378,35 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
           children: [
             // New products already on this delivery (a second batch of one).
             if (widget.drafts.isNotEmpty) ...[
-              _section('MPYA KWENYE MZIGO HUU'),
+              _section(tr('MPYA KWENYE MZIGO HUU')),
               for (final d in widget.drafts)
                 _tile(
                   title: d.name,
-                  subtitle: 'Bidhaa mpya · ${d.units.map((u) => unitLabel(u.name)).join(', ')}',
-                  badge: 'mpya',
+                  subtitle: tr('Bidhaa mpya · :a', {'a': d.units.map((u) => unitLabel(u.name)).join(', ')}),
+                  badge: tr('mpya'),
                   onTap: () => _chooseDraft(d),
                 ),
             ],
             // 1. The shop's own products always come first.
-            if (_results.isNotEmpty) _section('BIDHAA ZAKO'),
+            if (_results.isNotEmpty) _section(tr('BIDHAA ZAKO')),
             for (final p in _results)
               _tile(
                 title: p.name,
-                subtitle: 'Iliyopo: ${describeStock(p.onHand, p.units)}',
+                subtitle: tr('Iliyopo: :a', {'a': describeStock(p.onHand, p.units)}),
                 onTap: () => _choose(p),
               ),
             // 2. Then the catalogue: correct names for what isn't in stock yet.
             if (_catalogue.isNotEmpty) ...[
-              _section('KATALOGI · BADO HUNA HIZI'),
+              _section(tr('KATALOGI · BADO HUNA HIZI')),
               const Padding(
                 padding: EdgeInsets.only(bottom: 6),
-                child: Text('Ukichagua, bidhaa mpya inaundwa kwa jina sahihi.', style: TextStyle(fontSize: 12, color: mutedText)),
+                child: T('Ukichagua, bidhaa mpya inaundwa kwa jina sahihi.', style: TextStyle(fontSize: 12, color: mutedText)),
               ),
               for (final (item, v) in _catalogue)
                 _tile(
                   title: '${v['name']}',
                   subtitle: _catalogueLine(item),
-                  badge: '+ Mpya',
+                  badge: tr('+ Mpya'),
                   onTap: () => _newProduct(item: item, variant: v),
                 ),
             ],
@@ -419,13 +420,13 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                   border: Border.all(color: const Color(0xFF9CC9B8)),
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Haipo kwenye katalogi pia?', style: TextStyle(fontWeight: FontWeight.w800)),
-                  const Text('Kwa vitu visivyo dawa (vipodozi, glovu, pamba). Mwenye duka ataona alama "nje ya katalogi".',
+                  const T('Haipo kwenye katalogi pia?', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const T('Kwa vitu visivyo dawa (vipodozi, glovu, pamba). Mwenye duka ataona alama "nje ya katalogi".',
                       style: TextStyle(fontSize: 12, color: mutedText)),
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: () => _newProduct(typed: _search.text.trim()),
-                    child: Text('Ongeza "${_search.text.trim()}" kama bidhaa mpya'),
+                    child: Text(tr('Ongeza ":a" kama bidhaa mpya', {'a': _search.text.trim()})),
                   ),
                 ]),
               ),
@@ -439,7 +440,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   String _catalogueLine(Map<String, dynamic> item) {
     const sources = {'tmda': 'TMDA', 'nemlit': 'NEMLIT', 'supplies': 'Vifaa tiba'};
     final brandOf = item['source'] == 'tmda' && item['ingredient'] != null ? ' · ${item['ingredient']}' : '';
-    return '${sources[item['source']] ?? item['source']}$brandOf';
+    return '${sources[item['source']] == null ? item['source'] : tr(sources[item['source']]!)}$brandOf';
   }
 
   Widget _section(String text) => Padding(
@@ -498,19 +499,19 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                         margin: const EdgeInsets.only(bottom: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: const Color(0xFFDDF3EA), borderRadius: BorderRadius.circular(8)),
-                        child: Text(_draft!.offCatalogue ? 'BIDHAA MPYA · nje ya katalogi' : 'BIDHAA MPYA',
+                        child: Text(_draft!.offCatalogue ? tr('BIDHAA MPYA · nje ya katalogi') : tr('BIDHAA MPYA'),
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: brandGreen)),
                       ),
                     Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                     Text(
                       _draft != null
-                          ? (_draft!.hasPrices ? 'Itaundwa mzigo ukihifadhiwa' : 'Bei ya kuuza: mwenye duka ataiweka akithibitisha')
-                          : 'Iliyopo: ${describeStock(p.onHand, p.units)}',
+                          ? (_draft!.hasPrices ? tr('Itaundwa mzigo ukihifadhiwa') : tr('Bei ya kuuza: mwenye duka ataiweka akithibitisha'))
+                          : tr('Iliyopo: :a', {'a': describeStock(p.onHand, p.units)}),
                       style: const TextStyle(fontSize: 12, color: mutedText),
                     ),
                   ]),
                 ),
-                if (_draft != null) TextButton(onPressed: _editDraft, child: const Text('Hariri')),
+                if (_draft != null) TextButton(onPressed: _editDraft, child: const T('Hariri')),
                 if (widget.initial == null)
                   TextButton(
                     onPressed: () => setState(() {
@@ -519,19 +520,25 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                       _linkId = null;
                       _linkVariant = null;
                     }),
-                    child: const Text('Badilisha'),
+                    child: const T('Badilisha'),
                   ),
               ]),
             ]),
 
             // Packaging + how many
             _card([
-              const Text('Kimekuja kwa kifungashio gani?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const T('Kimekuja kwa kifungashio gani?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
               if (_last != null)
                 Text(
-                  '${_last!['from_this_supplier'] == true ? 'Mara ya mwisho ${widget.supplierName ?? 'msambazaji huyu'}' : 'Mzigo wa mwisho'}: '
-                  '${_last!['pack_name'] == null ? unitLabel(base, 2) : unitLabel('${_last!['pack_name']}')} ya ${unitLabel(base, 2)} ${_last!['pack_size']}, '
-                  '${formatTsh(asInt(_last!['pack_cost']))}',
+                  tr(':when: :pack ya :base :size, :cost', {
+                    'when': _last!['from_this_supplier'] == true
+                        ? tr('Mara ya mwisho :supplier', {'supplier': widget.supplierName ?? tr('msambazaji huyu')})
+                        : tr('Mzigo wa mwisho'),
+                    'pack': _last!['pack_name'] == null ? unitLabel(base, 2) : unitLabel('${_last!['pack_name']}'),
+                    'base': unitLabel(base, 2),
+                    'size': _last!['pack_size'],
+                    'cost': formatTsh(asInt(_last!['pack_cost'])),
+                  }),
                   style: const TextStyle(fontSize: 12, color: mutedText),
                 ),
               const SizedBox(height: 10),
@@ -548,18 +555,18 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                       _fillCostFromLast();
                     }),
                   ),
-                ActionChip(label: const Text('+ Nyingine'), onPressed: _otherPack),
+                ActionChip(label: const T('+ Nyingine'), onPressed: _otherPack),
               ]),
               const SizedBox(height: 14),
               Row(children: [
                 Expanded(
-                  child: Text('${pack == null ? 'Ngapi' : unitLabel(pack.name, 2)} ngapi?',
+                  child: Text(tr(':a ngapi?', {'a': pack == null ? tr('Ngapi') : unitLabel(pack.name, 2)}),
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                 ),
                 _stepButton(Icons.remove, _count > 1 ? () => setState(() => _count--) : null),
                 InkWell(
                   onTap: () async {
-                    final v = await askText(context, title: 'Idadi', label: 'Idadi', initial: '$_count', digitsOnly: true, required: true);
+                    final v = await askText(context, title: tr('Idadi'), label: tr('Idadi'), initial: '$_count', digitsOnly: true, required: true);
                     final n = int.tryParse(v ?? '') ?? 0;
                     if (n > 0 && mounted) setState(() => _count = n);
                   },
@@ -586,14 +593,14 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
               TextField(
                 controller: _batch,
                 textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(labelText: 'Namba ya batch (BATCH / LOT)'),
+                decoration: InputDecoration(labelText: tr('Namba ya batch (BATCH / LOT)')),
               ),
             ]),
 
             // Expiry
             _card([
               Row(children: [
-                const Expanded(child: Text('Inaisha (EXP)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+                const Expanded(child: T('Inaisha (EXP)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
                 if (_year != null && _month != null)
                   Text('${_month.toString().padLeft(2, '0')}/$_year',
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: brandGreen)),
@@ -605,7 +612,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
               if (_year != null && _month != null && _monthsLeft() >= 0 && _monthsLeft() < 6)
                 const Padding(
                   padding: EdgeInsets.only(top: 10),
-                  child: Text('Muda mfupi: inaisha ndani ya miezi 6. Una uhakika?',
+                  child: T('Muda mfupi: inaisha ndani ya miezi 6. Una uhakika?',
                       style: TextStyle(color: warnAmber, fontWeight: FontWeight.w800, fontSize: 12)),
                 ),
             ]),
@@ -618,7 +625,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  labelText: 'Bei ya kununua kwa ${pack == null ? 'kifungashio' : unitLabel(pack.name)} (TSh)',
+                  labelText: tr('Bei ya kununua kwa :a (TSh)', {'a': pack == null ? tr('kifungashio') : unitLabel(pack.name)}),
                   helperText: _sellingHint(cost),
                 ),
               ),
@@ -633,14 +640,14 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Row(children: [
-              const Expanded(child: Text('Jumla ya bidhaa hii', style: TextStyle(color: mutedText))),
+              const Expanded(child: T('Jumla ya bidhaa hii', style: TextStyle(color: mutedText))),
               Text(formatTsh(total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             ]),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: _save,
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-              child: Text(widget.initial == null ? 'Ongeza kwenye mzigo' : 'Hifadhi mabadiliko'),
+              child: Text(widget.initial == null ? tr('Ongeza kwenye mzigo') : tr('Hifadhi mabadiliko')),
             ),
           ]),
         ),
@@ -655,10 +662,10 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final perBase = cost / pack.size;
     final sell = _product!.units.first.price;
     final base = unitLabel(_product!.units.first.name);
-    final cost1 = 'TSh ${perBase.toStringAsFixed(perBase < 10 ? 1 : 0)} kwa $base';
+    final cost1 = tr('TSh :a kwa :base', {'a': perBase.toStringAsFixed(perBase < 10 ? 1 : 0), 'base': base});
     if (sell == 0) return cost1; // new product, price set by the owner later
-    final hint = '$cost1 · unauza TSh $sell';
-    return perBase >= sell ? '$hint · HASARA!' : hint;
+    final hint = tr(':cost · unauza TSh :sell', {'cost': cost1, 'sell': sell});
+    return perBase >= sell ? tr(':hint · HASARA!', {'hint': hint}) : hint;
   }
 
   Widget _stepButton(IconData icon, VoidCallback? onTap, {bool filled = false}) => SizedBox(
@@ -721,7 +728,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
               borderRadius: BorderRadius.circular(10),
               onTap: () => setState(() => _month = m),
               child: Center(
-                child: Text(_monthNames[m - 1],
+                child: Text(tr(_monthNames[m - 1]),
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _month == m ? Colors.white : inkColor)),
               ),
             ),

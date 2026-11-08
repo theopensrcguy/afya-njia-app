@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/pin_fields.dart';
 import '../../core/session.dart';
+import '../../core/i18n.dart';
 
 /// Choose my own PIN.
 ///
@@ -52,11 +53,11 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
     final fresh = _fresh.text.trim();
     String? error;
     if (current.length != 4 || fresh.length != 4) {
-      error = 'Kila PIN iwe tarakimu 4.';
+      error = tr('Kila PIN iwe tarakimu 4.');
     } else if (fresh != _again.text.trim()) {
-      error = 'PIN mpya hazilingani.';
+      error = tr('PIN mpya hazilingani.');
     } else if (fresh == current) {
-      error = 'PIN mpya isiwe sawa na ya sasa.';
+      error = tr('PIN mpya isiwe sawa na ya sasa.');
     }
     if (error != null) {
       setState(() => _error = error);
@@ -71,7 +72,7 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
       await widget.session.changeOwnPin(current, fresh);
       if (!mounted) return;
       if (!widget.forced) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN yako imebadilishwa.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('PIN yako imebadilishwa.')));
         Navigator.of(context).pop();
       }
       // forced: the session changed and main.dart now shows the home screen.
@@ -87,11 +88,11 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
     final name = widget.session.user?.name ?? '';
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.forced ? 'Chagua PIN yako' : 'Badilisha PIN yangu'),
+        title: Text(widget.forced ? tr('Chagua PIN yako') : tr('Badilisha PIN yangu')),
         backgroundColor: pageBackground,
         automaticallyImplyLeading: !widget.forced, // forced: no back button
         actions: [
-          if (widget.forced) TextButton(onPressed: widget.session.logout, child: const Text('Toka')),
+          if (widget.forced) TextButton(onPressed: widget.session.logout, child: const T('Toka')),
         ],
       ),
       body: ListView(
@@ -102,16 +103,15 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
             decoration: softCard(radius: 18),
             child: Text(
               widget.forced
-                  ? 'Karibu $name. PIN uliyopewa ni ya muda tu: mmiliki anaijua. '
-                      'Chagua PIN yako mwenyewe, ambayo ni wewe tu unaijua. Kila mauzo yatakuwa na jina lako.'
-                  : 'Badilisha PIN mara moja kama unadhani mtu ameiona. Usimwambie mtu yeyote PIN yako.',
+                  ? tr('Karibu :name. PIN uliyopewa ni ya muda tu: mmiliki anaijua. Chagua PIN yako mwenyewe, ambayo ni wewe tu unaijua. Kila mauzo yatakuwa na jina lako.', {'name': name})
+                  : tr('Badilisha PIN mara moja kama unadhani mtu ameiona. Usimwambie mtu yeyote PIN yako.'),
               style: const TextStyle(height: 1.4),
             ),
           ),
           const SizedBox(height: 20),
           PinBox(
             controller: _current,
-            label: widget.forced ? 'PIN uliyopewa' : 'PIN ya sasa',
+            label: widget.forced ? tr('PIN uliyopewa') : tr('PIN ya sasa'),
             autofocus: true,
             next: _freshFocus,
             onChanged: () => setState(() {}),
@@ -121,7 +121,7 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
             controller: _fresh,
             focusNode: _freshFocus,
             next: _againFocus,
-            label: 'PIN mpya',
+            label: tr('PIN mpya'),
             status: newPinStatus(_fresh.text, mustDifferFrom: _current.text),
             onChanged: () => setState(() {}),
           ),
@@ -130,12 +130,12 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
           PinBox(
             controller: _again,
             focusNode: _againFocus,
-            label: 'Rudia PIN mpya',
+            label: tr('Rudia PIN mpya'),
             status: repeatStatus(_fresh.text, _again.text),
             onChanged: () => setState(() {}),
           ),
           const SizedBox(height: 10),
-          const Text('Usitumie 1111, 1234, mwaka wa kuzaliwa, wala PIN ya simu yako.',
+          const T('Usitumie 1111, 1234, mwaka wa kuzaliwa, wala PIN ya simu yako.',
               style: TextStyle(color: mutedText, fontSize: 12)),
           if (_error != null)
             Padding(
@@ -146,7 +146,7 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
           FilledButton(
             onPressed: _saving || !_ready ? null : _save,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-            child: Text(_saving ? 'Inahifadhi…' : 'Hifadhi PIN'),
+            child: Text(_saving ? tr('Inahifadhi…') : tr('Hifadhi PIN')),
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/pin_fields.dart';
 import '../../core/session.dart';
 import 'staff_profile.dart';
+import '../../core/i18n.dart';
 
 /// Owner only: who may do what, and until when.
 ///
@@ -45,21 +46,21 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
   /// on the shop's phone they can sign in at once, on their own phone it
   /// waits for approval under Simu (as for any new phone).
   Future<void> _addPerson() async {
-    final name = await askText(context, title: 'Mfanyakazi mpya', label: 'Jina (litaonekana kwenye skrini ya PIN)', required: true);
+    final name = await askText(context, title: tr('Mfanyakazi mpya'), label: tr('Jina (litaonekana kwenye skrini ya PIN)'), required: true);
     if (name == null || !mounted) return;
     final pin = await askNewPin(context,
-        title: 'PIN ya muda ya $name', message: 'Ataitumia mara moja tu kuingia, kisha atachagua PIN yake mwenyewe.');
+        title: tr('PIN ya muda ya :name', {'name': name}), message: tr('Ataitumia mara moja tu kuingia, kisha atachagua PIN yake mwenyewe.'));
     if (pin == null || !mounted) return;
     // How they sign in on a new phone or a computer, where no names are shown.
     final phone = await askText(context,
-        title: 'Namba ya simu ya $name',
-        label: 'Namba ya simu (si lazima sasa)',
+        title: tr('Namba ya simu ya :name', {'name': name}),
+        label: tr('Namba ya simu (si lazima sasa)'),
         hint: '0712 345 678',
-        helper: 'Ataingia nayo kwenye simu mpya au kompyuta');
+        helper: tr('Ataingia nayo kwenye simu mpya au kompyuta'));
     if (!mounted) return;
     try {
       await widget.session.api.post('staff', {'name': name, 'pin': pin, if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim()});
-      _toast('$name ameongezwa. PIN hii ni ya muda: akiingia mara ya kwanza atachagua yake mwenyewe.');
+      _toast(tr(':name ameongezwa. PIN hii ni ya muda: akiingia mara ya kwanza atachagua yake mwenyewe.', {'name': name}));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -76,13 +77,13 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
     final staff = (((_data ?? const {})['staff'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final labels = _labels(_data);
     return Scaffold(
-      appBar: AppBar(title: const Text('Wafanyakazi na ruhusa'), backgroundColor: pageBackground),
+      appBar: AppBar(title: const T('Wafanyakazi na ruhusa'), backgroundColor: pageBackground),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addPerson,
         backgroundColor: brandGreen,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Ongeza mfanyakazi'),
+        label: const T('Ongeza mfanyakazi'),
       ),
       body: _data == null
           ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator())
@@ -91,8 +92,8 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 96),
                 children: [
-                  const Text(
-                    'Mmiliki ana ruhusa zote daima. Hapa unawapa wafanyakazi ruhusa, kwa muda au kudumu, na kuziondoa wakati wowote.',
+                  Text(
+                    tr('Mmiliki ana ruhusa zote daima. Hapa unawapa wafanyakazi ruhusa, kwa muda au kudumu, na kuziondoa wakati wowote.'),
                     style: TextStyle(color: mutedText, fontSize: 13),
                   ),
                   const SizedBox(height: 14),
@@ -103,21 +104,21 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
                       decoration: softCard(radius: 18),
                       child: ListTile(
                         leading: const Icon(Icons.verified_user_outlined, color: brandGreen),
-                        title: const Text('Wewe (mmiliki)', style: TextStyle(fontWeight: FontWeight.w800)),
+                        title: const T('Wewe (mmiliki)', style: TextStyle(fontWeight: FontWeight.w800)),
                         subtitle: Text((_data!['owner'] as Map)['phone'] == null
-                            ? 'Weka namba yako: utaihitaji kuingia kwenye simu mpya au kompyuta'
-                            : 'Namba ya kuingia: ${(_data!['owner'] as Map)['phone']}'),
+                            ? tr('Weka namba yako: utaihitaji kuingia kwenye simu mpya au kompyuta')
+                            : tr('Namba ya kuingia: :a', {'a': (_data!['owner'] as Map)['phone']})),
                         trailing: TextButton(
                           onPressed: () async {
                             final o = (_data!['owner'] as Map).cast<String, dynamic>();
-                            if (await editSignInPhone(context, widget.session.api, asInt(o['id']), 'yako', o['phone'] as String?)) _load();
+                            if (await editSignInPhone(context, widget.session.api, asInt(o['id']), tr('yako'), o['phone'] as String?)) _load();
                           },
-                          child: const Text('Badilisha'),
+                          child: const T('Badilisha'),
                         ),
                       ),
                     ),
                   if (staff.isEmpty)
-                    const Padding(padding: EdgeInsets.only(top: 32), child: Text('Hakuna wafanyakazi bado.', textAlign: TextAlign.center)),
+                    const Padding(padding: EdgeInsets.only(top: 32), child: T('Hakuna wafanyakazi bado.', textAlign: TextAlign.center)),
                   for (final s in staff)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -144,11 +145,11 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
                                         color: s['is_active'] == false ? mutedText : inkColor,
                                       )),
                                 ),
-                                if (s['is_active'] == false) _grantChip('Amesimamishwa', false),
+                                if (s['is_active'] == false) _grantChip(tr('Amesimamishwa'), false),
                                 const Icon(Icons.chevron_right),
                               ]),
                               Text(
-                                s['phone'] == null ? 'Hana namba ya kuingia (simu mpya / kompyuta)' : 'Namba: ${s['phone']}',
+                                s['phone'] == null ? tr('Hana namba ya kuingia (simu mpya / kompyuta)') : tr('Namba: :a', {'a': s['phone']}),
                                 style: TextStyle(fontSize: 12, color: s['phone'] == null ? warnAmber : mutedText),
                               ),
                               const SizedBox(height: 6),
@@ -237,11 +238,11 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
     final now = DateTime.now();
     final endOfToday = DateTime(now.year, now.month, now.day, 23, 59);
     final options = <(String, DateTime?)>[
-      ('Leo tu (hadi saa 5:59 usiku)', endOfToday),
-      ('Siku 3', endOfToday.add(const Duration(days: 3))),
-      ('Wiki 1', endOfToday.add(const Duration(days: 7))),
-      ('Mwezi 1', endOfToday.add(const Duration(days: 30))),
-      ('Kudumu (hadi niiondoe)', null),
+      (tr('Leo tu (hadi saa 5:59 usiku)'), endOfToday),
+      (tr('Siku 3'), endOfToday.add(const Duration(days: 3))),
+      (tr('Wiki 1'), endOfToday.add(const Duration(days: 7))),
+      (tr('Mwezi 1'), endOfToday.add(const Duration(days: 30))),
+      (tr('Kudumu (hadi niiondoe)'), null),
     ];
     final picked = await showModalBottomSheet<int>(
       context: context,
@@ -251,13 +252,13 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Text('$what: mpaka lini?', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            child: Text(tr(':what: mpaka lini?', {'what': what}), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           ),
           for (var i = 0; i < options.length; i++)
             ListTile(
               leading: Icon(options[i].$2 == null ? Icons.all_inclusive : Icons.schedule),
               title: Text(options[i].$1),
-              subtitle: options[i].$2 == null ? null : Text('Inaisha ${_until(options[i].$2!.toIso8601String())}'),
+              subtitle: options[i].$2 == null ? null : Text(tr('Inaisha :a', {'a': _until(options[i].$2!.toIso8601String())})),
               onTap: () => Navigator.of(sheet).pop(i),
             ),
         ]),
@@ -274,10 +275,10 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
       await _run(
         // UTC on the wire, so the server's timezone can't shift the end time.
         () => _api.post('staff/${widget.staffId}/grants', {'permission': key, 'expires_at': until?.toUtc().toIso8601String()}),
-        until == null ? '$label: imetolewa.' : '$label: imetolewa hadi ${_until(until.toIso8601String())}.',
+        until == null ? tr(':label: imetolewa.', {'label': label}) : tr(':label: imetolewa hadi :a.', {'label': label, 'a': _until(until.toIso8601String())}),
       );
     } else {
-      await _run(() => _api.delete('staff/${widget.staffId}/grants/$key'), '$label: imeondolewa.');
+      await _run(() => _api.delete('staff/${widget.staffId}/grants/$key'), tr(':label: imeondolewa.', {'label': label}));
     }
   }
 
@@ -286,26 +287,25 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
     if (!ok) return;
     await _run(
       () => _api.post('staff/${widget.staffId}/bundle', {'bundle': b['key'], 'expires_at': until?.toUtc().toIso8601String()}),
-      'Sasa ni ${b['label']}.',
+      tr('Sasa ni :a.', {'a': b['label']}),
     );
   }
 
   bool get _activeNow => _person['is_active'] != false;
 
   Future<void> _phone() async {
-    if (await editSignInPhone(context, _api, widget.staffId, 'ya ${_person['name']}', _person['phone'] as String?)) {
+    if (await editSignInPhone(context, _api, widget.staffId, tr('ya :a', {'a': _person['name']}), _person['phone'] as String?)) {
       _reload();
     }
   }
 
   Future<void> _changePin() async {
     final pin = await askNewPin(context,
-        title: 'Weka upya PIN ya ${_person['name']}',
-        message: 'Kwa PIN iliyosahauliwa au iliyoonekana. Atatolewa kwenye simu zote sasa hivi, '
-            'na akiingia kwa PIN hii ya muda atachagua yake mwenyewe.');
+        title: tr('Weka upya PIN ya :a', {'a': _person['name']}),
+        message: tr('Kwa PIN iliyosahauliwa au iliyoonekana. Atatolewa kwenye simu zote sasa hivi, na akiingia kwa PIN hii ya muda atachagua yake mwenyewe.'));
     if (pin == null || !mounted) return;
     await _run(() => _api.patch('staff/${widget.staffId}/pin', {'pin': pin}),
-        'PIN imewekwa upya. ${_person['name']} ametolewa kwenye simu zote.');
+        tr('PIN imewekwa upya. :a ametolewa kwenye simu zote.', {'a': _person['name']}));
   }
 
   /// Someone leaves: no sign-in anywhere, signed out on every phone now,
@@ -323,31 +323,30 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
       context: context,
       builder: (d) => StatefulBuilder(
         builder: (d, setLocal) => AlertDialog(
-          title: Text('Simamisha ${_person['name']}?'),
+          title: Text(tr('Simamisha :a?', {'a': _person['name']})),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Hataweza kuingia, na atatolewa kwenye simu zote sasa hivi. Ruhusa zake zinaisha. '
-                  'Mauzo na historia yake vinabaki.'),
+              const T('Hataweza kuingia, na atatolewa kwenye simu zote sasa hivi. Ruhusa zake zinaisha. Mauzo na historia yake vinabaki.'),
               if (phones.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text('Ondoa pia simu hizi kwenye simu zinazoruhusiwa:', style: TextStyle(fontWeight: FontWeight.w700)),
+                const T('Ondoa pia simu hizi kwenye simu zinazoruhusiwa:', style: TextStyle(fontWeight: FontWeight.w700)),
                 for (final p in phones)
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: remove.contains(asInt(p['id'])),
                     onChanged: (v) => setLocal(() => v == true ? remove.add(asInt(p['id'])) : remove.remove(asInt(p['id']))),
                     title: Text('${p['name']}'),
-                    subtitle: p['shared'] == true ? const Text('Inatumiwa na wengine pia (mf. simu ya duka)') : null,
+                    subtitle: p['shared'] == true ? const T('Inatumiwa na wengine pia (mf. simu ya duka)') : null,
                   ),
               ],
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(d).pop(false), child: const Text('Ghairi')),
+            TextButton(onPressed: () => Navigator.of(d).pop(false), child: const T('Ghairi')),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: dangerRed),
               onPressed: () => Navigator.of(d).pop(true),
-              child: const Text('Simamisha'),
+              child: const T('Simamisha'),
             ),
           ],
         ),
@@ -356,12 +355,12 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
     if (ok != true) return;
     await _run(
       () => _api.post('staff/${widget.staffId}/deactivate', {'revoke_device_ids': remove.toList()}),
-      '${_person['name']} amesimamishwa.',
+      tr(':a amesimamishwa.', {'a': _person['name']}),
     );
   }
 
   Future<void> _activate() =>
-      _run(() => _api.post('staff/${widget.staffId}/activate'), '${_person['name']} amerudi kazini (ruhusa za msaidizi).');
+      _run(() => _api.post('staff/${widget.staffId}/activate'), tr(':a amerudi kazini (ruhusa za msaidizi).', {'a': _person['name']}));
 
   Future<void> _history() async {
     final rows = (await _api.get('staff/${widget.staffId}/permission-history') as List).cast<Map<String, dynamic>>();
@@ -378,7 +377,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
           controller: controller,
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           children: [
-            const Text('Historia ya ruhusa', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const T('Historia ya ruhusa', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             for (final r in rows)
               ListTile(
@@ -387,9 +386,9 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                     color: r['active'] == true ? brandGreen : mutedText),
                 title: Text('${r['label']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text([
-                  'Imetolewa ${_until('${r['granted_at']}')}${r['granted_by'] == null ? ' (mwanzo)' : ' na ${r['granted_by']}'}',
-                  if (r['expires_at'] != null) 'Hadi ${_until('${r['expires_at']}')}',
-                  if (r['revoked_at'] != null) 'Imeondolewa ${_until('${r['revoked_at']}')} na ${r['revoked_by']}',
+                  tr('Imetolewa :a:b', {'a': _until('${r['granted_at']}'), 'b': r['granted_by'] == null ? tr(' (mwanzo)') : tr(' na :a', {'a': r['granted_by']})}),
+                  if (r['expires_at'] != null) tr('Hadi :a', {'a': _until('${r['expires_at']}')}),
+                  if (r['revoked_at'] != null) tr('Imeondolewa :a na :b', {'a': _until('${r['revoked_at']}'), 'b': r['revoked_by']}),
                 ].join('\n')),
               ),
           ],
@@ -413,7 +412,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
         title: Text('${_person['name']}'),
         backgroundColor: pageBackground,
         actions: [
-          IconButton(tooltip: 'Historia', onPressed: _history, icon: const Icon(Icons.history)),
+          IconButton(tooltip: tr('Historia'), onPressed: _history, icon: const Icon(Icons.history)),
           PopupMenuButton<String>(
             onSelected: (v) => switch (v) {
               'pin' => _changePin(),
@@ -422,12 +421,12 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
               _ => _activate(),
             },
             itemBuilder: (_) => [
-              if (_activeNow) const PopupMenuItem(value: 'pin', child: Text('Weka upya PIN')),
-              if (_activeNow) const PopupMenuItem(value: 'phone', child: Text('Namba ya kuingia')),
+              if (_activeNow) const PopupMenuItem(value: 'pin', child: T('Weka upya PIN')),
+              if (_activeNow) const PopupMenuItem(value: 'phone', child: T('Namba ya kuingia')),
               if (_activeNow)
-                const PopupMenuItem(value: 'off', child: Text('Simamisha (ameondoka)', style: TextStyle(color: dangerRed)))
+                const PopupMenuItem(value: 'off', child: T('Simamisha (ameondoka)', style: TextStyle(color: dangerRed)))
               else
-                const PopupMenuItem(value: 'on', child: Text('Rudisha kazini')),
+                const PopupMenuItem(value: 'on', child: T('Rudisha kazini')),
             ],
           ),
         ],
@@ -442,14 +441,13 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                 margin: const EdgeInsets.only(bottom: 14),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(color: const Color(0xFFFDE7E4), borderRadius: BorderRadius.circular(16)),
-                child: const Text(
-                  'Amesimamishwa: hawezi kuingia kwenye simu yoyote. Historia yake yote imebaki. '
-                  'Menyu (⋮) › Rudisha kazini kumrudisha.',
+                child: Text(
+                  tr('Amesimamishwa: hawezi kuingia kwenye simu yoyote. Historia yake yote imebaki. Menyu (⋮) › Rudisha kazini kumrudisha.'),
                   style: TextStyle(color: Color(0xFF8F1D14), fontWeight: FontWeight.w700),
                 ),
               ),
             StaffProfileCard(api: _api, staffId: widget.staffId, active: _activeNow),
-            const Text('Weka kwa haraka', style: TextStyle(color: mutedText)),
+            const T('Weka kwa haraka', style: TextStyle(color: mutedText)),
             const SizedBox(height: 8),
             Row(children: [
               for (final b in bundles)
@@ -482,7 +480,7 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                       title: Text('${c['label']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                       subtitle: Text(
                         active[c['key']] != null
-                            ? '${c['description']}\nHadi ${_until(active[c['key']]!)}'
+                            ? tr(':a\nHadi :b', {'a': c['description'], 'b': _until(active[c['key']]!)})
                             : '${c['description']}',
                         style: TextStyle(fontSize: 12, color: active[c['key']] != null ? warnAmber : mutedText),
                       ),
@@ -491,8 +489,8 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
                 ]),
               ),
             ],
-            const Text(
-              'Ruhusa ya kusimamia wafanyakazi na ruhusa ni ya mmiliki peke yake; haiwezi kutolewa.',
+            Text(
+              tr('Ruhusa ya kusimamia wafanyakazi na ruhusa ni ya mmiliki peke yake; haiwezi kutolewa.'),
               style: TextStyle(color: mutedText, fontSize: 12),
             ),
           ],
@@ -506,11 +504,11 @@ class _StaffDetailScreenState extends State<StaffDetailScreen> {
 /// sign-in screen shows no names). Returns true when it changed.
 Future<bool> editSignInPhone(BuildContext context, ApiClient api, int userId, String whose, String? current) async {
   final v = await askText(context,
-      title: 'Namba ya kuingia $whose',
-      label: 'Namba ya simu',
+      title: tr('Namba ya kuingia :whose', {'whose': whose}),
+      label: tr('Namba ya simu'),
       hint: '0712 345 678',
       initial: current ?? '',
-      helper: 'Kwenye simu mpya au kompyuta: namba hii + PIN');
+      helper: tr('Kwenye simu mpya au kompyuta: namba hii + PIN'));
   if (v == null || !context.mounted) return false;
   try {
     await api.patch('staff/$userId/phone', {'phone': v.trim()});

@@ -4,6 +4,7 @@ import '../../../core/api_client.dart';
 import '../../../core/brand.dart';
 import '../../../core/format.dart';
 import '../../../core/money.dart';
+import '../../../core/i18n.dart';
 
 /// "Wiki hii / Oktoba": one bar per day, today in mint.
 ///
@@ -66,7 +67,7 @@ class _TrendCardState extends State<TrendCard> {
   Widget build(BuildContext context) {
     final data = _cache[_range];
     final from = parseDate(data?['from']);
-    final title = _range == 'week' ? 'Wiki hii' : (from != null ? monthNames[from.month - 1] : 'Mwezi huu');
+    final title = _range == 'week' ? tr('Wiki hii') : (from != null ? monthNames[from.month - 1] : tr('Mwezi huu'));
     final total = asInt(data?['total']);
 
     return Container(
@@ -83,7 +84,7 @@ class _TrendCardState extends State<TrendCard> {
                   children: [
                     Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                     Text(
-                      data == null ? ' ' : 'Jumla ${widget.hidden ? 'TSh ••••••' : formatTsh(total)}',
+                      data == null ? ' ' : tr('Jumla :a', {'a': widget.hidden ? tr('TSh ••••••') : formatTsh(total)}),
                       style: const TextStyle(fontSize: 13, color: mutedText),
                     ),
                   ],
@@ -99,7 +100,7 @@ class _TrendCardState extends State<TrendCard> {
                 ? _bars(data)
                 : Center(
                     child: _error != null
-                        ? TextButton(onPressed: _load, child: const Text('Jaribu tena'))
+                        ? TextButton(onPressed: _load, child: const T('Jaribu tena'))
                         : const CircularProgressIndicator(strokeWidth: 2),
                   ),
           ),
@@ -127,7 +128,7 @@ class _TrendCardState extends State<TrendCard> {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(color: mintSoft, borderRadius: BorderRadius.circular(14)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [option('week', 'Wiki'), option('month', 'Mwezi')]),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [option('week', tr('Wiki')), option('month', tr('Mwezi'))]),
     );
   }
 

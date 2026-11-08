@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'brand.dart';
+import 'i18n.dart';
 
 /// The same "easy PIN" rule as the server (App\Support\PinRules), checked
 /// while typing so people see it before pressing save. The server still
@@ -58,7 +59,7 @@ class PinBox extends StatelessWidget {
         labelText: label,
         counterText: '',
         suffixIcon: s == null ? null : Icon(s.icon, color: s.color),
-        helperText: s?.text,
+        helperText: s == null ? null : tr(s.text),
         helperStyle: TextStyle(color: s?.color, fontWeight: FontWeight.w700),
       ),
     );
@@ -84,7 +85,7 @@ PinStatus? newPinStatus(String pin, {String? mustDifferFrom}) {
   if (pin.length < 4) return null;
   if (isEasyPin(pin)) return PinStatus.easy;
   if (mustDifferFrom != null && pin == mustDifferFrom) {
-    return const PinStatus(Icons.error, dangerRed, 'Sawa na ya sasa: chagua tofauti');
+    return PinStatus(Icons.error, dangerRed, tr('Sawa na ya sasa: chagua tofauti'));
   }
   return PinStatus.good;
 }
@@ -136,7 +137,7 @@ class _NewPinDialogState extends State<_NewPinDialog> {
           if (widget.message != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(widget.message!)),
           PinBox(
             controller: _pin,
-            label: 'PIN (tarakimu 4)',
+            label: tr('PIN (tarakimu 4)'),
             autofocus: true,
             next: _againFocus,
             status: newPinStatus(_pin.text),
@@ -146,15 +147,15 @@ class _NewPinDialogState extends State<_NewPinDialog> {
           PinBox(
             controller: _again,
             focusNode: _againFocus,
-            label: 'Rudia PIN',
+            label: tr('Rudia PIN'),
             status: repeatStatus(_pin.text, _again.text),
             onChanged: () => setState(() {}),
           ),
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ghairi')),
-        FilledButton(onPressed: _ok ? () => Navigator.of(context).pop(_pin.text) : null, child: const Text('Weka')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi')),
+        FilledButton(onPressed: _ok ? () => Navigator.of(context).pop(_pin.text) : null, child: const T('Weka')),
       ],
     );
   }

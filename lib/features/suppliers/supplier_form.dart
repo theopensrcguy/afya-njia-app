@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
+import '../../core/i18n.dart';
 
 /// Add or edit a supplier. Only the name is needed; everything else is
 /// filled in when someone has it, and helps later (WhatsApp orders, calls,
@@ -36,7 +37,7 @@ class _SupplierFormScreenState extends State<SupplierFormScreen> {
 
   Future<void> _save() async {
     if (_c['name']!.text.trim().isEmpty) {
-      setState(() => _fieldErrors = {'name': 'Andika jina'});
+      setState(() => _fieldErrors = {'name': tr('Andika jina')});
       return;
     }
     setState(() {
@@ -88,7 +89,7 @@ class _SupplierFormScreenState extends State<SupplierFormScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: pageBackground,
-        title: Text(widget.initial == null ? 'Msambazaji mpya' : 'Taarifa za msambazaji'),
+        title: Text(widget.initial == null ? tr('Msambazaji mpya') : tr('Taarifa za msambazaji')),
       ),
       body: Column(children: [
         Expanded(
@@ -96,15 +97,15 @@ class _SupplierFormScreenState extends State<SupplierFormScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
             children: [
-              _field('name', 'Jina la msambazaji *', icon: Icons.storefront_outlined),
-              _field('contact_person', 'Mtu wa kuongea naye', hint: 'mfano: Bw. Juma', icon: Icons.person_outline),
-              _field('phone', 'Simu', hint: '0712 345 678', type: TextInputType.phone, icon: Icons.call_outlined),
-              _field('whatsapp', 'WhatsApp (kama ni tofauti na simu)',
-                  hint: '0712 345 678', helper: 'Maagizo yatatumwa hapa', type: TextInputType.phone, icon: Icons.chat_outlined),
-              _field('email', 'Barua pepe', type: TextInputType.emailAddress, icon: Icons.mail_outline),
-              _field('location', 'Mahali', hint: 'mfano: Kariakoo, Dar es Salaam', icon: Icons.place_outlined),
-              _field('tin', 'TIN', helper: 'Iko kwenye ankara zake', type: TextInputType.number, icon: Icons.badge_outlined),
-              _field('notes', 'Maelezo', hint: 'mfano: huleta Jumanne, hutoa mkopo wa siku 30', lines: 3, icon: Icons.notes),
+              _field('name', tr('Jina la msambazaji *'), icon: Icons.storefront_outlined),
+              _field('contact_person', tr('Mtu wa kuongea naye'), hint: tr('mfano: Bw. Juma'), icon: Icons.person_outline),
+              _field('phone', tr('Simu'), hint: '0712 345 678', type: TextInputType.phone, icon: Icons.call_outlined),
+              _field('whatsapp', tr('WhatsApp (kama ni tofauti na simu)'),
+                  hint: '0712 345 678', helper: tr('Maagizo yatatumwa hapa'), type: TextInputType.phone, icon: Icons.chat_outlined),
+              _field('email', tr('Barua pepe'), type: TextInputType.emailAddress, icon: Icons.mail_outline),
+              _field('location', tr('Mahali'), hint: tr('mfano: Kariakoo, Dar es Salaam'), icon: Icons.place_outlined),
+              _field('tin', tr('TIN'), helper: tr('Iko kwenye ankara zake'), type: TextInputType.number, icon: Icons.badge_outlined),
+              _field('notes', tr('Maelezo'), hint: tr('mfano: huleta Jumanne, hutoa mkopo wa siku 30'), lines: 3, icon: Icons.notes),
               if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed)),
             ],
           ),
@@ -116,7 +117,7 @@ class _SupplierFormScreenState extends State<SupplierFormScreen> {
             child: FilledButton(
               onPressed: _busy ? null : _save,
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-              child: Text(_busy ? 'Inahifadhi…' : 'Hifadhi'),
+              child: Text(_busy ? tr('Inahifadhi…') : tr('Hifadhi')),
             ),
           ),
         ),

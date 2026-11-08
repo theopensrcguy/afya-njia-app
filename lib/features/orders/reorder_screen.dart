@@ -12,6 +12,7 @@ import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'order_send_screen.dart';
+import '../../core/i18n.dart';
 
 /// Agiza: what will run out before the next delivery, grouped by supplier.
 ///
@@ -129,7 +130,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('Agiza ${l['name']} kwa:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              child: Text(tr('Agiza :a kwa:', {'a': l['name']}), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             ),
             for (final (n, size) in options)
               ListTile(
@@ -140,8 +141,8 @@ class _ReorderScreenState extends State<ReorderScreen> {
               ),
             ListTile(
               leading: const Icon(Icons.add),
-              title: const Text('Kifungashio kingine…'),
-              subtitle: const Text('mfano: katoni ya boksi 10'),
+              title: const T('Kifungashio kingine…'),
+              subtitle: const T('mfano: katoni ya boksi 10'),
               onTap: () => Navigator.of(sheet).pop(('', 0)),
             ),
           ]),
@@ -167,7 +168,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
       );
       if (n == null || !mounted) return;
       final v = await askText(context,
-          title: '${unitLabel(n)} moja ina ${unitLabel(base, 2)} ngapi?', label: 'Idadi', digitsOnly: true, required: true);
+          title: tr(':a moja ina :b ngapi?', {'a': unitLabel(n), 'b': unitLabel(base, 2)}), label: tr('Idadi'), digitsOnly: true, required: true);
       final s = int.tryParse(v ?? '') ?? 0;
       if (s < 1 || !mounted) return;
       (name, size) = (n, s);
@@ -192,7 +193,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('Agiza kutoka kwa nani?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              child: T('Agiza kutoka kwa nani?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             ),
             for (final s in _suppliers)
               ListTile(
@@ -202,8 +203,8 @@ class _ReorderScreenState extends State<ReorderScreen> {
               ),
             ListTile(
               leading: const Icon(Icons.help_outline),
-              title: const Text('Bado sijaamua'),
-              subtitle: const Text('Utachagua ukituma'),
+              title: const T('Bado sijaamua'),
+              subtitle: const T('Utachagua ukituma'),
               onTap: () => Navigator.of(sheet).pop(0),
             ),
           ]),
@@ -224,7 +225,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
     if (p == null || !mounted) return;
     final already = _groups.expand((g) => (g['lines'] as List).cast<Map<String, dynamic>>()).any((l) => asInt(l['product_id']) == p.id);
     if (already) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${p.name} tayari iko kwenye orodha.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(':name tayari iko kwenye orodha.', {'name': p.name}))));
       return;
     }
     final biggest = p.units.isEmpty ? null : p.units.last;
@@ -281,10 +282,9 @@ class _ReorderScreenState extends State<ReorderScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            const Text('Maagizo yanayosubiriwa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const Text(
-              'Agizo linafungwa lenyewe ukipokea (Pokea mzigo) bidhaa yake yoyote kutoka kwa msambazaji huyo. '
-              'Lisilokuja (msambazaji hana mzigo, au umenunua kwingine), ghairi hapa.',
+            const T('Maagizo yanayosubiriwa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text(
+              tr('Agizo linafungwa lenyewe ukipokea (Pokea mzigo) bidhaa yake yoyote kutoka kwa msambazaji huyo. Lisilokuja (msambazaji hana mzigo, au umenunua kwingine), ghairi hapa.'),
               style: TextStyle(fontSize: 12, color: mutedText),
             ),
             for (final o in _open)
@@ -293,7 +293,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(color: pageBackground, borderRadius: BorderRadius.circular(16)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${(o['supplier'] as Map?)?['name'] ?? 'Bila msambazaji'} · ${timeAgo(DateTime.parse('${o['sent_at']}'))}',
+                  Text('${(o['supplier'] as Map?)?['name'] ?? tr('Bila msambazaji')} · ${timeAgo(DateTime.parse('${o['sent_at']}'))}',
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                   Text(
                     ((o['lines'] as List?) ?? const [])
@@ -314,7 +314,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
                           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
                         }
                       },
-                      child: const Text('Ghairi agizo: halitakuja', style: TextStyle(color: dangerRed)),
+                      child: const T('Ghairi agizo: halitakuja', style: TextStyle(color: dangerRed)),
                     ),
                   ),
                 ]),
@@ -334,8 +334,8 @@ class _ReorderScreenState extends State<ReorderScreen> {
       appBar: AppBar(
         backgroundColor: pageBackground,
         title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Agiza', style: TextStyle(fontWeight: FontWeight.w800)),
-          Text('Zitakazoisha kabla mzigo ujao haujafika', style: TextStyle(fontSize: 12, color: mutedText)),
+          T('Agiza', style: TextStyle(fontWeight: FontWeight.w800)),
+          T('Zitakazoisha kabla mzigo ujao haujafika', style: TextStyle(fontSize: 12, color: mutedText)),
         ]),
       ),
       body: RefreshIndicator(
@@ -344,12 +344,12 @@ class _ReorderScreenState extends State<ReorderScreen> {
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           children: [
             // Said in words: how much to order, not a bare "7 / 14 / 30".
-            const Text('Agiza kiasi cha kutosha kwa:', style: TextStyle(fontWeight: FontWeight.w800)),
+            const T('Agiza kiasi cha kutosha kwa:', style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<int>(
-                segments: [for (final (d, label) in _covers) ButtonSegment(value: d, label: Text(label))],
+                segments: [for (final (d, label) in _covers) ButtonSegment(value: d, label: Text(tr(label)))],
                 selected: {_cover},
                 showSelectedIcon: false,
                 style: SegmentedButton.styleFrom(
@@ -365,7 +365,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
             ),
             const Padding(
               padding: EdgeInsets.only(top: 6, left: 4),
-              child: Text('baada ya mzigo kufika', style: TextStyle(fontSize: 12, color: mutedText)),
+              child: T('baada ya mzigo kufika', style: TextStyle(fontSize: 12, color: mutedText)),
             ),
             if (_open.isNotEmpty)
               Padding(
@@ -376,8 +376,8 @@ class _ReorderScreenState extends State<ReorderScreen> {
                   child: ListTile(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     leading: const Icon(Icons.local_shipping_outlined, color: brandGreen),
-                    title: Text('Maagizo ${_open.length} yametumwa, yanasubiri kufika', style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('Bidhaa zake hazitapendekezwa tena mpaka mzigo ufike · gusa kuona'),
+                    title: Text(tr('Maagizo :open yametumwa, yanasubiri kufika', {'open': _open.length}), style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const T('Bidhaa zake hazitapendekezwa tena mpaka mzigo ufike · gusa kuona'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _showOpen,
                   ),
@@ -389,22 +389,21 @@ class _ReorderScreenState extends State<ReorderScreen> {
             if (!_loading && _error == null && groups.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('Hakuna kitakachoisha kabla mzigo ujao.', textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
+                child: T('Hakuna kitakachoisha kabla mzigo ujao.', textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
               ),
             for (final g in groups) _group(g),
             const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: _data == null ? null : _orderAnything,
               icon: const Icon(Icons.add),
-              label: const Text('Agiza bidhaa nyingine yoyote'),
+              label: const T('Agiza bidhaa nyingine yoyote'),
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             ),
             if (groups.isNotEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(4, 14, 4, 0),
                 child: Text(
-                  'Idadi imehesabiwa kutoka mauzo ya siku 30, muda ambao msambazaji huchukua kuleta mzigo, na '
-                  'vifungashio alivyoleta mara ya mwisho. Gusa kifungashio kubadilisha (mfano kadi → boksi).',
+                  tr('Idadi imehesabiwa kutoka mauzo ya siku 30, muda ambao msambazaji huchukua kuleta mzigo, na vifungashio alivyoleta mara ya mwisho. Gusa kifungashio kubadilisha (mfano kadi → boksi).'),
                   style: TextStyle(fontSize: 12, color: mutedText),
                 ),
               ),
@@ -420,11 +419,11 @@ class _ReorderScreenState extends State<ReorderScreen> {
     final lastDays = g['last_delivery_days'];
     final lead = g['lead_days'];
     final note = s == null
-        ? 'Hazijawahi kuletwa na msambazaji anayejulikana'
+        ? tr('Hazijawahi kuletwa na msambazaji anayejulikana')
         : lead == null
-            ? 'Umeongeza mwenyewe'
-            : '${g['lead_learned'] == true ? 'Huleta kila siku ~$lead' : 'Muda wa kuleta: siku $lead (makadirio)'}'
-                '${lastDays != null ? ' · mara ya mwisho siku $lastDays zilizopita' : ''}';
+            ? tr('Umeongeza mwenyewe')
+            : '${g['lead_learned'] == true ? tr('Huleta kila siku ~:lead', {'lead': lead}) : tr('Muda wa kuleta: siku :lead (makadirio)', {'lead': lead})}'
+                '${lastDays != null ? tr(' · mara ya mwisho siku :last_days zilizopita', {'last_days': lastDays}) : ''}';
     var total = 0;
     var priced = true;
     for (final l in lines) {
@@ -443,7 +442,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s == null ? 'Bila msambazaji' : '${s['name']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                Text(s == null ? tr('Bila msambazaji') : '${s['name']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 Text(note, style: const TextStyle(fontSize: 12, color: mutedText)),
               ]),
             ),
@@ -456,7 +455,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
           child: TextButton.icon(
             onPressed: () => _addProduct(asInt(s?['id'])),
             icon: const Icon(Icons.add),
-            label: const Text('Ongeza bidhaa'),
+            label: const T('Ongeza bidhaa'),
           ),
         ),
         Padding(
@@ -464,7 +463,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
           child: FilledButton.icon(
             onPressed: lines.any((l) => _chosen(l) > 0) ? () => _send(g) : null,
             icon: const Icon(Icons.send_rounded),
-            label: Text(s == null ? 'Andaa ujumbe' : 'Tuma kwa ${s['name']}'),
+            label: Text(s == null ? tr('Andaa ujumbe') : tr('Tuma kwa :a', {'a': s['name']})),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
         ),
@@ -480,12 +479,12 @@ class _ReorderScreenState extends State<ReorderScreen> {
     final units = _units(l);
     final reason = '${l['reason']}';
     final (packName, packSize) = _pack(l);
-    final stock = 'zipo ${describeStock(onHand, units)}';
+    final stock = tr('zipo :a', {'a': describeStock(onHand, units)});
     final (why, color) = switch (reason) {
-      'out' => ('Imeisha', dangerRed),
-      'runs_out' => ('Itaisha baada ya siku $days${asInt(days) < 2 ? '!' : ''} · $stock', asInt(days) < 2 ? dangerRed : warnAmber),
-      'low' => ('Chini ya kiwango cha kuagiza · $stock', warnAmber),
-      _ => ('Umeongeza mwenyewe · $stock', mutedText),
+      'out' => (tr('Imeisha'), dangerRed),
+      'runs_out' => (tr('Itaisha baada ya siku :days:a · :stock', {'days': days, 'a': asInt(days) < 2 ? '!' : '', 'stock': stock}), asInt(days) < 2 ? dangerRed : warnAmber),
+      'low' => (tr('Chini ya kiwango cha kuagiza · :stock', {'stock': stock}), warnAmber),
+      _ => (tr('Umeongeza mwenyewe · :stock', {'stock': stock}), mutedText),
     };
     final n = _chosen(l);
     final base = units.isEmpty ? '' : units.first.name;
@@ -496,7 +495,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('${l['name']}', style: const TextStyle(fontWeight: FontWeight.w800)),
         Text(why, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
-        if (onOrder > 0) Text('Imeshaagizwa: ${describeStock(onOrder, units)}', style: const TextStyle(fontSize: 12, color: mutedText)),
+        if (onOrder > 0) Text(tr('Imeshaagizwa: :a', {'a': describeStock(onOrder, units)}), style: const TextStyle(fontSize: 12, color: mutedText)),
         const SizedBox(height: 4),
         Row(children: [
           // The packaging is a button: strips last time, boxes now.
@@ -515,7 +514,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Punguza',
+            tooltip: tr('Punguza'),
             onPressed: n > 0 ? () => setState(() => _packs[id] = n - 1) : null,
             icon: const Icon(Icons.remove_circle_outline, color: brandGreen),
           ),
@@ -524,7 +523,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
             child: Text('$n', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           ),
           IconButton(
-            tooltip: 'Ongeza',
+            tooltip: tr('Ongeza'),
             onPressed: () => setState(() => _packs[id] = n + 1),
             icon: const Icon(Icons.add_circle, color: brandGreen),
           ),
@@ -581,13 +580,13 @@ class _ProductPickSheetState extends State<_ProductPickSheet> {
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.7,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('Agiza bidhaa gani?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const T('Agiza bidhaa gani?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           TextField(
             controller: _q,
             autofocus: true,
             onChanged: _search,
-            decoration: const InputDecoration(labelText: 'Tafuta dawa', prefixIcon: Icon(Icons.search)),
+            decoration: InputDecoration(labelText: tr('Tafuta dawa'), prefixIcon: Icon(Icons.search)),
           ),
           Expanded(
             child: ListView(children: [
@@ -595,13 +594,13 @@ class _ProductPickSheetState extends State<_ProductPickSheet> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('Zipo: ${describeStock(p.onHand, p.units)}'),
+                  subtitle: Text(tr('Zipo: :a', {'a': describeStock(p.onHand, p.units)})),
                   trailing: const Icon(Icons.add_circle_outline, color: brandGreen),
                   onTap: () => Navigator.of(context).pop(p),
                 ),
             ]),
           ),
-          const Text('Bidhaa ambayo haipo kabisa kwenye duka: iongeze kupitia Pokea mzigo ikifika.',
+          const T('Bidhaa ambayo haipo kabisa kwenye duka: iongeze kupitia Pokea mzigo ikifika.',
               style: TextStyle(fontSize: 12, color: mutedText)),
         ]),
       ),

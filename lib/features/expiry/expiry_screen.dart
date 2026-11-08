@@ -5,6 +5,7 @@ import '../../core/brand.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/i18n.dart';
 
 /// Screen 3 of the mockups: batches that have expired or expire soon, with the
 /// money at risk. Owner only (the server enforces that).
@@ -83,14 +84,14 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Muda wa kuisha')),
+      appBar: AppBar(title: const T('Muda wa kuisha')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Text(_error!, style: const TextStyle(color: dangerRed)),
-                    TextButton(onPressed: _load, child: const Text('Jaribu tena')),
+                    TextButton(onPressed: _load, child: const T('Jaribu tena')),
                   ]),
                 )
               : _buildBody(),
@@ -116,7 +117,7 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
             children: [
               for (var i = 0; i < _bands.length; i++)
                 ChoiceChip(
-                  label: Text('${_bands[i].label} (${_inBand(i).length})'),
+                  label: Text('${tr(_bands[i].label)} (${_inBand(i).length})'),
                   selected: _selected == i,
                   selectedColor: i == 0 ? const Color(0xFFFDECEA) : null,
                   onSelected: (_) => setState(() => _selected = i),
@@ -134,10 +135,10 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(expiredBand ? 'Thamani iliyopotea (bei ya kununua)' : 'Thamani iliyo hatarini (bei ya kununua)',
+                  Text(expiredBand ? tr('Thamani iliyopotea (bei ya kununua)') : tr('Thamani iliyo hatarini (bei ya kununua)'),
                       style: TextStyle(color: tone)),
                   Text(formatTsh(value), style: TextStyle(color: tone, fontSize: 24, fontWeight: FontWeight.w700)),
-                  Text(band.advice, style: TextStyle(color: tone, fontSize: 12)),
+                  Text(tr(band.advice), style: TextStyle(color: tone, fontSize: 12)),
                 ],
               ),
             ),
@@ -146,7 +147,7 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 40),
               child: Text(
-                expiredBand ? 'Hakuna dawa zilizoisha muda kwenye hisa.' : 'Hakuna batch katika kundi hili.',
+                expiredBand ? tr('Hakuna dawa zilizoisha muda kwenye hisa.') : tr('Hakuna batch katika kundi hili.'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: mutedText),
               ),
@@ -173,9 +174,9 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('${b['product']}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                Text('Batch ${b['batch_number']} · vipande ${asInt(b['quantity'])} · ${b['expiry_date']}',
+                Text(tr('Batch :a · vipande :b · :c', {'a': b['batch_number'], 'b': asInt(b['quantity']), 'c': b['expiry_date']}),
                     style: const TextStyle(fontSize: 12, color: mutedText)),
-                Text('Thamani ${formatTsh(asInt(b['value_at_cost']))}', style: const TextStyle(fontSize: 12, color: mutedText)),
+                Text(tr('Thamani :a', {'a': formatTsh(asInt(b['value_at_cost']))}), style: const TextStyle(fontSize: 12, color: mutedText)),
               ],
             ),
           ),
@@ -183,7 +184,7 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(color: badgeColor.withAlpha(30), borderRadius: BorderRadius.circular(8)),
             child: Text(
-              expired ? (days == 0 ? 'Imeisha leo' : 'Siku ${-days} zilizopita') : 'Siku $days',
+              expired ? (days == 0 ? tr('Imeisha leo') : tr('Siku :a zilizopita', {'a': -days})) : tr('Siku :days', {'days': days}),
               style: TextStyle(color: badgeColor, fontWeight: FontWeight.w700, fontSize: 12),
             ),
           ),

@@ -14,6 +14,7 @@ import 'checkout_screen.dart';
 import 'quantity_dialog.dart';
 import 'scan_screen.dart';
 import 'sell_unit.dart';
+import '../../core/i18n.dart';
 
 /// Screen 2 of the mockups: search and add to the basket.
 ///
@@ -76,7 +77,7 @@ class _CounterScreenState extends State<CounterScreen> {
 
   void _tapTile(Product p, String? usual) {
     if (!_cart.canEdit) {
-      _showMessage('Tuma mauzo yaliyopita kwanza ("Tuma tena").', isError: true);
+      _showMessage(tr('Tuma mauzo yaliyopita kwanza ("Tuma tena").'), isError: true);
       return;
     }
     // Same unit as already in the basket, or the usual one.
@@ -84,14 +85,14 @@ class _CounterScreenState extends State<CounterScreen> {
     if (_cart.addIn(p, unit)) {
       HapticFeedback.selectionClick();
     } else {
-      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).', isError: true);
+      _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': p.name, 'a': describeStock(p.onHand, p.units)}), isError: true);
     }
   }
 
   Future<void> _openScanner() async {
     FocusScope.of(context).unfocus();
     if (!_cart.canEdit) {
-      _showMessage('Tuma mauzo yaliyopita kwanza ("Tuma tena").', isError: true);
+      _showMessage(tr('Tuma mauzo yaliyopita kwanza ("Tuma tena").'), isError: true);
       return;
     }
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ScanScreen(api: _api, cart: _cart)));
@@ -134,19 +135,19 @@ class _CounterScreenState extends State<CounterScreen> {
 
   void _addToCart(Product product) {
     if (!_cart.canEdit) {
-      _showMessage('Tuma mauzo yaliyopita kwanza ("Tuma tena").', isError: true);
+      _showMessage(tr('Tuma mauzo yaliyopita kwanza ("Tuma tena").'), isError: true);
       return;
     }
     if (_cart.add(product)) {
       HapticFeedback.selectionClick(); // feel the tap without looking up
     } else {
-      _showMessage('Hisa haitoshi: ${product.name} (zilizopo ${describeStock(product.onHand, product.units)}).', isError: true);
+      _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': product.name, 'a': describeStock(product.onHand, product.units)}), isError: true);
     }
   }
 
   void _changeUnit(Product p, ProductUnit unit) {
     if (!_cart.setUnit(p.id, unit)) {
-      _showMessage('Hakuna ${unitLabel(unit.name)} nzima ya ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).', isError: true);
+      _showMessage(tr('Hakuna :a nzima ya :name (zilizopo :b).', {'a': unitLabel(unit.name), 'name': p.name, 'b': describeStock(p.onHand, p.units)}), isError: true);
     }
   }
 
@@ -167,11 +168,11 @@ class _CounterScreenState extends State<CounterScreen> {
     final leave = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Toka kwenye mauzo?'),
-        content: Text('Kikapu kina bidhaa ${_cart.itemCount}. Zitaondolewa.'),
+        title: const T('Toka kwenye mauzo?'),
+        content: Text(tr('Kikapu kina bidhaa :item_count. Zitaondolewa.', {'item_count': _cart.itemCount})),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Hapana')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Toka')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const T('Hapana')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const T('Toka')),
         ],
       ),
     );
@@ -213,8 +214,8 @@ class _CounterScreenState extends State<CounterScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Mauzo mapya', style: TextStyle(fontWeight: FontWeight.w700)),
-            Text('Mhudumu: $userName', style: const TextStyle(fontSize: 12, color: mutedText)),
+            const T('Mauzo mapya', style: TextStyle(fontWeight: FontWeight.w700)),
+            Text(tr('Mhudumu: :user_name', {'user_name': userName}), style: const TextStyle(fontSize: 12, color: mutedText)),
           ],
         ),
       ),
@@ -227,8 +228,8 @@ class _CounterScreenState extends State<CounterScreen> {
               onChanged: _onSearchChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                labelText: 'Tafuta dawa',
-                hintText: 'Andika jina au barcode',
+                labelText: tr('Tafuta dawa'),
+                hintText: tr('Andika jina au barcode'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searching
                     ? const Padding(
@@ -237,12 +238,12 @@ class _CounterScreenState extends State<CounterScreen> {
                       )
                     : _searchController.text.isEmpty
                         ? IconButton(
-                            tooltip: 'Skani barcode',
+                            tooltip: tr('Skani barcode'),
                             icon: const Icon(Icons.qr_code_scanner, color: brandGreen),
                             onPressed: _openScanner,
                           )
                         : IconButton(
-                            tooltip: 'Futa',
+                            tooltip: tr('Futa'),
                             icon: const Icon(Icons.close),
                             onPressed: () {
                               _searchController.clear();
@@ -276,13 +277,13 @@ class _CounterScreenState extends State<CounterScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(_searchError!, textAlign: TextAlign.center),
-            TextButton(onPressed: () => _search(_searchController.text), child: const Text('Jaribu tena')),
+            TextButton(onPressed: () => _search(_searchController.text), child: const T('Jaribu tena')),
           ],
         ),
       );
     }
     if (_results.isEmpty && !_searching) {
-      return const Center(child: Text('Hakuna bidhaa iliyopatikana.'));
+      return const Center(child: T('Hakuna bidhaa iliyopatikana.'));
     }
 
     // The server sends only suggestions, or only real matches, never a mix.
@@ -304,8 +305,8 @@ class _CounterScreenState extends State<CounterScreen> {
             padding: const EdgeInsets.only(top: 4),
             child: Text.rich(
               TextSpan(children: [
-                TextSpan(text: 'Hakuna "${_searchController.text.trim()}". '),
-                const TextSpan(text: 'Je, ulimaanisha…?', style: TextStyle(fontWeight: FontWeight.w700)),
+                TextSpan(text: tr('Hakuna ":a". ', {'a': _searchController.text.trim()})),
+                TextSpan(text: tr('Je, ulimaanisha…?'), style: TextStyle(fontWeight: FontWeight.w700)),
               ]),
               style: const TextStyle(color: warnAmber, fontSize: 14),
             ),
@@ -314,9 +315,9 @@ class _CounterScreenState extends State<CounterScreen> {
         final p = _results[i - offset];
         final outOfStock = p.onHand == 0;
         final stockText = outOfStock
-            ? 'Hazipo (zimeisha)'
-            : 'Hisa: ${describeStock(p.onHand, p.units)}${p.lowStock ? ' · chini' : ''}'
-                '${p.nextExpiry != null ? ' · inaisha ${_monthYear(p.nextExpiry!)}' : ''}';
+            ? tr('Hazipo (zimeisha)')
+            : tr('Hisa: :a:b', {'a': describeStock(p.onHand, p.units), 'b': p.lowStock ? tr(' · chini') : ''}) +
+                '${p.nextExpiry != null ? tr(' · inaisha :a', {'a': _monthYear(p.nextExpiry!)}) : ''}';
 
         final inBasket = _cart.quantityOf(p.id);
         // The price shown is for the unit being sold (or the one a tap would add).
@@ -389,9 +390,9 @@ class _CounterScreenState extends State<CounterScreen> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('Haraka', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          const T('Haraka', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
           const Spacer(),
-          Text('zinazouzwa sana ${_parts[_part] ?? 'sasa'}', style: const TextStyle(fontSize: 12, color: mutedText)),
+          Text(tr('zinazouzwa sana :a', {'a': tr(_parts[_part] ?? 'sasa')}), style: const TextStyle(fontSize: 12, color: mutedText)),
         ]),
         const SizedBox(height: 8),
         GridView(
@@ -484,7 +485,7 @@ class _CounterScreenState extends State<CounterScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: quantity == 1 ? 'Ondoa' : 'Punguza',
+          tooltip: quantity == 1 ? tr('Ondoa') : tr('Punguza'),
           constraints: box,
           padding: EdgeInsets.zero,
           onPressed: _cart.canEdit ? () => _cart.setQuantity(p.id, quantity - 1) : null,
@@ -502,7 +503,7 @@ class _CounterScreenState extends State<CounterScreen> {
           ),
         ),
         IconButton(
-          tooltip: 'Ongeza',
+          tooltip: tr('Ongeza'),
           constraints: box,
           padding: EdgeInsets.zero,
           onPressed: _cart.canEdit ? () => _addToCart(p) : null,
@@ -516,7 +517,7 @@ class _CounterScreenState extends State<CounterScreen> {
     final value = await askQuantity(context, p, current, unit: _cart.unitOf(p.id));
     if (value == null || !mounted) return;
     if (!_cart.setQuantity(p.id, value)) {
-      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).', isError: true);
+      _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': p.name, 'a': describeStock(p.onHand, p.units)}), isError: true);
     }
   }
 
@@ -543,7 +544,7 @@ class _CounterScreenState extends State<CounterScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Kikapu · ${_cart.itemCount} bidhaa', style: const TextStyle(fontSize: 12, color: mutedText)),
+                      Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount}), style: const TextStyle(fontSize: 12, color: mutedText)),
                       Text(formatTsh(_cart.total), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                     ],
                   ),
@@ -554,7 +555,7 @@ class _CounterScreenState extends State<CounterScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_cart.uncertain ? 'Tuma tena' : 'Lipa', style: const TextStyle(fontSize: 16)),
+                      Text(_cart.uncertain ? tr('Tuma tena') : tr('Lipa'), style: const TextStyle(fontSize: 16)),
                       const Icon(Icons.chevron_right),
                     ],
                   ),
@@ -568,5 +569,5 @@ class _CounterScreenState extends State<CounterScreen> {
   }
 
   static const _months = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
-  String _monthYear(DateTime d) => '${_months[d.month - 1]} ${d.year}';
+  String _monthYear(DateTime d) => '${tr(_months[d.month - 1])} ${d.year}';
 }

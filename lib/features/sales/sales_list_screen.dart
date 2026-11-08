@@ -8,6 +8,7 @@ import '../../core/units.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../core/i18n.dart';
 
 /// Today's sales, newest first. The owner sees everyone's; a helper sees
 /// only his own (the server decides that, not the app).
@@ -59,7 +60,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
     final total = completed.fold<int>(0, (sum, s) => sum + asInt(s['total']));
 
     return Scaffold(
-      appBar: AppBar(title: Text(_allSales ? 'Mauzo ya leo' : 'Mauzo yangu ya leo')),
+      appBar: AppBar(title: Text(_allSales ? tr('Mauzo ya leo') : tr('Mauzo yangu ya leo'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -73,15 +74,15 @@ class _SalesListScreenState extends State<SalesListScreen> {
                       child: Text(_error!, style: const TextStyle(color: dangerRed)),
                     ),
                   // Summary line: what counts (completed sales only).
-                  Text('${completed.length} mauzo · ${formatTsh(total)}',
+                  Text(tr(':completed mauzo · :a', {'completed': completed.length, 'a': formatTsh(total)}),
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                   if (_sales.length > completed.length)
-                    Text('Yaliyofutwa: ${_sales.length - completed.length}', style: const TextStyle(color: dangerRed)),
+                    Text(tr('Yaliyofutwa: :a', {'a': _sales.length - completed.length}), style: const TextStyle(color: dangerRed)),
                   const SizedBox(height: 12),
                   if (_sales.isEmpty && _error == null)
                     const Padding(
                       padding: EdgeInsets.only(top: 48),
-                      child: Text('Hakuna mauzo leo bado.', textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
+                      child: T('Hakuna mauzo leo bado.', textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
                     ),
                   for (final s in _sales) _saleTile(s),
                 ],
@@ -110,7 +111,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
           '${soldAt != null ? formatTime(soldAt) : ''} · ${s['receipt_number']}'
           ' · ${paymentLabels[s['payment_method']] ?? s['payment_method']}'
           '${_allSales ? ' · $seller' : ''}'
-          '${voided ? '\nImefutwa: ${s['void_reason'] ?? ''}' : ''}',
+          '${voided ? tr('\nImefutwa: :a', {'a': s['void_reason'] ?? ''}) : ''}',
           style: TextStyle(color: voided ? dangerRed : mutedText),
         ),
         isThreeLine: voided,
@@ -138,7 +139,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('${s['receipt_number']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              Text('Na ${(s['user'] as Map?)?['name'] ?? ''} · ${paymentLabels[s['payment_method']] ?? s['payment_method']}',
+              Text(tr('Na :a · :b', {'a': (s['user'] as Map?)?['name'] ?? '', 'b': paymentLabels[s['payment_method']] ?? s['payment_method']}),
                   style: const TextStyle(color: mutedText)),
               const Divider(height: 24),
               for (final i in items)
@@ -152,15 +153,15 @@ class _SalesListScreenState extends State<SalesListScreen> {
                   ),
                 ),
               const Divider(height: 24),
-              if (discount > 0) _row('Punguzo', '− ${formatTsh(discount)}'),
-              _row('Jumla', formatTsh(asInt(s['total'])), bold: true),
+              if (discount > 0) _row(tr('Punguzo'), '− ${formatTsh(discount)}'),
+              _row(tr('Jumla'), formatTsh(asInt(s['total'])), bold: true),
               if (voided) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: const Color(0xFFFDECEA), borderRadius: BorderRadius.circular(10)),
-                  child: Text('Imefutwa${parseDate(s['voided_at']) != null ? ' saa ${formatTime(parseDate(s['voided_at'])!)}' : ''}.'
-                      ' Sababu: ${s['void_reason'] ?? '-'}',
+                  child: Text(tr('Imefutwa:a.', {'a': parseDate(s['voided_at']) != null ? tr(' saa :a', {'a': formatTime(parseDate(s['voided_at'])!)}) : ''}) +
+                      tr(' Sababu: :a', {'a': s['void_reason'] ?? '-'}),
                       style: const TextStyle(color: dangerRed)),
                 ),
               ] else ...[
@@ -168,7 +169,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(foregroundColor: dangerRed, minimumSize: const Size.fromHeight(48)),
                   icon: const Icon(Icons.cancel_outlined),
-                  label: const Text('Futa mauzo haya'),
+                  label: const T('Futa mauzo haya'),
                   onPressed: () {
                     Navigator.of(sheetContext).pop();
                     _void(s);
@@ -193,11 +194,11 @@ class _SalesListScreenState extends State<SalesListScreen> {
   Future<void> _void(Map<String, dynamic> s) async {
     final reason = await askText(
       context,
-      title: 'Futa ${s['receipt_number']}?',
-      message: 'Jumla ${formatTsh(asInt(s['total']))}. Dawa zitarudishwa kwenye hisa.',
-      label: 'Sababu (lazima)',
-      hint: 'Mf. dawa isiyo sahihi',
-      confirm: 'Futa',
+      title: tr('Futa :a?', {'a': s['receipt_number']}),
+      message: tr('Jumla :a. Dawa zitarudishwa kwenye hisa.', {'a': formatTsh(asInt(s['total']))}),
+      label: tr('Sababu (lazima)'),
+      hint: tr('Mf. dawa isiyo sahihi'),
+      confirm: tr('Futa'),
       danger: true,
       required: true,
     );
@@ -205,7 +206,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
     try {
       await _api.post('sales/${s['id']}/void', {'reason': reason});
-      _message('Mauzo yamefutwa. Dawa zimerudi kwenye hisa.');
+      _message(tr('Mauzo yamefutwa. Dawa zimerudi kwenye hisa.'));
       _load();
     } on ApiException catch (e) {
       _message(e.message, isError: true);

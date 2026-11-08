@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
 import '../../core/session.dart';
+import '../../core/i18n.dart';
 
 /// Personal details of staff, built to protect them as much as the shop:
 /// optional, owner-only, encrypted on the server, NIDA masked (seeing it needs
@@ -36,13 +37,13 @@ Widget _row(String label, String? value) => value == null || value.isEmpty
 Widget _accessLog(List log) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Padding(
         padding: EdgeInsets.only(top: 14, bottom: 4),
-        child: Text('Nani ameangalia au kubadilisha', style: TextStyle(fontWeight: FontWeight.w800)),
+        child: T('Nani ameangalia au kubadilisha', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
-      if (log.isEmpty) const Text('Hakuna bado.', style: TextStyle(color: mutedText)),
+      if (log.isEmpty) const T('Hakuna bado.', style: TextStyle(color: mutedText)),
       for (final r in log.cast<Map<String, dynamic>>())
         Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text('• ${_actions[r['action']] ?? r['action']} · ${r['by'] ?? ''} · ${_date(r['at'] as String?)}',
+          child: Text('• ${_actions[r['action']] == null ? r['action'] : tr(_actions[r['action']]!)} · ${r['by'] ?? ''} · ${_date(r['at'] as String?)}',
               style: const TextStyle(fontSize: 12, color: mutedText)),
         ),
     ]);
@@ -102,14 +103,14 @@ class _StaffProfileCardState extends State<StaffProfileCard> {
       await showDialog<void>(
         context: context,
         builder: (d) => AlertDialog(
-          title: const Text('NIDA kamili'),
+          title: const T('NIDA kamili'),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             SelectableText('${res['nida']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 1)),
             const SizedBox(height: 10),
-            const Text('Kuangalia huku kumeandikwa, na mfanyakazi anaweza kukiona kwenye "Taarifa zangu".',
+            const T('Kuangalia huku kumeandikwa, na mfanyakazi anaweza kukiona kwenye "Taarifa zangu".',
                 style: TextStyle(fontSize: 12, color: mutedText)),
           ]),
-          actions: [FilledButton(onPressed: () => Navigator.of(d).pop(), child: const Text('Funga'))],
+          actions: [FilledButton(onPressed: () => Navigator.of(d).pop(), child: const T('Funga'))],
         ),
       );
       _load(); // the log now shows this
@@ -122,15 +123,14 @@ class _StaffProfileCardState extends State<StaffProfileCard> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (d) => AlertDialog(
-        title: const Text('Futa taarifa binafsi?'),
-        content: const Text('Simu, mtu wa dharura, makazi, NIDA na maelezo yatafutwa kabisa. '
-            'Jina lake linabaki kwenye mauzo na historia. Haiwezi kurudishwa.'),
+        title: const T('Futa taarifa binafsi?'),
+        content: const T('Simu, mtu wa dharura, makazi, NIDA na maelezo yatafutwa kabisa. Jina lake linabaki kwenye mauzo na historia. Haiwezi kurudishwa.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(d).pop(false), child: const Text('Ghairi')),
+          TextButton(onPressed: () => Navigator.of(d).pop(false), child: const T('Ghairi')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: dangerRed),
             onPressed: () => Navigator.of(d).pop(true),
-            child: const Text('Futa'),
+            child: const T('Futa'),
           ),
         ],
       ),
@@ -139,7 +139,7 @@ class _StaffProfileCardState extends State<StaffProfileCard> {
     try {
       final p = await widget.api.delete('staff/${widget.staffId}/profile') as Map<String, dynamic>;
       if (mounted) setState(() => _p = p);
-      _toast('Taarifa binafsi zimefutwa.');
+      _toast(tr('Taarifa binafsi zimefutwa.'));
     } on ApiException catch (e) {
       _toast(e.message, error: true);
     }
@@ -159,39 +159,39 @@ class _StaffProfileCardState extends State<StaffProfileCard> {
               Row(children: [
                 const Icon(Icons.lock_outline, size: 18, color: brandGreen),
                 const SizedBox(width: 6),
-                const Expanded(child: Text('Taarifa binafsi', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-                if (widget.active) TextButton(onPressed: _edit, child: Text(empty ? 'Ongeza' : 'Hariri')),
+                const Expanded(child: T('Taarifa binafsi', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+                if (widget.active) TextButton(onPressed: _edit, child: Text(empty ? tr('Ongeza') : tr('Hariri'))),
               ]),
               if (p['erased_at'] != null)
-                Text('Zilifutwa ${_date(p['erased_at'] as String?)}.', style: const TextStyle(color: mutedText))
+                Text(tr('Zilifutwa :a.', {'a': _date(p['erased_at'] as String?)}), style: const TextStyle(color: mutedText))
               else if (empty)
-                const Text('Hakuna taarifa. Ni hiari: simu, mtu wa dharura, makazi, NIDA.', style: TextStyle(color: mutedText))
+                const T('Hakuna taarifa. Ni hiari: simu, mtu wa dharura, makazi, NIDA.', style: TextStyle(color: mutedText))
               else ...[
-                _row('Simu', p['phone'] as String?),
-                _row('Mtu wa dharura',
+                _row(tr('Simu'), p['phone'] as String?),
+                _row(tr('Mtu wa dharura'),
                     [p['emergency_name'], p['emergency_relation'], p['emergency_phone']].where((v) => v != null && '$v'.isNotEmpty).join(' · ')),
-                _row('Makazi (mtaa / kata)', p['residence_area'] as String?),
-                _row('Alianza kazi', p['started_on'] == null ? null : swahiliDate(DateTime.parse('${p['started_on']}'))),
+                _row(tr('Makazi (mtaa / kata)'), p['residence_area'] as String?),
+                _row(tr('Alianza kazi'), p['started_on'] == null ? null : swahiliDate(DateTime.parse('${p['started_on']}'))),
                 if (p['nida_masked'] != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Row(children: [
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(p['nida_verified_at'] != null ? 'NIDA · imethibitishwa' : 'NIDA',
+                          Text(p['nida_verified_at'] != null ? tr('NIDA · imethibitishwa') : tr('NIDA'),
                               style: const TextStyle(fontSize: 12, color: mutedText)),
                           Text('${p['nida_masked']}', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
                         ]),
                       ),
-                      TextButton.icon(onPressed: _reveal, icon: const Icon(Icons.visibility_outlined, size: 18), label: const Text('Onyesha')),
+                      TextButton.icon(onPressed: _reveal, icon: const Icon(Icons.visibility_outlined, size: 18), label: const T('Onyesha')),
                     ]),
                   ),
-                _row('Maelezo (wewe tu)', p['notes'] as String?),
-                _row('Ridhaa ya mfanyakazi', _date(p['consent_at'] as String?)),
+                _row(tr('Maelezo (wewe tu)'), p['notes'] as String?),
+                _row(tr('Ridhaa ya mfanyakazi'), _date(p['consent_at'] as String?)),
               ],
               TextButton(
                 onPressed: () => setState(() => _showLog = !_showLog),
-                child: Text(_showLog ? 'Ficha kumbukumbu' : 'Nani ameangalia?'),
+                child: Text(_showLog ? tr('Ficha kumbukumbu') : tr('Nani ameangalia?')),
               ),
               if (_showLog) _accessLog((p['access_log'] as List?) ?? const []),
               if (!widget.active && p['erased_at'] == null && !empty)
@@ -200,7 +200,7 @@ class _StaffProfileCardState extends State<StaffProfileCard> {
                   child: OutlinedButton.icon(
                     onPressed: _erase,
                     icon: const Icon(Icons.delete_forever_outlined, color: dangerRed),
-                    label: const Text('Futa taarifa binafsi', style: TextStyle(color: dangerRed)),
+                    label: const T('Futa taarifa binafsi', style: TextStyle(color: dangerRed)),
                   ),
                 ),
             ]),
@@ -227,7 +227,7 @@ class _OwnerPinDialogState extends State<_OwnerPinDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Weka PIN yako'),
+      title: const T('Weka PIN yako'),
       content: TextField(
         controller: _pin,
         autofocus: true,
@@ -238,9 +238,9 @@ class _OwnerPinDialogState extends State<_OwnerPinDialog> {
         onChanged: (v) {
           if (v.length == 4) Navigator.of(context).pop(v);
         },
-        decoration: const InputDecoration(helperText: 'Kuona NIDA kamili kunaandikwa kwenye kumbukumbu.'),
+        decoration: InputDecoration(helperText: tr('Kuona NIDA kamili kunaandikwa kwenye kumbukumbu.')),
       ),
-      actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ghairi'))],
+      actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi'))],
     );
   }
 }
@@ -282,7 +282,7 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
 
   Future<void> _save() async {
     if (!_hadConsent && !_consent) {
-      setState(() => _error = 'Kwanza thibitisha kwamba mfanyakazi amekubali.');
+      setState(() => _error = tr('Kwanza thibitisha kwamba mfanyakazi amekubali.'));
       return;
     }
     setState(() {
@@ -320,26 +320,25 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
   Widget build(BuildContext context) {
     final masked = widget.current['nida_masked'] as String?;
     return Scaffold(
-      appBar: AppBar(title: Text('Taarifa za ${widget.current['name']}'), backgroundColor: pageBackground),
+      appBar: AppBar(title: Text(tr('Taarifa za :a', {'a': widget.current['name']})), backgroundColor: pageBackground),
       body: ListView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
-          const Text('Zote ni za hiari. Zinahifadhiwa kwa usimbaji fiche, na wewe pekee ndiye unaziona. '
-              'Mfanyakazi anaweza kuona taarifa zake mwenyewe.',
+          const T('Zote ni za hiari. Zinahifadhiwa kwa usimbaji fiche, na wewe pekee ndiye unaziona. Mfanyakazi anaweza kuona taarifa zake mwenyewe.',
               style: TextStyle(color: mutedText, fontSize: 13)),
           const SizedBox(height: 16),
-          _field('phone', 'Simu', type: TextInputType.phone, hint: '07xx xxx xxx'),
-          const Text('Mtu wa kuwasiliana naye kwa dharura', style: TextStyle(fontWeight: FontWeight.w800)),
+          _field('phone', tr('Simu'), type: TextInputType.phone, hint: tr('07xx xxx xxx')),
+          const T('Mtu wa kuwasiliana naye kwa dharura', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          _field('emergency_name', 'Jina'),
-          _field('emergency_relation', 'Uhusiano', hint: 'mf. Mama, Kaka, Mume'),
-          _field('emergency_phone', 'Simu yake', type: TextInputType.phone),
-          _field('residence_area', 'Makazi: mtaa / kata', hint: 'mf. Sinza, Kinondoni (si anwani kamili)'),
+          _field('emergency_name', tr('Jina')),
+          _field('emergency_relation', tr('Uhusiano'), hint: tr('mf. Mama, Kaka, Mume')),
+          _field('emergency_phone', tr('Simu yake'), type: TextInputType.phone),
+          _field('residence_area', tr('Makazi: mtaa / kata'), hint: tr('mf. Sinza, Kinondoni (si anwani kamili)')),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Alianza kazi'),
-            subtitle: Text(_started == null ? 'Chagua tarehe' : swahiliDate(_started!)),
+            title: const T('Alianza kazi'),
+            subtitle: Text(_started == null ? tr('Chagua tarehe') : swahiliDate(_started!)),
             trailing: const Icon(Icons.event_outlined),
             onTap: () async {
               final d = await showDatePicker(
@@ -357,7 +356,7 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(20)],
             decoration: InputDecoration(
-              labelText: masked == null ? 'NIDA (tarakimu 20)' : 'NIDA mpya (acha wazi kubaki na $masked)',
+              labelText: masked == null ? tr('NIDA (tarakimu 20)') : tr('NIDA mpya (acha wazi kubaki na :masked)', {'masked': masked}),
               counterText: '',
             ),
           ),
@@ -365,23 +364,23 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
             contentPadding: EdgeInsets.zero,
             value: _verified,
             onChanged: (v) => setState(() => _verified = v ?? false),
-            title: const Text('Nimeona kitambulisho chake na kulinganisha'),
+            title: const T('Nimeona kitambulisho chake na kulinganisha'),
           ),
-          _field('notes', 'Maelezo (wewe tu unayaona)', lines: 3),
+          _field('notes', tr('Maelezo (wewe tu unayaona)'), lines: 3),
           if (!_hadConsent)
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: _consent,
               onChanged: (v) => setState(() => _consent = v ?? false),
-              title: const Text('Mfanyakazi amekubali taarifa hizi zihifadhiwe'),
-              subtitle: const Text('Anaweza kuziona kwenye "Taarifa zangu".'),
+              title: const T('Mfanyakazi amekubali taarifa hizi zihifadhiwe'),
+              subtitle: const T('Anaweza kuziona kwenye "Taarifa zangu".'),
             ),
           if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _save,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-            child: Text(_saving ? 'Inahifadhi…' : 'Hifadhi'),
+            child: Text(_saving ? tr('Inahifadhi…') : tr('Hifadhi')),
           ),
         ],
       ),
@@ -419,13 +418,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   Widget build(BuildContext context) {
     final p = _p;
     return Scaffold(
-      appBar: AppBar(title: const Text('Taarifa zangu'), backgroundColor: pageBackground),
+      appBar: AppBar(title: const T('Taarifa zangu'), backgroundColor: pageBackground),
       body: p == null
           ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
               children: [
-                const Text('Hizi ndizo taarifa ambazo duka limehifadhi kukuhusu. Kama kuna kosa, mwambie mmiliki.',
+                const T('Hizi ndizo taarifa ambazo duka limehifadhi kukuhusu. Kama kuna kosa, mwambie mmiliki.',
                     style: TextStyle(color: mutedText, fontSize: 13)),
                 const SizedBox(height: 14),
                 Container(
@@ -436,15 +435,15 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     if (p['consent_at'] == null)
                       const Padding(
                         padding: EdgeInsets.only(top: 8),
-                        child: Text('Hakuna taarifa binafsi zilizohifadhiwa.', style: TextStyle(color: mutedText)),
+                        child: T('Hakuna taarifa binafsi zilizohifadhiwa.', style: TextStyle(color: mutedText)),
                       ),
-                    _row('Simu', p['phone'] as String?),
-                    _row('Mtu wa dharura',
+                    _row(tr('Simu'), p['phone'] as String?),
+                    _row(tr('Mtu wa dharura'),
                         [p['emergency_name'], p['emergency_relation'], p['emergency_phone']].where((v) => v != null && '$v'.isNotEmpty).join(' · ')),
-                    _row('Makazi', p['residence_area'] as String?),
-                    _row('Alianza kazi', p['started_on'] == null ? null : swahiliDate(DateTime.parse('${p['started_on']}'))),
-                    _row('NIDA', p['nida_masked'] as String?),
-                    _row('Ulikubali', _date(p['consent_at'] as String?)),
+                    _row(tr('Makazi'), p['residence_area'] as String?),
+                    _row(tr('Alianza kazi'), p['started_on'] == null ? null : swahiliDate(DateTime.parse('${p['started_on']}'))),
+                    _row(tr('NIDA'), p['nida_masked'] as String?),
+                    _row(tr('Ulikubali'), _date(p['consent_at'] as String?)),
                     _accessLog((p['access_log'] as List?) ?? const []),
                   ]),
                 ),

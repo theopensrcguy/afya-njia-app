@@ -5,6 +5,8 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
 import '../../models/staff.dart';
+import 'forgot_pin_screen.dart';
+import '../../core/i18n.dart';
 
 /// Sign in: who you are, then a 4-digit PIN.
 ///
@@ -80,7 +82,7 @@ class _PinScreenState extends State<PinScreen> {
   void _tapDigit(String digit) {
     if (_signingIn || _pin.length >= _pinLength) return;
     if (_byPhone && !_phoneReady) {
-      setState(() => _error = 'Andika namba yako ya simu kwanza.');
+      setState(() => _error = tr('Andika namba yako ya simu kwanza.'));
       return;
     }
     setState(() {
@@ -113,7 +115,7 @@ class _PinScreenState extends State<PinScreen> {
           final wasWaiting = _pairingCode != null;
           _pairingCode = e.data['pairing_code'] as String?;
           _pendingPin = pinToSend;
-          _error = wasWaiting ? 'Bado haijaidhinishwa. Mwombe mmiliki aidhinishe.' : null;
+          _error = wasWaiting ? tr('Bado haijaidhinishwa. Mwombe mmiliki aidhinishe.') : null;
         } else {
           _pairingCode = null;
           _pendingPin = '';
@@ -145,6 +147,17 @@ class _PinScreenState extends State<PinScreen> {
     return Scaffold(
       backgroundColor: brandGreen,
       body: SafeArea(
+        child: Column(children: [
+          // Kiswahili / English before signing in. Becomes this person's choice
+          // when they sign in (see Session._syncLanguage).
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: LanguageSwitch(onDark: true, onChanged: lang.chooseSignedOut),
+            ),
+          ),
+          Expanded(
         // On a laptop the keyboard types the PIN too (digits, Backspace),
         // except while the phone-number field is being typed in.
         child: Focus(
@@ -167,7 +180,7 @@ class _PinScreenState extends State<PinScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420, maxHeight: 820),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                 child: _loading
                     ? const Center(child: CircularProgressIndicator(color: Colors.white))
                     : _info == null
@@ -179,6 +192,8 @@ class _PinScreenState extends State<PinScreen> {
             ),
           ),
         ),
+          ),
+        ]),
       ),
     );
   }
@@ -196,13 +211,13 @@ class _PinScreenState extends State<PinScreen> {
         children: [
           const Icon(Icons.phonelink_lock, color: Colors.white, size: 56),
           const SizedBox(height: 16),
-          const Text(
-            'Simu hii ni mpya',
+          Text(
+            tr('Kifaa hiki ni kipya'),
             style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Mwonyeshe mmiliki namba hii ili aidhinishe simu hii.',
+          Text(
+            tr('Mwonyeshe mmiliki namba hii ili aidhinishe kifaa hiki (simu au kompyuta).'),
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 15),
           ),
@@ -233,13 +248,13 @@ class _PinScreenState extends State<PinScreen> {
               onPressed: _signingIn ? null : () => _submit(_pendingPin),
               child: _signingIn
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Ameidhinisha · Jaribu tena', style: TextStyle(fontSize: 17)),
+                  : const T('Ameidhinisha · Jaribu tena', style: TextStyle(fontSize: 17)),
             ),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: _signingIn ? null : _cancelWaiting,
-            child: const Text('Rudi', style: TextStyle(color: Colors.white)),
+            child: const T('Rudi', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -252,12 +267,12 @@ class _PinScreenState extends State<PinScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            _error ?? 'Imeshindwa kufungua.',
+            _error ?? tr('Imeshindwa kufungua.'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white, fontSize: 16),
           ),
           const SizedBox(height: 16),
-          FilledButton.tonal(onPressed: _load, child: const Text('Jaribu tena')),
+          FilledButton.tonal(onPressed: _load, child: const T('Jaribu tena')),
         ],
       ),
     );
@@ -267,14 +282,14 @@ class _PinScreenState extends State<PinScreen> {
     return Column(
       children: [
         const SizedBox(height: 16),
-        const Text('AFYA NJIA', style: TextStyle(color: Colors.white70, letterSpacing: 2, fontSize: 13)),
+        const T('AFYA NJIA', style: TextStyle(color: Colors.white70, letterSpacing: 2, fontSize: 13)),
         const SizedBox(height: 8),
         ..._who(),
         const SizedBox(height: 32),
 
         // The four dots
         Semantics(
-          label: 'Tarakimu ${_pin.length} kati ya $_pinLength',
+          label: tr('Tarakimu :pin kati ya :pin_length', {'pin': _pin.length, 'pin_length': _pinLength}),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -315,15 +330,15 @@ class _PinScreenState extends State<PinScreen> {
               const SizedBox.shrink(),
               _key('0'),
               IconButton(
-                tooltip: 'Futa',
+                tooltip: tr('Futa'),
                 onPressed: _backspace,
                 icon: const Icon(Icons.backspace_outlined, color: Colors.white),
               ),
             ],
           ),
         ),
-        const Text(
-          'Mauzo yote yatahifadhiwa kwa jina la aliyeingia.',
+        Text(
+          tr('Mauzo yote yatahifadhiwa kwa jina la aliyeingia.'),
           style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
@@ -335,9 +350,9 @@ class _PinScreenState extends State<PinScreen> {
     final info = _info!;
     if (_byPhone) {
       return [
-        const Text('Ingia', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+        const T('Ingia', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        const Text('Namba yako ya simu na PIN', style: TextStyle(color: Colors.white70)),
+        const T('Namba yako ya simu na PIN', style: TextStyle(color: Colors.white70)),
         const SizedBox(height: 18),
         TextField(
           controller: _phone,
@@ -357,6 +372,7 @@ class _PinScreenState extends State<PinScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
           ),
         ),
+        _forgotButton(),
         if (info.mode != 'new')
           TextButton(
             onPressed: () => setState(() {
@@ -364,7 +380,7 @@ class _PinScreenState extends State<PinScreen> {
               _pin = '';
               _error = null;
             }),
-            child: const Text('Rudi', style: TextStyle(color: Colors.white)),
+            child: const T('Rudi', style: TextStyle(color: Colors.white)),
           ),
       ];
     }
@@ -372,14 +388,15 @@ class _PinScreenState extends State<PinScreen> {
       return [
         _avatar(_selected!, size: 64, selected: true),
         const SizedBox(height: 12),
-        Text('Karibu tena, ${_selected!.name.split(' ').first}',
+        Text(tr('Karibu tena, :a', {'a': _selected!.name.split(' ').first}),
             style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-        TextButton(onPressed: _usePhone, child: const Text('Si wewe?', style: TextStyle(color: Colors.white70))),
+        TextButton(onPressed: _usePhone, child: const T('Si wewe?', style: TextStyle(color: Colors.white70))),
+        _forgotButton(),
       ];
     }
     // The shared counter phone: who uses it, most recent first.
     return [
-      const Text('Nani anaingia?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+      const T('Nani anaingia?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
       const SizedBox(height: 18),
       Wrap(
         spacing: 14,
@@ -410,8 +427,30 @@ class _PinScreenState extends State<PinScreen> {
             ),
         ],
       ),
-      TextButton(onPressed: _usePhone, child: const Text('Siko kwenye orodha', style: TextStyle(color: Colors.white70))),
+      TextButton(onPressed: _usePhone, child: const T('Siko kwenye orodha', style: TextStyle(color: Colors.white70))),
+      _forgotButton(),
     ];
+  }
+
+  /// "Umesahau PIN?": code by SMS, new PIN. Back here with the phone number filled in.
+  Widget _forgotButton() {
+    return TextButton(
+      onPressed: () async {
+        final phone = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(builder: (_) => ForgotPinScreen(api: widget.session.api, phone: _byPhone ? _phone.text.trim() : '')),
+        );
+        if (phone != null && mounted) {
+          setState(() {
+            _byPhone = true;
+            _phone.text = phone;
+            _pin = '';
+            _error = null;
+          });
+        }
+      },
+      child: const T('Umesahau PIN?', style: TextStyle(color: Colors.white70, decoration: TextDecoration.underline)),
+    );
   }
 
   /// Round initials: quicker to spot than a list of names.

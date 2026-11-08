@@ -11,6 +11,7 @@ import '../../core/units.dart';
 import '../../models/product.dart';
 import 'cart.dart';
 import 'sell_unit.dart';
+import '../../core/i18n.dart';
 
 /// Scan at the counter, with the phone's own camera.
 ///
@@ -89,10 +90,10 @@ class _ScanScreenState extends State<ScanScreen> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(p.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                Text('Iliyopo: ${describeStock(p.onHand, p.units)}', style: const TextStyle(color: mutedText)),
+                Text(tr('Iliyopo: :a', {'a': describeStock(p.onHand, p.units)}), style: const TextStyle(color: mutedText)),
                 const SizedBox(height: 14),
                 if (p.units.length > 1) ...[
-                  const Text('Unauza nini?', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const T('Unauza nini?', style: TextStyle(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
                   Wrap(spacing: 8, runSpacing: 6, children: [
                     for (final u in p.units)
@@ -111,7 +112,7 @@ class _ScanScreenState extends State<ScanScreen> {
                   const SizedBox(height: 12),
                 ],
                 Row(children: [
-                  const Expanded(child: Text('Idadi', style: TextStyle(fontWeight: FontWeight.w800))),
+                  const Expanded(child: T('Idadi', style: TextStyle(fontWeight: FontWeight.w800))),
                   IconButton.filledTonal(onPressed: qty > 1 ? () => setSheet(() => qty--) : null, icon: const Icon(Icons.remove)),
                   SizedBox(width: 48, child: Text('$qty', textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800))),
                   IconButton.filled(onPressed: qty < max ? () => setSheet(() => qty++) : null, icon: const Icon(Icons.add)),
@@ -123,8 +124,8 @@ class _ScanScreenState extends State<ScanScreen> {
                       : () => Navigator.of(sheet).pop(widget.cart.addIn(p, unit, qty)),
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
                   child: Text(max < 1
-                      ? 'Hisa haitoshi'
-                      : 'Ongeza $qty ${unitLabel(unit.name, qty)} · ${formatTsh(qty * unit.price)}'),
+                      ? tr('Hisa haitoshi')
+                      : tr('Ongeza :qty :a · :b', {'qty': qty, 'a': unitLabel(unit.name, qty), 'b': formatTsh(qty * unit.price)})),
                 ),
               ]),
             ),
@@ -136,7 +137,7 @@ class _ScanScreenState extends State<ScanScreen> {
     if (added == true) {
       _toast('✓ ${p.name}: $qty ${unitLabel(unit.name, qty)}');
     } else if (added == false) {
-      _toast('Hisa haitoshi: ${p.name}.', error: true);
+      _toast(tr('Hisa haitoshi: :name.', {'name': p.name}), error: true);
     }
   }
 
@@ -154,7 +155,7 @@ class _ScanScreenState extends State<ScanScreen> {
     try {
       await widget.api.post('products/${product.id}/barcodes', {'code': code, 'unit_name': ?printedOn});
       if (!mounted) return;
-      _toast('Imeunganishwa. Ukiiskani tena, ${product.name} itajulikana yenyewe.');
+      _toast(tr('Imeunganishwa. Ukiiskani tena, :name itajulikana yenyewe.', {'name': product.name}));
       await _sellSheet(product, printedOn: printedOn);
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -182,13 +183,13 @@ class _ScanScreenState extends State<ScanScreen> {
         title: ListenableBuilder(
           listenable: widget.cart,
           builder: (context, _) => Text(
-            widget.cart.isEmpty ? 'Skani barcode' : 'Kikapu · ${widget.cart.itemCount} · ${formatTsh(widget.cart.total)}',
+            widget.cart.isEmpty ? tr('Skani barcode') : tr('Kikapu · :item_count · :a', {'item_count': widget.cart.itemCount, 'a': formatTsh(widget.cart.total)}),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
         ),
         actions: [
-          IconButton(tooltip: 'Tochi', onPressed: () => _controller.toggleTorch(), icon: const Icon(Icons.flashlight_on_outlined)),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Maliza', style: TextStyle(color: Colors.white))),
+          IconButton(tooltip: tr('Tochi'), onPressed: () => _controller.toggleTorch(), icon: const Icon(Icons.flashlight_on_outlined)),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Maliza', style: TextStyle(color: Colors.white))),
         ],
       ),
       body: Stack(children: [
@@ -201,12 +202,12 @@ class _ScanScreenState extends State<ScanScreen> {
             decoration: BoxDecoration(border: Border.all(color: mintAccent, width: 3), borderRadius: BorderRadius.circular(22)),
           ),
         ),
-        const Positioned(
+        Positioned(
           left: 24,
           right: 24,
           bottom: 40,
           child: Text(
-            'Elekeza kwenye barcode: inasoma yenyewe.\nSkrini nyeusi? Ruhusu kamera: Settings › Afya Njia.',
+            tr('Elekeza kwenye barcode: inasoma yenyewe.\nSkrini nyeusi? Ruhusu kamera: Settings › Afya Njia.'),
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70),
           ),
@@ -262,24 +263,24 @@ class _TeachSheetState extends State<_TeachSheet> {
       padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('BARCODE MPYA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: warnAmber, letterSpacing: 0.4)),
-          const Text('Ni bidhaa gani?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const Text('Chagua mara moja tu. Ukiiskani tena itajulikana yenyewe.', style: TextStyle(color: mutedText)),
+          const T('BARCODE MPYA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: warnAmber, letterSpacing: 0.4)),
+          const T('Ni bidhaa gani?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const T('Chagua mara moja tu. Ukiiskani tena itajulikana yenyewe.', style: TextStyle(color: mutedText)),
           const SizedBox(height: 12),
           if (p == null) ...[
             TextField(
               controller: _q,
               autofocus: true,
               onChanged: _search,
-              decoration: const InputDecoration(labelText: 'Tafuta dawa', prefixIcon: Icon(Icons.search)),
+              decoration: InputDecoration(labelText: tr('Tafuta dawa'), prefixIcon: Icon(Icons.search)),
             ),
             const SizedBox(height: 8),
             for (final r in _results.take(6))
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(r.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('Iliyopo: ${describeStock(r.onHand, r.units)}'),
-                trailing: const Text('Unganisha', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
+                subtitle: Text(tr('Iliyopo: :a', {'a': describeStock(r.onHand, r.units)})),
+                trailing: const T('Unganisha', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
                 onTap: () => setState(() {
                   _product = r;
                   // Barcodes are mostly on the outer pack.
@@ -288,12 +289,12 @@ class _TeachSheetState extends State<_TeachSheet> {
               ),
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('Haipo kabisa? Iongeze kwanza kupitia Pokea mzigo.', style: TextStyle(fontSize: 12, color: mutedText)),
+              child: T('Haipo kabisa? Iongeze kwanza kupitia Pokea mzigo.', style: TextStyle(fontSize: 12, color: mutedText)),
             ),
           ] else ...[
             Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
-            const Text('Barcode iko kwenye nini?', style: TextStyle(fontWeight: FontWeight.w800)),
+            const T('Barcode iko kwenye nini?', style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             Wrap(spacing: 8, runSpacing: 6, children: [
               for (final u in p.units)
@@ -310,9 +311,9 @@ class _TeachSheetState extends State<_TeachSheet> {
             FilledButton(
               onPressed: () => Navigator.of(context).pop((p, _printedOn)),
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-              child: const Text('Unganisha'),
+              child: const T('Unganisha'),
             ),
-            TextButton(onPressed: () => setState(() => _product = null), child: const Text('Si hii, rudi')),
+            TextButton(onPressed: () => setState(() => _product = null), child: const T('Si hii, rudi')),
           ],
         ]),
       ),

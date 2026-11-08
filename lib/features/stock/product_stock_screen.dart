@@ -11,6 +11,7 @@ import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'units_editor_screen.dart';
+import '../../core/i18n.dart';
 
 /// One product: what's on the shelf, how it's sold, its batches, and every
 /// change to its stock (who, when, why). Owner only.
@@ -65,9 +66,9 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     final base = units.isEmpty ? '' : unitLabel(units.first.name, 2);
     final answer = await askText(
       context,
-      title: 'Kiwango cha kuagiza',
-      message: 'Hisa ikifika hapa au chini, bidhaa itaonekana kwenye "za kuagiza".',
-      label: 'Idadi ($base)',
+      title: tr('Kiwango cha kuagiza'),
+      message: tr('Hisa ikifika hapa au chini, bidhaa itaonekana kwenye "za kuagiza".'),
+      label: tr('Idadi (:base)', {'base': base}),
       helper: units.length > 1 ? '${unitLabel(units[1].name)} 1 = ${units[1].baseQuantity} $base' : null,
       initial: '${asInt(_p!['reorder_level'])}',
       digitsOnly: true,
@@ -94,7 +95,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
   Future<void> _adjust({Map<String, dynamic>? expiredBatch}) async {
     final batches = ((_p!['batches'] as List?) ?? const []).cast<Map<String, dynamic>>();
     if (batches.isEmpty) {
-      _toast('Hakuna batch yenye hisa ya kurekebisha.');
+      _toast(tr('Hakuna batch yenye hisa ya kurekebisha.'));
       return;
     }
     final done = await showModalBottomSheet<bool>(
@@ -105,7 +106,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
       builder: (_) => _AdjustSheet(api: _api, batches: batches, units: _units, expiredBatch: expiredBatch),
     );
     if (done == true) {
-      _toast(expiredBatch != null ? 'Imeandikwa kama hasara.' : 'Hisa imerekebishwa.');
+      _toast(expiredBatch != null ? tr('Imeandikwa kama hasara.') : tr('Hisa imerekebishwa.'));
       _load();
     }
   }
@@ -121,7 +122,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
               child: _error != null
                   ? Column(mainAxisSize: MainAxisSize.min, children: [
                       Text(_error!, style: const TextStyle(color: dangerRed)),
-                      TextButton(onPressed: _load, child: const Text('Jaribu tena')),
+                      TextButton(onPressed: _load, child: const T('Jaribu tena')),
                     ])
                   : const CircularProgressIndicator(),
             )
@@ -144,7 +145,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                   OutlinedButton.icon(
                     onPressed: _adjust,
                     icon: const Icon(Icons.tune),
-                    label: const Text('Rekebisha hisa (imeharibika, imepotea…)'),
+                    label: const T('Rekebisha hisa (imeharibika, imepotea…)'),
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: cardColor),
                   ),
                 ],
@@ -169,16 +170,16 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
 
     return _card(children: [
       Row(children: [
-        const Expanded(child: Text('Iliyopo sasa', style: TextStyle(color: mutedText))),
+        const Expanded(child: T('Iliyopo sasa', style: TextStyle(color: mutedText))),
         if (onHand == 0)
-          _badge('Hazipo', dangerRed, const Color(0xFFFDE7E4))
+          _badge(tr('Hazipo'), dangerRed, const Color(0xFFFDE7E4))
         else if (low)
-          _badge('Chache · agiza', warnAmber, const Color(0xFFFBEFD6)),
+          _badge(tr('Chache · agiza'), warnAmber, const Color(0xFFFBEFD6)),
       ]),
       const SizedBox(height: 4),
       Text(describeStock(onHand, units), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-      Text('Jumla ${unitLabel(units.isEmpty ? '' : units.first.name, 2)} $onHand'
-          '${_can(Perm.viewCosts) ? ' · thamani ${formatTsh(asInt(p['value_at_cost']))}' : ''}',
+      Text(tr('Jumla :a :on_hand', {'a': unitLabel(units.isEmpty ? '' : units.first.name, 2), 'on_hand': onHand}) +
+          '${_can(Perm.viewCosts) ? tr(' · thamani :a', {'a': formatTsh(asInt(p['value_at_cost']))}) : ''}',
           style: const TextStyle(color: mutedText, fontSize: 13)),
       const SizedBox(height: 12),
       ClipRRect(
@@ -197,7 +198,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(children: [
             Expanded(
-              child: Text('Kiwango cha kuagiza: ${describeStock(reorder, units)}',
+              child: Text(tr('Kiwango cha kuagiza: :a', {'a': describeStock(reorder, units)}),
                   style: const TextStyle(fontSize: 13, color: mutedText)),
             ),
             if (_can(Perm.editPrices)) const Icon(Icons.edit_outlined, size: 18, color: mutedText),
@@ -218,9 +219,9 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     final lastCost = _p!['last_unit_cost'];
     return _card(children: [
       Row(children: [
-        const Expanded(child: Text('Vipimo na bei', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+        const Expanded(child: T('Vipimo na bei', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
         if (_can(Perm.editPrices))
-          TextButton.icon(onPressed: _editUnits, icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('Badilisha')),
+          TextButton.icon(onPressed: _editUnits, icon: const Icon(Icons.edit_outlined, size: 18), label: const T('Badilisha')),
       ]),
       // Selling price against buying price, per unit. The cost is the last
       // delivery's cost × the unit's size; a red margin means selling at a loss.
@@ -244,7 +245,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                 Text(formatTsh(u.price), style: const TextStyle(fontWeight: FontWeight.w800)),
                 if (margin != null)
                   Text(
-                    losing ? 'Hasara! gharama ${formatTsh(asInt(raw['cost']))}' : 'Faida $margin% · gharama ${formatTsh(asInt(raw['cost']))}',
+                    losing ? tr('Hasara! gharama :a', {'a': formatTsh(asInt(raw['cost']))}) : tr('Faida :margin% · gharama :a', {'margin': margin, 'a': formatTsh(asInt(raw['cost']))}),
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: losing ? dangerRed : brandGreen),
                   ),
               ]),
@@ -254,7 +255,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
       if (lastCost != null) ...[
         const Divider(height: 20),
         Row(children: [
-          const Expanded(child: Text('Bei ya kununua (mwisho)', style: TextStyle(color: mutedText))),
+          const Expanded(child: T('Bei ya kununua (mwisho)', style: TextStyle(color: mutedText))),
           Text('${formatTsh(asInt(lastCost))} / ${unitLabel(units.isEmpty ? '' : units.first.name)}',
               style: const TextStyle(fontWeight: FontWeight.w800)),
         ]),
@@ -267,7 +268,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     final history = ((_p!['price_history'] as List?) ?? const []).cast<Map<String, dynamic>>();
     if (history.isEmpty) return const SizedBox.shrink();
     return _card(children: [
-      const Text('Historia ya bei', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+      const T('Historia ya bei', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
       for (final h in history.take(8))
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -287,14 +288,14 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
   String _whenWho(Map<String, dynamic> h) {
     final at = parseDate(h['at']);
     final when = at == null ? '' : swahiliDate(at.toLocal());
-    return h['user'] == null ? '$when · bei ya kuanzia' : '$when · ${h['user']}';
+    return h['user'] == null ? tr(':when · bei ya kuanzia', {'when': when}) : '$when · ${h['user']}';
   }
 
   String _priceChange(Map<String, dynamic> h) {
     final old = h['old_price'];
     final now = h['new_price'];
     if (old == null) return formatTsh(asInt(now));
-    if (now == null) return 'kimeondolewa';
+    if (now == null) return tr('kimeondolewa');
     final diff = asInt(now) - asInt(old);
     final pct = asInt(old) == 0 ? 0 : (diff * 100 / asInt(old)).round();
     return '${formatTsh(asInt(old))} → ${formatTsh(asInt(now))} (${pct >= 0 ? '+' : ''}$pct%)';
@@ -304,10 +305,10 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     final units = _units;
     final batches = ((_p!['batches'] as List?) ?? const []).cast<Map<String, dynamic>>();
     return _card(children: [
-      const Text('Batch', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-      const Text('Inayoisha kwanza inauzwa kwanza', style: TextStyle(fontSize: 12, color: mutedText)),
+      const T('Batch', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+      const T('Inayoisha kwanza inauzwa kwanza', style: TextStyle(fontSize: 12, color: mutedText)),
       if (batches.isEmpty)
-        const Padding(padding: EdgeInsets.only(top: 12), child: Text('Hakuna batch yenye hisa.', style: TextStyle(color: mutedText))),
+        const Padding(padding: EdgeInsets.only(top: 12), child: T('Hakuna batch yenye hisa.', style: TextStyle(color: mutedText))),
       for (var i = 0; i < batches.length; i++)
         Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -320,7 +321,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                   Text('${batches[i]['batch_number']}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                   if (batches[i]['selling_now'] == true) ...[
                     const SizedBox(width: 6),
-                    _badge('inauzwa sasa', brandGreen, const Color(0xFFDDF3EA)),
+                    _badge(tr('inauzwa sasa'), brandGreen, const Color(0xFFDDF3EA)),
                   ],
                 ]),
                 Text(_expiryText(batches[i]),
@@ -332,7 +333,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => _adjust(expiredBatch: batches[i]),
                       icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                      label: const Text('Andika kama hasara'),
+                      label: const T('Andika kama hasara'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: dangerRed,
                         side: const BorderSide(color: dangerRed),
@@ -353,8 +354,8 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     final d = parseDate(b['expiry_date']);
     final days = asInt(b['days_left']);
     final date = d == null ? '' : '${d.month.toString().padLeft(2, '0')}/${d.year}';
-    if (b['is_expired'] == true) return 'Imeisha muda $date · haiuzwi';
-    return days <= 90 ? 'Inaisha $date · siku $days' : 'Inaisha $date';
+    if (b['is_expired'] == true) return tr('Imeisha muda :date · haiuzwi', {'date': date});
+    return days <= 90 ? tr('Inaisha :date · siku :days', {'date': date, 'days': days}) : tr('Inaisha :date', {'date': date});
   }
 
   static const _types = {
@@ -370,9 +371,9 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     final units = _units;
     final history = ((_p!['history'] as List?) ?? const []).cast<Map<String, dynamic>>();
     return _card(children: [
-      const Text('Historia', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+      const T('Historia', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
       if (history.isEmpty)
-        const Padding(padding: EdgeInsets.only(top: 12), child: Text('Bado hakuna mabadiliko.', style: TextStyle(color: mutedText))),
+        const Padding(padding: EdgeInsets.only(top: 12), child: T('Bado hakuna mabadiliko.', style: TextStyle(color: mutedText))),
       for (var i = 0; i < history.length; i++) _historyRow(history[i], units, last: i == history.length - 1),
     ]);
   }
@@ -403,7 +404,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(note.isEmpty ? label : '$label: $note',
+            Text(note.isEmpty ? tr(label) : '${tr(label)}: $note',
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
             Text('$when · ${h['user'] ?? ''}${h['batch_number'] != null ? ' · ${h['batch_number']}' : ''}',
                 style: const TextStyle(fontSize: 12, color: mutedText)),
@@ -462,11 +463,11 @@ class _AdjustSheetState extends State<_AdjustSheet> {
   Future<void> _save() async {
     final n = int.tryParse(_qty.text.trim()) ?? 0;
     if (n <= 0) {
-      setState(() => _error = 'Weka idadi ya kuondoa.');
+      setState(() => _error = tr('Weka idadi ya kuondoa.'));
       return;
     }
     if (n > asInt(_batch['quantity'])) {
-      setState(() => _error = 'Batch hii ina ${asInt(_batch['quantity'])} tu.');
+      setState(() => _error = tr('Batch hii ina :a tu.', {'a': asInt(_batch['quantity'])}));
       return;
     }
     final (type, label) = _reasons[_reason];
@@ -499,16 +500,16 @@ class _AdjustSheetState extends State<_AdjustSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.expiredBatch != null ? 'Andika kama hasara' : 'Rekebisha hisa',
+          Text(widget.expiredBatch != null ? tr('Andika kama hasara') : tr('Rekebisha hisa'),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           if (widget.expiredBatch != null)
             const Padding(
               padding: EdgeInsets.only(top: 4),
-              child: Text('Dawa iliyoisha muda haiuzwi. Ukihifadhi, inatoka kwenye hisa na kuonekana kama hasara kwenye historia.',
+              child: T('Dawa iliyoisha muda haiuzwi. Ukihifadhi, inatoka kwenye hisa na kuonekana kama hasara kwenye historia.',
                   style: TextStyle(fontSize: 13, color: mutedText)),
             ),
           const SizedBox(height: 12),
-          const Text('Batch', style: TextStyle(color: mutedText, fontSize: 13)),
+          const T('Batch', style: TextStyle(color: mutedText, fontSize: 13)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 6, children: [
             for (final b in widget.batches)
@@ -523,7 +524,7 @@ class _AdjustSheetState extends State<_AdjustSheet> {
           Wrap(spacing: 8, runSpacing: 6, children: [
             for (var i = 0; i < _reasons.length; i++)
               ChoiceChip(
-                label: Text(_reasons[i].$2),
+                label: Text(tr(_reasons[i].$2)),
                 selected: _reason == i,
                 showCheckmark: false,
                 onSelected: (_) => setState(() => _reason = i),
@@ -534,15 +535,15 @@ class _AdjustSheetState extends State<_AdjustSheet> {
             controller: _qty,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(labelText: 'Idadi ya kuondoa ($base)', errorText: _error),
+            decoration: InputDecoration(labelText: tr('Idadi ya kuondoa (:base)', {'base': base}), errorText: _error),
           ),
           const SizedBox(height: 12),
-          TextField(controller: _note, decoration: const InputDecoration(labelText: 'Maelezo zaidi (si lazima)')),
+          TextField(controller: _note, decoration: InputDecoration(labelText: tr('Maelezo zaidi (si lazima)'))),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _save,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            child: Text(_saving ? 'Inahifadhi…' : 'Ondoa kwenye hisa'),
+            child: Text(_saving ? tr('Inahifadhi…') : tr('Ondoa kwenye hisa')),
           ),
         ],
       ),

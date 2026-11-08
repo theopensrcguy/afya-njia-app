@@ -10,6 +10,7 @@ import '../../core/units.dart';
 import '../../models/product.dart';
 import '../purchases/receive_screen.dart';
 import 'product_stock_screen.dart';
+import '../../core/i18n.dart';
 
 /// "Hisa": every product, what's on the shelf and what it's worth.
 ///
@@ -114,7 +115,7 @@ class _StockScreenState extends State<StockScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Hisa'), backgroundColor: pageBackground),
+      appBar: AppBar(title: const T('Hisa'), backgroundColor: pageBackground),
       floatingActionButton: !widget.session.user!.can(Perm.receive) ? null : FloatingActionButton.extended(
         onPressed: () async {
           final saved = await Navigator.of(context).push<bool>(
@@ -125,7 +126,7 @@ class _StockScreenState extends State<StockScreen> {
         backgroundColor: brandGreen,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.local_shipping_outlined),
-        label: const Text('Pokea mzigo'),
+        label: const T('Pokea mzigo'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -143,7 +144,7 @@ class _StockScreenState extends State<StockScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Row(children: [
                         Expanded(child: Text(_error!, style: const TextStyle(color: dangerRed))),
-                        TextButton(onPressed: _load, child: const Text('Jaribu tena')),
+                        TextButton(onPressed: _load, child: const T('Jaribu tena')),
                       ]),
                     ),
                   if (_data != null) _summary(),
@@ -162,7 +163,7 @@ class _StockScreenState extends State<StockScreen> {
                           // Fewer results = shorter list: keep the box at the top.
                           _searchToTop();
                         },
-                        decoration: const InputDecoration(labelText: 'Tafuta dawa', prefixIcon: Icon(Icons.search)),
+                        decoration: InputDecoration(labelText: tr('Tafuta dawa'), prefixIcon: Icon(Icons.search)),
                       ),
                   ),
                   const SizedBox(height: 12),
@@ -181,11 +182,11 @@ class _StockScreenState extends State<StockScreen> {
     final s = (_data!['summary'] as Map?) ?? const {};
     final rows = _rows;
     final (String title, int value) = switch (_filter) {
-      'chache' => ('Za kuagiza · bidhaa ${rows.length} (thamani iliyobaki)', _sum(rows, 'value_at_cost')),
-      'hazipo' => ('Hazipo kabisa · bidhaa ${rows.length}', 0),
-      'muda' => ('Hatarini: inaisha ndani ya siku 30 · bidhaa ${rows.length}', _sum(rows, 'expiring_value')),
-      'zimeisha' => ('Hasara: zimeisha muda · bidhaa ${rows.length}', _sum(rows, 'expired_value')),
-      _ => ('Thamani ya hisa (bei ya kununua)', _sum(rows, 'value_at_cost')),
+      'chache' => (tr('Za kuagiza · bidhaa :rows (thamani iliyobaki)', {'rows': rows.length}), _sum(rows, 'value_at_cost')),
+      'hazipo' => (tr('Hazipo kabisa · bidhaa :rows', {'rows': rows.length}), 0),
+      'muda' => (tr('Hatarini: inaisha ndani ya siku 30 · bidhaa :rows', {'rows': rows.length}), _sum(rows, 'expiring_value')),
+      'zimeisha' => (tr('Hasara: zimeisha muda · bidhaa :rows', {'rows': rows.length}), _sum(rows, 'expired_value')),
+      _ => (tr('Thamani ya hisa (bei ya kununua)'), _sum(rows, 'value_at_cost')),
     };
     // Without "Kuona gharama na faida" the big number is a count, not money.
     final hazipo = _filter == 'hazipo' || !_costs;
@@ -222,11 +223,11 @@ class _StockScreenState extends State<StockScreen> {
                   style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               Row(children: [
-                stat('${asInt(s['products'])}', 'bidhaa zote', 'zote'),
+                stat('${asInt(s['products'])}', tr('bidhaa zote'), 'zote'),
                 const SizedBox(width: 8),
-                stat('${asInt(s['to_reorder'])}', 'za kuagiza', 'chache'),
+                stat('${asInt(s['to_reorder'])}', tr('za kuagiza'), 'chache'),
                 const SizedBox(width: 8),
-                stat('${asInt(s['expiring'])}', 'muda karibu', 'muda'),
+                stat('${asInt(s['expiring'])}', tr('muda karibu'), 'muda'),
               ]),
             ],
           ),
@@ -248,10 +249,10 @@ class _StockScreenState extends State<StockScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Hasara: ${formatTsh(lost)}',
+                      Text(tr('Hasara: :a', {'a': formatTsh(lost)}),
                           style: const TextStyle(color: dangerRed, fontSize: 16, fontWeight: FontWeight.w800)),
-                      Text('Bidhaa ${asInt(s['expired_products'])} zimeisha muda. Zitoe kwenye rafu ya kuuzia, '
-                          'kisha uziandike kama hasara (gusa hapa).',
+                      Text(tr('Bidhaa :n zimeisha muda. Zitoe kwenye rafu ya kuuzia, kisha uziandike kama hasara (gusa hapa).',
+                              {'n': asInt(s['expired_products'])}),
                           style: const TextStyle(color: Color(0xFF8F1D14), fontSize: 12)),
                     ]),
                   ),
@@ -274,11 +275,11 @@ class _StockScreenState extends State<StockScreen> {
     final anyExpired = asInt(((_data ?? const {})['summary'] as Map?)?['expired_products']) > 0 ||
         (((_data ?? const {})['products'] as List?) ?? const []).cast<Map<String, dynamic>>().any((p) => _expired(p) > 0);
     final defs = [
-      ('zote', 'Zote'),
-      ('chache', 'Chache'),
-      ('hazipo', 'Hazipo'),
-      ('muda', 'Muda'),
-      if (anyExpired || _filter == 'zimeisha') ('zimeisha', 'Zimeisha muda'),
+      ('zote', tr('Zote')),
+      ('chache', tr('Chache')),
+      ('hazipo', tr('Hazipo')),
+      ('muda', tr('Muda')),
+      if (anyExpired || _filter == 'zimeisha') ('zimeisha', tr('Zimeisha muda')),
     ];
     return Wrap(
       spacing: 8,
@@ -306,7 +307,7 @@ class _StockScreenState extends State<StockScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Text(
-          q.isEmpty ? 'Hakuna bidhaa hapa.' : 'Hakuna "$q"${_filter == 'zote' ? '' : ' kwenye kundi hili'}.',
+          q.isEmpty ? tr('Hakuna bidhaa hapa.') : tr('Hakuna ":q":a.', {'q': q, 'a': _filter == 'zote' ? '' : tr(' kwenye kundi hili')}),
           textAlign: TextAlign.center,
           style: const TextStyle(color: mutedText),
         ),
@@ -335,16 +336,15 @@ class _StockScreenState extends State<StockScreen> {
     final (Color dot, String note, Color noteColor) = expiredQty > 0
         ? (
             dangerRed,
-            '${describeStock(expiredQty, units)} zimeisha muda'
-                '${_costs ? ' · hasara ${formatTsh(asInt(p['expired_value']))}' : ''}',
+            tr(':a zimeisha muda:b', {'a': describeStock(expiredQty, units), 'b': _costs ? tr(' · hasara :a', {'a': formatTsh(asInt(p['expired_value']))}) : ''}),
             dangerRed,
           )
         : out
-            ? (dangerRed, 'Hazipo · kiwango ${describeStock(asInt(p['reorder_level']), units)}', dangerRed)
+            ? (dangerRed, tr('Hazipo · kiwango :a', {'a': describeStock(asInt(p['reorder_level']), units)}), dangerRed)
             : expiring && next != null
-                ? (const Color(0xFFD0533C), 'Inaisha ${next.day}/${next.month}/${next.year}', dangerRed)
+                ? (const Color(0xFFD0533C), tr('Inaisha :day/:month/:year', {'day': next.day, 'month': next.month, 'year': next.year}), dangerRed)
                 : low
-                    ? (const Color(0xFFC98A00), 'Chache · kiwango ${describeStock(asInt(p['reorder_level']), units)}', warnAmber)
+                    ? (const Color(0xFFC98A00), tr('Chache · kiwango :a', {'a': describeStock(asInt(p['reorder_level']), units)}), warnAmber)
                     : (mintAccent, units.length > 1 ? _unitsNote(units) : unitLabel(units.isEmpty ? '' : units.first.name), mutedText);
 
     return InkWell(

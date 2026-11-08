@@ -8,6 +8,7 @@ import '../../core/format.dart';
 import '../../core/session.dart';
 import '../suppliers/supplier_form.dart';
 import '../suppliers/suppliers_screen.dart';
+import '../../core/i18n.dart';
 
 /// The order as the supplier will read it, then one tap to WhatsApp.
 ///
@@ -54,7 +55,7 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
       for (var i = 0; i < widget.lines.length; i++)
         '${i + 1}. ${widget.lines[i]['name']}: ${widget.lines[i]['pack_name']} ${widget.lines[i]['packs']}',
     ];
-    return 'Habari${s != null ? ' ${s['name']}' : ''},\nNaomba mzigo huu:\n\n${rows.join('\n')}\n\nAsante.';
+    return tr('Habari:a,\nNaomba mzigo huu:\n\n:b\n\nAsante.', {'a': s != null ? ' ${s['name']}' : '', 'b': rows.join('\n')});
   }
 
   /// The supplier's details (WhatsApp number, phone, location...), saved for next time.
@@ -95,11 +96,11 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
         final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
         if (!opened) {
           await Clipboard.setData(ClipboardData(text: message));
-          if (mounted) _toast('WhatsApp haikufunguka. Ujumbe umenakiliwa: ubandike mwenyewe.');
+          if (mounted) _toast(tr('WhatsApp haikufunguka. Ujumbe umenakiliwa: ubandike mwenyewe.'));
         }
       } else {
         await Clipboard.setData(ClipboardData(text: message));
-        _toast('Ujumbe umenakiliwa.');
+        _toast(tr('Ujumbe umenakiliwa.'));
       }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -118,8 +119,8 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
       appBar: AppBar(
         backgroundColor: pageBackground,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(s == null ? 'Agizo' : 'Agizo · ${s['name']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-          const Text('Angalia, kisha tuma', style: TextStyle(fontSize: 12, color: mutedText)),
+          Text(s == null ? tr('Agizo') : tr('Agizo · :a', {'a': s['name']}), style: const TextStyle(fontWeight: FontWeight.w800)),
+          const T('Angalia, kisha tuma', style: TextStyle(fontSize: 12, color: mutedText)),
         ]),
       ),
       body: Column(children: [
@@ -140,14 +141,14 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
-              child: Text('Jina la duka linaongezwa mwishoni. Bei hazitumwi: msambazaji ataleta ankara.',
+              child: T('Jina la duka linaongezwa mwishoni. Bei hazitumwi: msambazaji ataleta ankara.',
                   style: TextStyle(fontSize: 12, color: mutedText)),
             ),
             // No supplier yet: choose one, so the order can close when they deliver.
             if (widget.supplier == null && widget.suppliers.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.fromLTRB(4, 16, 4, 6),
-                child: Text('Unamtumia nani?', style: TextStyle(fontWeight: FontWeight.w800)),
+                child: T('Unamtumia nani?', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
               Wrap(spacing: 8, runSpacing: 6, children: [
                 for (final x in widget.suppliers)
@@ -166,9 +167,9 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
                 margin: const EdgeInsets.only(top: 16),
                 decoration: softCard(radius: 18),
                 child: ListTile(
-                  title: const Text('Namba ya WhatsApp', style: TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text(_phone?.isNotEmpty == true ? _phone! : 'Haijawekwa: WhatsApp itakuuliza umtumie nani'),
-                  trailing: TextButton(onPressed: _editSupplier, child: Text(_phone?.isNotEmpty == true ? 'Badilisha' : 'Weka')),
+                  title: const T('Namba ya WhatsApp', style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text(_phone?.isNotEmpty == true ? _phone! : tr('Haijawekwa: WhatsApp itakuuliza umtumie nani')),
+                  trailing: TextButton(onPressed: _editSupplier, child: Text(_phone?.isNotEmpty == true ? tr('Badilisha') : tr('Weka'))),
                 ),
               ),
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: dangerRed))),
@@ -182,14 +183,14 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
               FilledButton.icon(
                 onPressed: _busy ? null : () => _send(whatsapp: true),
                 icon: const Icon(Icons.chat_rounded),
-                label: Text(_busy ? 'Inahifadhi…' : 'Fungua WhatsApp na tuma'),
+                label: Text(_busy ? tr('Inahifadhi…') : tr('Fungua WhatsApp na tuma')),
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: _busy ? null : () => _send(whatsapp: false),
                 style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                child: const Text('Nakili ujumbe (SMS au simu)'),
+                child: const T('Nakili ujumbe (SMS au simu)'),
               ),
             ]),
           ),

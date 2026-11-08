@@ -6,6 +6,7 @@ import '../../core/brand.dart';
 import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/i18n.dart';
 
 /// Screens 4 and 6 of the mockups: the shift and the cash drawer.
 ///
@@ -72,7 +73,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
       await _api.post('shifts', {'opening_float': int.tryParse(_floatController.text) ?? 0});
       _floatController.clear();
       await _load();
-      _message('Zamu imefunguliwa.');
+      _message(tr('Zamu imefunguliwa.'));
     } on ApiException catch (e) {
       _message(e.message, isError: true); // e.g. "Kuna zamu iliyo wazi tayari."
       await _load();
@@ -84,7 +85,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   Future<void> _close() async {
     final counted = int.tryParse(_countedController.text);
     if (counted == null) {
-      _message('Andika kiasi ulichohesabu kwenye droo.', isError: true);
+      _message(tr('Andika kiasi ulichohesabu kwenye droo.'), isError: true);
       return;
     }
     setState(() => _busy = true);
@@ -114,17 +115,17 @@ class _ShiftScreenState extends State<ShiftScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: Icon(ok ? Icons.check_circle : Icons.warning_amber_rounded, color: ok ? brandGreen : dangerRed, size: 48),
-        title: const Text('Zamu imefungwa'),
+        title: const T('Zamu imefungwa'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _row('Ilitarajiwa', formatTsh(asInt(r['expected_cash']))),
-            _row('Imehesabiwa', formatTsh(asInt(r['counted_cash']))),
+            _row(tr('Ilitarajiwa'), formatTsh(asInt(r['expected_cash']))),
+            _row(tr('Imehesabiwa'), formatTsh(asInt(r['counted_cash']))),
             const Divider(),
-            _row(ok ? 'Hakuna tofauti' : 'Tofauti', ok ? '' : formatTsh(variance), color: ok ? brandGreen : dangerRed, bold: true),
+            _row(ok ? tr('Hakuna tofauti') : tr('Tofauti'), ok ? '' : formatTsh(variance), color: ok ? brandGreen : dangerRed, bold: true),
           ],
         ),
-        actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Sawa'))],
+        actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: const T('Sawa'))],
       ),
     );
   }
@@ -139,7 +140,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Zamu na fedha')),
+      appBar: AppBar(title: const T('Zamu na fedha')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -161,11 +162,10 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
   List<Widget> _openForm() {
     return [
-      const Text('Hakuna zamu iliyo wazi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+      const T('Hakuna zamu iliyo wazi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       const SizedBox(height: 4),
-      const Text(
-        'Fungua zamu mwanzoni mwa kazi. Mauzo ya taslimu yatahesabiwa, '
-        'na mwisho wa zamu utahesabu droo kuona kama fedha zinalingana.',
+      Text(
+        tr('Fungua zamu mwanzoni mwa kazi. Mauzo ya taslimu yatahesabiwa, na mwisho wa zamu utahesabu droo kuona kama fedha zinalingana.'),
         style: TextStyle(color: mutedText),
       ),
       const SizedBox(height: 20),
@@ -173,9 +173,9 @@ class _ShiftScreenState extends State<ShiftScreen> {
         controller: _floatController,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(
-          labelText: 'Fedha zilizopo kwenye droo sasa (TSh)',
-          helperText: 'Chenji ya kuanzia. Weka 0 kama droo ni tupu.',
+        decoration: InputDecoration(
+          labelText: tr('Fedha zilizopo kwenye droo sasa (TSh)'),
+          helperText: tr('Chenji ya kuanzia. Weka 0 kama droo ni tupu.'),
         ),
       ),
       const SizedBox(height: 16),
@@ -184,7 +184,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
         child: FilledButton.icon(
           onPressed: _busy ? null : _open,
           icon: const Icon(Icons.lock_open),
-          label: const Text('Fungua zamu', style: TextStyle(fontSize: 17)),
+          label: const T('Fungua zamu', style: TextStyle(fontSize: 17)),
         ),
       ),
     ];
@@ -203,31 +203,31 @@ class _ShiftScreenState extends State<ShiftScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Zamu ya ${s['user']} · tangu ${opened != null ? formatTime(opened) : '-'}',
+            Text(tr('Zamu ya :a · tangu :b', {'a': s['user'], 'b': opened != null ? formatTime(opened) : '-'}),
                 style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 4),
             Text(formatTsh(asInt(s['sales_total'])),
                 style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700)),
-            Text('Mauzo ${asInt(s['sales_count'])}', style: const TextStyle(color: Colors.white70)),
+            Text(tr('Mauzo :a', {'a': asInt(s['sales_count'])}), style: const TextStyle(color: Colors.white70)),
           ],
         ),
       ),
       const SizedBox(height: 12),
       _panel([
-        const Text('Jinsi walivyolipa', style: TextStyle(fontWeight: FontWeight.w700)),
+        const T('Jinsi walivyolipa', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        if (byPayment.isEmpty) const Text('Hakuna mauzo bado.', style: TextStyle(color: mutedText)),
+        if (byPayment.isEmpty) const T('Hakuna mauzo bado.', style: TextStyle(color: mutedText)),
         for (final e in byPayment.entries) _row(paymentLabels[e.key] ?? e.key, formatTsh(e.value)),
         const Divider(),
         // Only cash goes in the drawer: mobile money and insurance don't.
-        _row('Inatarajiwa kwenye droo', formatTsh(expected), bold: true),
-        const Text('Chenji ya kuanzia + mauzo ya taslimu', style: TextStyle(fontSize: 12, color: mutedText)),
+        _row(tr('Inatarajiwa kwenye droo'), formatTsh(expected), bold: true),
+        const T('Chenji ya kuanzia + mauzo ya taslimu', style: TextStyle(fontSize: 12, color: mutedText)),
       ]),
       if (attention.isNotEmpty) ...[
         const SizedBox(height: 12),
         _panel(
           [
-            Text('Yanahitaji kuangaliwa · ${attention.length}', style: const TextStyle(fontWeight: FontWeight.w700, color: dangerRed)),
+            Text(tr('Yanahitaji kuangaliwa · :attention', {'attention': attention.length}), style: const TextStyle(fontWeight: FontWeight.w700, color: dangerRed)),
             const SizedBox(height: 4),
             for (final a in attention) _attentionRow(a),
           ],
@@ -242,7 +242,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
             style: FilledButton.styleFrom(backgroundColor: inkColor),
             onPressed: () => setState(() => _closing = true),
             icon: const Icon(Icons.lock_outline),
-            label: const Text('Funga zamu na hesabu fedha', style: TextStyle(fontSize: 16)),
+            label: const T('Funga zamu na hesabu fedha', style: TextStyle(fontSize: 16)),
           ),
         )
       else
@@ -264,11 +264,11 @@ class _ShiftScreenState extends State<ShiftScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(voided ? 'Mauzo yamefutwa · ${formatTsh(asInt(a['amount']))}' : 'Punguzo kubwa · ${formatTsh(asInt(a['amount']))}',
+                Text(voided ? tr('Mauzo yamefutwa · :a', {'a': formatTsh(asInt(a['amount']))}) : tr('Punguzo kubwa · :a', {'a': formatTsh(asInt(a['amount']))}),
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text(
                   '${at != null ? formatTime(at) : ''} · ${a['by']} · ${a['receipt_number']}'
-                  '${voided && a['reason'] != null ? '\nSababu: ${a['reason']}' : ''}',
+                  '${voided && a['reason'] != null ? tr('\nSababu: :a', {'a': a['reason']}) : ''}',
                   style: const TextStyle(fontSize: 12, color: mutedText),
                 ),
               ],
@@ -286,7 +286,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
     return [
       _panel([
-        const Text('Hesabu fedha kwenye droo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const T('Hesabu fedha kwenye droo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
         TextField(
           controller: _countedController,
@@ -294,13 +294,13 @@ class _ShiftScreenState extends State<ShiftScreen> {
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-          decoration: const InputDecoration(labelText: 'Taslimu iliyohesabiwa (TSh)'),
+          decoration: InputDecoration(labelText: tr('Taslimu iliyohesabiwa (TSh)')),
         ),
         const SizedBox(height: 12),
-        _row('Inatarajiwa', formatTsh(expected)),
+        _row(tr('Inatarajiwa'), formatTsh(expected)),
         if (gap != null)
           _row(
-            gap == 0 ? 'Inalingana' : 'Tofauti',
+            gap == 0 ? tr('Inalingana') : tr('Tofauti'),
             gap == 0 ? '✓' : formatTsh(gap),
             color: gap == 0 ? brandGreen : dangerRed,
             bold: true,
@@ -310,8 +310,8 @@ class _ShiftScreenState extends State<ShiftScreen> {
           controller: _noteController,
           maxLines: 2,
           decoration: InputDecoration(
-            labelText: gap != null && gap != 0 ? 'Sababu ya tofauti (lazima)' : 'Maelezo (si lazima)',
-            hintText: 'Mf. chenji ya jana, matumizi ya duka…',
+            labelText: gap != null && gap != 0 ? tr('Sababu ya tofauti (lazima)') : tr('Maelezo (si lazima)'),
+            hintText: tr('Mf. chenji ya jana, matumizi ya duka…'),
           ),
         ),
       ]),
@@ -322,7 +322,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               onPressed: _busy ? null : () => setState(() => _closing = false),
-              child: const Text('Ghairi'),
+              child: const T('Ghairi'),
             ),
           ),
           const SizedBox(width: 12),
@@ -333,7 +333,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
               onPressed: _busy ? null : _close,
               child: _busy
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Funga zamu', style: TextStyle(fontSize: 16)),
+                  : const T('Funga zamu', style: TextStyle(fontSize: 16)),
             ),
           ),
         ],

@@ -4,6 +4,7 @@ import '../../../core/brand.dart';
 import '../../../core/format.dart';
 import '../../../core/money.dart';
 import '../../../core/units.dart';
+import '../../../core/i18n.dart';
 
 /// "Mauzo ya karibuni": the last few sales, newest first.
 ///
@@ -43,14 +44,14 @@ class RecentSalesCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Mauzo ya karibuni', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-              TextButton(onPressed: onSeeAll, child: Text('Ona yote $totalCount', style: const TextStyle(fontWeight: FontWeight.w800))),
+              const Expanded(child: T('Mauzo ya karibuni', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+              TextButton(onPressed: onSeeAll, child: Text(tr('Ona yote :total_count', {'total_count': totalCount}), style: const TextStyle(fontWeight: FontWeight.w800))),
             ],
           ),
           if (sales.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 18),
-              child: Text('Bado hakuna mauzo leo.', style: TextStyle(color: mutedText)),
+              child: T('Bado hakuna mauzo leo.', style: TextStyle(color: mutedText)),
             ),
           for (var i = 0; i < sales.length; i++) _row(sales[i], last: i == sales.length - 1),
         ],

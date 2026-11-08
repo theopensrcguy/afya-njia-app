@@ -1,6 +1,6 @@
 /// A person who can sign in on the counter phone: the owner or a helper.
 class Staff {
-  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false});
+  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false, this.locale});
 
   final int id;
   final String name;
@@ -15,6 +15,9 @@ class Staff {
   /// and the person must choose their own before doing anything else.
   final bool mustChangePin;
 
+  /// 'sw' or 'en': this person's language, the same on every phone and on the web.
+  final String? locale;
+
   bool get isOwner => role == 'owner';
 
   /// The owner can always; anyone else only with an active grant.
@@ -26,8 +29,9 @@ class Staff {
         role: json['role'] as String,
         permissions: ((json['permissions'] as List?) ?? const []).cast<String>(),
         mustChangePin: json['must_change_pin'] == true,
+        locale: json['locale'] as String?,
       );
 
   Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin};
+      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin, 'locale': locale};
 }

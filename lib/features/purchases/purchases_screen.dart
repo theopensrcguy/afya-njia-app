@@ -9,6 +9,7 @@ import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
+import '../../core/i18n.dart';
 
 const _statusLabels = {
   'pending': ('Inasubiri', warnAmber, Color(0xFFFBEFD6)),
@@ -62,7 +63,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_canConfirm ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu'), backgroundColor: pageBackground),
+      appBar: AppBar(title: Text(_canConfirm ? tr('Mizigo ya kuthibitisha') : tr('Mizigo yangu')), backgroundColor: pageBackground),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -74,7 +75,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   if (_items.isEmpty && _error == null)
                     Padding(
                       padding: const EdgeInsets.only(top: 48),
-                      child: Text(_canConfirm ? 'Hakuna mzigo unaosubiri.' : 'Bado hujarekodi mzigo.',
+                      child: Text(_canConfirm ? tr('Hakuna mzigo unaosubiri.') : tr('Bado hujarekodi mzigo.'),
                           textAlign: TextAlign.center, style: const TextStyle(color: mutedText)),
                     ),
                   for (final p in _items) _card(p),
@@ -101,7 +102,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${(p['supplier'] as Map?)?['name'] ?? 'Msambazaji hajulikani'} · bidhaa ${lines.length}',
+                  Text(tr(':a · bidhaa :lines', {'a': (p['supplier'] as Map?)?['name'] ?? tr('Msambazaji hajulikani'), 'lines': lines.length}),
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                   Text('${p['received_by'] ?? ''} · ${at == null ? '' : '${swahiliDate(at.toLocal())} ${formatTime(at)}'}',
                       style: const TextStyle(fontSize: 12, color: mutedText)),
@@ -113,7 +114,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-                  child: Text(label, style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800)),
+                  child: Text(tr(label), style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800)),
                 ),
               ]),
             ]),
@@ -192,7 +193,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
     String? reason;
     if (!accept) {
       reason = await askText(context,
-          title: 'Kataa mzigo', label: 'Sababu', hint: 'mfano: bei hailingani na ankara', required: true, danger: true, confirm: 'Kataa');
+          title: tr('Kataa mzigo'), label: tr('Sababu'), hint: tr('mfano: bei hailingani na ankara'), required: true, danger: true, confirm: tr('Kataa'));
       if (reason == null) return;
     }
     setState(() => _busy = true);
@@ -218,7 +219,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
       if (!mounted) return;
       setState(() => _p = res);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(accept ? 'Imethibitishwa. Hisa imeongezeka.' : 'Mzigo umekataliwa.'),
+        content: Text(accept ? tr('Imethibitishwa. Hisa imeongezeka.') : tr('Mzigo umekataliwa.')),
       ));
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -238,7 +239,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
     final total = asInt(_p['total_cost']);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mzigo'), backgroundColor: pageBackground),
+      appBar: AppBar(title: const T('Mzigo'), backgroundColor: pageBackground),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         children: [
@@ -251,14 +252,14 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-                    child: Text(label, style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
+                    child: Text(tr(label), style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
                   ),
                   const SizedBox(height: 8),
-                  _kv('Imerekodiwa na', '${_p['received_by'] ?? ''} · ${at == null ? '' : '${swahiliDate(at.toLocal())} ${formatTime(at)}'}'),
-                  _kv('Msambazaji', '${(_p['supplier'] as Map?)?['name'] ?? '—'}'),
-                  _kv('Ankara', '${_p['invoice_number'] ?? '—'}'),
-                  if (_p['confirmed_by'] != null) _kv(_p['status'] == 'rejected' ? 'Imekataliwa na' : 'Imethibitishwa na', '${_p['confirmed_by']}'),
-                  if (_p['rejected_reason'] != null) _kv('Sababu', '${_p['rejected_reason']}'),
+                  _kv(tr('Imerekodiwa na'), '${_p['received_by'] ?? ''} · ${at == null ? '' : '${swahiliDate(at.toLocal())} ${formatTime(at)}'}'),
+                  _kv(tr('Msambazaji'), '${(_p['supplier'] as Map?)?['name'] ?? '—'}'),
+                  _kv(tr('Ankara'), '${_p['invoice_number'] ?? '—'}'),
+                  if (_p['confirmed_by'] != null) _kv(_p['status'] == 'rejected' ? tr('Imekataliwa na') : tr('Imethibitishwa na'), '${_p['confirmed_by']}'),
+                  if (_p['rejected_reason'] != null) _kv(tr('Sababu'), '${_p['rejected_reason']}'),
                 ]),
               ),
               if (_photo != null) _photoThumb(),
@@ -278,7 +279,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
             decoration: softCard(radius: 20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                const Expanded(child: Text('Jumla ya mzigo', style: TextStyle(color: mutedText))),
+                const Expanded(child: T('Jumla ya mzigo', style: TextStyle(color: mutedText))),
                 Text(formatTsh(total), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               ]),
               if (invoiceTotal != null)
@@ -286,8 +287,8 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     invoiceTotal == total
-                        ? '✓ Inalingana na ankara (${formatTsh(invoiceTotal)})'
-                        : 'Ankara inasema ${formatTsh(invoiceTotal)}: tofauti ${formatTsh((invoiceTotal - total).abs())}',
+                        ? tr('✓ Inalingana na ankara (:a)', {'a': formatTsh(invoiceTotal)})
+                        : tr('Ankara inasema :a: tofauti :b', {'a': formatTsh(invoiceTotal), 'b': formatTsh((invoiceTotal - total).abs())}),
                     style: TextStyle(fontWeight: FontWeight.w800, color: invoiceTotal == total ? brandGreen : dangerRed),
                   ),
                 ),
@@ -298,7 +299,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
           if (_canConfirm && pending && _mine)
             const Padding(
               padding: EdgeInsets.only(top: 16),
-              child: Text('Huu ni mzigo uliourekodi mwenyewe: mtu mwingine ndiye athibitishe.',
+              child: T('Huu ni mzigo uliourekodi mwenyewe: mtu mwingine ndiye athibitishe.',
                   textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
             ),
           if (_canConfirm && pending && !_mine) ...[
@@ -312,7 +313,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                     foregroundColor: dangerRed,
                     side: const BorderSide(color: dangerRed, width: 2),
                   ),
-                  child: const Text('Kataa'),
+                  child: const T('Kataa'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -322,7 +323,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                   // A product without a price would reach the counter and sell for nothing.
                   onPressed: _busy || _unpriced > 0 ? null : () => _decide(true),
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-                  child: Text(_busy ? 'Inatuma…' : 'Thibitisha mzigo'),
+                  child: Text(_busy ? tr('Inatuma…') : tr('Thibitisha mzigo')),
                 ),
               ),
             ]),
@@ -330,7 +331,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  _canPrice ? 'Weka bei ya bidhaa mpya $_unpriced kwanza.' : 'Mzigo huu una bidhaa mpya bila bei: anayeweza kuweka bei athibitishe.',
+                  _canPrice ? tr('Weka bei ya bidhaa mpya :unpriced kwanza.', {'unpriced': _unpriced}) : tr('Mzigo huu una bidhaa mpya bila bei: anayeweza kuweka bei athibitishe.'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: warnAmber, fontWeight: FontWeight.w700),
                 ),
@@ -368,21 +369,21 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          badge('BIDHAA MPYA', brandGreen, const Color(0xFFDDF3EA)),
-          if (offCatalogue) badge('nje ya katalogi', warnAmber, const Color(0xFFFBEFD6)),
+          badge(tr('BIDHAA MPYA'), brandGreen, const Color(0xFFDDF3EA)),
+          if (offCatalogue) badge(tr('nje ya katalogi'), warnAmber, const Color(0xFFFBEFD6)),
         ]),
         const SizedBox(height: 8),
         if (offCatalogue) ...[
           TextField(
             controller: _nameFields[id],
-            decoration: const InputDecoration(labelText: 'Jina (limeandikwa na msaidizi: liangalie)'),
+            decoration: InputDecoration(labelText: tr('Jina (limeandikwa na msaidizi: liangalie)')),
           ),
         ] else
           Text('${n['name']}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
         if (needsPrice && !_canPrice)
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: Text('Haina bei bado. Huna ruhusa ya kuweka bei.', style: TextStyle(color: warnAmber)),
+            child: T('Haina bei bado. Huna ruhusa ya kuweka bei.', style: TextStyle(color: warnAmber)),
           ),
         if (_canPrice)
           for (final u in units)
@@ -394,7 +395,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  labelText: '${needsPrice ? 'Bei ya kuuza' : 'Bei (si lazima kubadilisha)'}: '
+                  labelText: '${needsPrice ? tr('Bei ya kuuza') : tr('Bei (si lazima kubadilisha)')}: '
                       '${unitLabel('${u['name']}')}${asInt(u['base_quantity']) > 1 ? ' (${asInt(u['base_quantity'])})' : ''}',
                   hintText: needsPrice ? null : formatTsh(asInt(u['price'])),
                   helperText: _profit(cost, asInt(u['base_quantity']), int.tryParse(_price(id, '${u['name']}').text.trim())),
@@ -409,9 +410,9 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
   String? _profit(int? costPerBase, int size, int? price) {
     if (costPerBase == null || !widget.session.user!.can(Perm.viewCosts)) return null;
     final cost = costPerBase * size;
-    if (price == null || price < 1) return 'Unanunua ${formatTsh(cost)}';
+    if (price == null || price < 1) return tr('Unanunua :a', {'a': formatTsh(cost)});
     final pct = ((price - cost) * 100 / price).round();
-    return 'Unanunua ${formatTsh(cost)} · ${pct < 0 ? 'HASARA' : 'faida $pct%'}';
+    return tr('Unanunua :a · :b', {'a': formatTsh(cost), 'b': pct < 0 ? tr('HASARA') : tr('faida :pct%', {'pct': pct})});
   }
 
   Widget _kv(String k, String v) => Padding(
@@ -470,8 +471,12 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
           Text(formatTsh(asInt(l['line_total'])), style: const TextStyle(fontWeight: FontWeight.w800)),
         ]),
         Text(
-          '$pack · ${l['batch_number']} · inaisha ${expiry == null ? '' : '${expiry.month.toString().padLeft(2, '0')}/${expiry.year}'}'
-          ' · ${formatTsh(asInt(l['pack_cost']))} kila moja',
+          tr(':pack · :batch · inaisha :exp · :cost kila moja', {
+            'pack': pack,
+            'batch': l['batch_number'],
+            'exp': expiry == null ? '' : '${expiry.month.toString().padLeft(2, '0')}/${expiry.year}',
+            'cost': formatTsh(asInt(l['pack_cost'])),
+          }),
           style: const TextStyle(fontSize: 12, color: mutedText),
         ),
       ]),

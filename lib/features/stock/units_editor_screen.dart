@@ -6,6 +6,7 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
+import '../../core/i18n.dart';
 
 /// How one product is sold: kidonge 1 · kadi 10 · boksi 100, each with a price.
 ///
@@ -78,11 +79,11 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
       final size = i == 0 ? 1 : int.tryParse(r.size.text.trim()) ?? 0;
       final price = int.tryParse(r.price.text.trim());
       if (name.isEmpty || size < 1 || price == null) {
-        setState(() => _error = 'Chagua kipimo, na ujaze ukubwa na bei kwa kila kimoja.');
+        setState(() => _error = tr('Chagua kipimo, na ujaze ukubwa na bei kwa kila kimoja.'));
         return;
       }
       if (i > 0 && size == 1) {
-        setState(() => _error = '$name: ukubwa lazima uwe zaidi ya 1.');
+        setState(() => _error = tr(':name: ukubwa lazima uwe zaidi ya 1.', {'name': name}));
         return;
       }
       units.add({'name': name, 'base_quantity': size, 'price': price});
@@ -106,25 +107,24 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
   Widget build(BuildContext context) {
     final baseName = _rows.isEmpty ? 'kidonge' : unitLabel(_rows.first.name, 2);
     return Scaffold(
-      appBar: AppBar(title: Text('Vipimo · ${widget.name}'), backgroundColor: pageBackground),
+      appBar: AppBar(title: Text(tr('Vipimo · :name', {'name': widget.name})), backgroundColor: pageBackground),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
-          const Text(
-            'Kipimo cha kwanza ndicho hisa inahesabiwa kwacho (kidonge, chupa, pakiti). '
-            'Vingine ni idadi ya hicho: kadi ya vidonge 10, boksi ya vidonge 100.',
+          Text(
+            tr('Kipimo cha kwanza ndicho hisa inahesabiwa kwacho (kidonge, chupa, pakiti). Vingine ni idadi ya hicho: kadi ya vidonge 10, boksi ya vidonge 100.'),
             style: TextStyle(color: mutedText, fontSize: 13),
           ),
           const SizedBox(height: 16),
           for (var i = 0; i < _rows.length; i++) _rowCard(i, baseName),
-          TextButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const Text('Ongeza kipimo')),
+          TextButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const T('Ongeza kipimo')),
           if (_error != null)
             Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: dangerRed))),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _save,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            child: Text(_saving ? 'Inahifadhi…' : 'Hifadhi'),
+            child: Text(_saving ? tr('Inahifadhi…') : tr('Hifadhi')),
           ),
         ],
       ),
@@ -151,8 +151,8 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
                 ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Nyingine…'),
-              subtitle: const Text('Kama haipo kwenye orodha'),
+              title: const T('Nyingine…'),
+              subtitle: const T('Kama haipo kwenye orodha'),
               onTap: () => Navigator.of(sheet).pop(''),
             ),
           ],
@@ -162,11 +162,11 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
     if (picked == null || !mounted) return;
     var name = picked;
     if (name.isEmpty) {
-      final typed = await askText(context, title: 'Kipimo kingine', label: 'Jina la kipimo', hint: 'mfano: roli', required: true);
+      final typed = await askText(context, title: tr('Kipimo kingine'), label: tr('Jina la kipimo'), hint: tr('mfano: roli'), required: true);
       if (typed == null || !mounted) return;
       name = normalUnitName(typed);
       if (taken.contains(name)) {
-        setState(() => _error = '"$name" tayari kipo.');
+        setState(() => _error = tr('":name" tayari kipo.', {'name': name}));
         return;
       }
     }
@@ -193,10 +193,10 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
               onTap: () => _pickName(i),
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: isBase ? 'Kipimo cha hisa' : 'Kipimo',
+                  labelText: isBase ? tr('Kipimo cha hisa') : tr('Kipimo'),
                   suffixIcon: const Icon(Icons.arrow_drop_down),
                 ),
-                child: Text(r.name.isEmpty ? 'Chagua' : unitLabel(r.name),
+                child: Text(r.name.isEmpty ? tr('Chagua') : unitLabel(r.name),
                     style: TextStyle(color: r.name.isEmpty ? mutedText : inkColor)),
               ),
             ),
@@ -205,7 +205,7 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
           Expanded(
             flex: 2,
             child: isBase
-                ? const InputDecorator(decoration: InputDecoration(labelText: 'Ukubwa'), child: Text('1'))
+                ? InputDecorator(decoration: InputDecoration(labelText: tr('Ukubwa')), child: Text('1'))
                 : TextField(
                     controller: r.size,
                     keyboardType: TextInputType.number,
@@ -220,11 +220,11 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
               controller: r.price,
               keyboardType: TextInputType.number,
               inputFormatters: digits,
-              decoration: const InputDecoration(labelText: 'Bei (TSh)'),
+              decoration: InputDecoration(labelText: tr('Bei (TSh)')),
             ),
           ),
           if (!isBase)
-            IconButton(tooltip: 'Ondoa', onPressed: () => _removeRow(i), icon: const Icon(Icons.close))
+            IconButton(tooltip: tr('Ondoa'), onPressed: () => _removeRow(i), icon: const Icon(Icons.close))
           else
             const SizedBox(width: 48),
         ],

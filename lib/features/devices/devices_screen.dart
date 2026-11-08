@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
+import '../../core/i18n.dart';
 
 /// Owner only: phones allowed to use the pharmacy.
 ///
@@ -58,7 +59,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
   }
 
   Future<void> _approve(Map<String, dynamic> device) async {
-    await _act(device, 'approve', 'Simu imeidhinishwa.');
+    await _act(device, 'approve', tr('Kifaa kimeidhinishwa.'));
   }
 
   Future<void> _revoke(Map<String, dynamic> device) async {
@@ -66,19 +67,19 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ondoa simu hii?'),
-        content: Text('${device['name']} haitaweza kutumia Afya Njia tena. Itahitaji idhini mpya.'),
+        title: const T('Ondoa kifaa hiki?'),
+        content: Text(tr(':a hakitaweza kutumia Afya Njia tena. Kitahitaji idhini mpya.', {'a': device['name']})),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Hapana')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const T('Hapana')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: dangerRed),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Ondoa'),
+            child: const T('Ondoa'),
           ),
         ],
       ),
     );
-    if (sure == true) await _act(device, 'revoke', 'Simu imeondolewa.');
+    if (sure == true) await _act(device, 'revoke', tr('Kifaa kimeondolewa.'));
   }
 
   Future<void> _act(Map<String, dynamic> device, String action, String doneMessage) async {
@@ -105,7 +106,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Simu zinazoruhusiwa')),
+      appBar: AppBar(title: const T('Vifaa vinavyoruhusiwa')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -118,7 +119,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   if (_devices.isEmpty && _error == null)
                     const Padding(
                       padding: EdgeInsets.only(top: 48),
-                      child: Text('Hakuna simu bado.', textAlign: TextAlign.center),
+                      child: T('Hakuna kifaa bado.', textAlign: TextAlign.center),
                     ),
                   for (final d in _devices) _deviceCard(d),
                 ],
@@ -133,9 +134,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final busy = _busyId == d['id'];
 
     final (label, color) = switch (status) {
-      'pending' => ('Inasubiri idhini', warnAmber),
-      'approved' => ('Imeidhinishwa', brandGreen),
-      _ => ('Imeondolewa', mutedText),
+      'pending' => (tr('Inasubiri idhini'), warnAmber),
+      'approved' => (tr('Imeidhinishwa'), brandGreen),
+      _ => (tr('Imeondolewa'), mutedText),
     };
 
     return Card(
@@ -155,7 +156,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '${d['name']}${isThis ? ' (simu hii)' : ''}',
+                    '${d['name']}${isThis ? tr(' (kifaa hiki)') : ''}',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -164,7 +165,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Imeombwa na ${d['requested_by']}${d['last_user'] != null ? ' · aliyetumia mwisho: ${d['last_user']}' : ''}',
+              tr('Imeombwa na :a:b', {'a': d['requested_by'], 'b': d['last_user'] != null ? tr(' · aliyetumia mwisho: :a', {'a': d['last_user']}) : ''}),
               style: const TextStyle(color: mutedText, fontSize: 13),
             ),
             // What its sign-in screen shows: one person's PIN, or the counter list.
@@ -172,15 +173,15 @@ class _DevicesScreenState extends State<DevicesScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: d['mode'] == 'shared',
-                title: const Text('Simu ya pamoja (kaunta)', style: TextStyle(fontWeight: FontWeight.w700)),
+                title: const T('Kifaa cha pamoja (kaunta)', style: TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text(d['mode'] == 'shared'
-                    ? 'Skrini ya kuingia inaonyesha wanaoitumia'
-                    : 'Inauliza PIN ya ${d['last_user'] ?? 'mtumiaji wake'} tu'),
+                    ? tr('Skrini ya kuingia inaonyesha wanaoitumia')
+                    : tr('Inauliza PIN ya :a tu', {'a': d['last_user'] ?? tr('mtumiaji wake')})),
                 onChanged: busy ? null : (on) => _setMode(d, on),
               ),
             if (status == 'pending') ...[
               const SizedBox(height: 12),
-              const Text('Hakikisha namba hii inalingana na iliyo kwenye simu yake:', style: TextStyle(fontSize: 13)),
+              const T('Hakikisha namba hii inalingana na iliyo kwenye kifaa chake (simu au kivinjari):', style: TextStyle(fontSize: 13)),
               const SizedBox(height: 4),
               Text(
                 d['pairing_code'] as String? ?? '',
@@ -197,13 +198,13 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         ? FilledButton.icon(
                             onPressed: () => _approve(d),
                             icon: const Icon(Icons.check),
-                            label: const Text('Idhinisha'),
+                            label: const T('Idhinisha'),
                           )
                         : OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(foregroundColor: dangerRed),
                             onPressed: () => _revoke(d),
                             icon: const Icon(Icons.block),
-                            label: const Text('Ondoa'),
+                            label: const T('Ondoa'),
                           ),
               ),
             ],

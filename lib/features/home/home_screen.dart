@@ -25,6 +25,7 @@ import '../stock/stock_screen.dart';
 import 'widgets/recent_sales_card.dart';
 import 'widgets/target_ring.dart';
 import 'widgets/trend_card.dart';
+import '../../core/i18n.dart';
 
 /// After login (v0.2, the "Mint Laini" design).
 ///
@@ -110,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) _load();
   }
 
-  String _money(int amount) => _hidden ? 'TSh ••••••' : formatTsh(amount);
+  String _money(int amount) => _hidden ? tr('TSh ••••••') : formatTsh(amount);
 
   // ---------------------------------------------------------------- layout
 
@@ -151,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _header() {
     final user = widget.session.user!;
-    final shiftText = _shift == null ? 'hakuna zamu iliyo wazi' : 'zamu ya ${_shift!['user']} iko wazi';
+    final shiftText = _shift == null ? tr('hakuna zamu iliyo wazi') : tr('zamu ya :a iko wazi', {'a': _shift!['user']});
     return Row(
       children: [
         Expanded(
@@ -173,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final count = _alerts().length;
     return Semantics(
       button: true,
-      label: 'Tahadhari $count',
+      label: tr('Tahadhari :count', {'count': count}),
       child: InkWell(
         onTap: _showAlerts,
         customBorder: const CircleBorder(),
@@ -214,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         children: [
           Expanded(child: Text(_error!, style: const TextStyle(color: dangerRed))),
-          TextButton(onPressed: _load, child: const Text('Jaribu tena')),
+          TextButton(onPressed: _load, child: const T('Jaribu tena')),
         ],
       ),
     );
@@ -237,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Icon(Icons.lock_clock_outlined, color: warnAmber),
                 SizedBox(width: 10),
                 Expanded(
-                  child: Text('Fungua zamu ili fedha za droo zihesabiwe',
+                  child: T('Fungua zamu ili fedha za droo zihesabiwe',
                       style: TextStyle(color: warnAmber, fontWeight: FontWeight.w700)),
                 ),
                 Icon(Icons.chevron_right, color: warnAmber),
@@ -252,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _eyeButton(String what) {
     return IconButton(
       onPressed: _toggleHidden,
-      tooltip: _hidden ? 'Onyesha $what' : 'Ficha $what',
+      tooltip: _hidden ? tr('Onyesha :what', {'what': what}) : tr('Ficha :what', {'what': what}),
       icon: Icon(_hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: mutedText),
     );
   }
@@ -292,16 +293,16 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Mauzo ya leo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-              _eyeButton('mauzo'),
+              const Expanded(child: T('Mauzo ya leo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+              _eyeButton(tr('mauzo')),
             ],
           ),
           Row(
             children: [
               TargetRing(
                 progress: _hidden || target == null || target == 0 ? 0 : total / target,
-                centerText: target == null ? 'Weka' : (_hidden ? '••' : '$pct%'),
-                caption: target == null ? 'lengo' : 'ya lengo',
+                centerText: target == null ? tr('Weka') : (_hidden ? '••' : '$pct%'),
+                caption: target == null ? tr('lengo') : tr('ya lengo'),
                 // The daily goal is the owner's call (pharmacy settings are never delegated).
                 onTap: widget.session.user!.isOwner ? () => _setTarget(target) : null,
               ),
@@ -347,8 +348,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Mauzo yangu ya leo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-              _eyeButton('mauzo yangu'),
+              const Expanded(child: T('Mauzo yangu ya leo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+              _eyeButton(tr('mauzo yangu')),
             ],
           ),
           Padding(
@@ -357,7 +358,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_money(total), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-                Text('Mauzo ${done.length}', style: const TextStyle(color: mutedText)),
+                Text(tr('Mauzo :done', {'done': done.length}), style: const TextStyle(color: mutedText)),
                 _paymentRows(byPayment),
               ],
             ),
@@ -371,13 +372,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _setTarget(int? current) async {
     final answer = await askText(
       context,
-      title: 'Lengo la mauzo kwa siku',
-      message: 'Kiasi unachotaka kuuza kila siku. Pete itaonyesha umefika wapi.',
-      label: 'Kiasi (TSh)',
-      hint: 'mfano 250000',
+      title: tr('Lengo la mauzo kwa siku'),
+      message: tr('Kiasi unachotaka kuuza kila siku. Pete itaonyesha umefika wapi.'),
+      label: tr('Kiasi (TSh)'),
+      hint: tr('mfano 250000'),
       initial: current?.toString() ?? '',
       digitsOnly: true,
-      clearLabel: current != null ? 'Ondoa lengo' : null,
+      clearLabel: current != null ? tr('Ondoa lengo') : null,
     );
     if (answer == null || !mounted) return; // cancelled
     try {
@@ -397,21 +398,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final tiles = <Widget>[
       if (_can(Perm.sell))
-        _tile(Icons.add_rounded, 'Uza sasa', () => _open(CounterScreen(session: widget.session)), primary: true),
+        _tile(Icons.add_rounded, tr('Uza sasa'), () => _open(CounterScreen(session: widget.session)), primary: true),
       // Deliveries come in every week: stock in is as important as stock out.
       if (_can(Perm.receive))
-        _tile(Icons.local_shipping_outlined, 'Pokea mzigo', () => _open(ReceiveScreen(session: widget.session)),
+        _tile(Icons.local_shipping_outlined, tr('Pokea mzigo'), () => _open(ReceiveScreen(session: widget.session)),
             color: const Color(0xFF7A5BC7)),
       if (!_shopView) ...[
-        _tile(Icons.point_of_sale_outlined, 'Zamu', () => _open(ShiftScreen(session: widget.session)), color: brandGreen),
+        _tile(Icons.point_of_sale_outlined, tr('Zamu'), () => _open(ShiftScreen(session: widget.session)), color: brandGreen),
         if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
-          _tile(Icons.inventory_outlined, _can(Perm.confirmDeliveries) ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu',
+          _tile(Icons.inventory_outlined, _can(Perm.confirmDeliveries) ? tr('Mizigo ya kuthibitisha') : tr('Mizigo yangu'),
               () => _open(PurchasesScreen(session: widget.session)), color: brandGreen),
       ],
       if (_can(Perm.viewStock)) ...[
-        _tile(Icons.hourglass_bottom_rounded, expiring > 0 ? 'Muda · $expiring' : 'Muda wa kuisha',
+        _tile(Icons.hourglass_bottom_rounded, expiring > 0 ? tr('Muda · :expiring', {'expiring': expiring}) : tr('Muda wa kuisha'),
             () => _open(ExpiryScreen(session: widget.session)), color: const Color(0xFFD0533C)),
-        _tile(Icons.inventory_2_outlined, reorder > 0 ? 'Kuagiza · $reorder' : 'Hisa',
+        _tile(Icons.inventory_2_outlined, reorder > 0 ? tr('Kuagiza · :reorder', {'reorder': reorder}) : tr('Hisa'),
             () => _open(StockScreen(session: widget.session, initialFilter: reorder > 0 ? 'chache' : 'zote')),
             color: const Color(0xFFC98A00)),
       ],
@@ -514,26 +515,26 @@ class _HomeScreenState extends State<HomeScreen> {
         (
           icon: Icons.local_shipping_outlined,
           color: const Color(0xFF7A5BC7),
-          title: 'Mizigo $waiting ya kuthibitisha',
-          subtitle: 'Hisa yake bado haijaongezwa. Ithibitishe au ikatae.',
+          title: tr('Mizigo :waiting ya kuthibitisha', {'waiting': waiting}),
+          subtitle: tr('Hisa yake bado haijaongezwa. Ithibitishe au ikatae.'),
           screen: PurchasesScreen(session: widget.session),
         ),
       if (outOfStock.isNotEmpty)
-        (icon: Icons.remove_shopping_cart_outlined, color: dangerRed, title: 'Bidhaa ${outOfStock.length} zimeisha (hazipo)', subtitle: _names(outOfStock), screen: stock),
+        (icon: Icons.remove_shopping_cart_outlined, color: dangerRed, title: tr('Bidhaa :out_of_stock zimeisha (hazipo)', {'out_of_stock': outOfStock.length}), subtitle: _names(outOfStock), screen: stock),
       if (expiringBatches > 0)
         (
           icon: Icons.event_busy_outlined,
           color: warnAmber,
-          title: 'Batch $expiringBatches zimeisha au zinaisha ndani ya siku 30',
-          subtitle: 'Thamani ${formatTsh(asInt(expiring['value_at_cost']))} (kwa bei ya kununua)',
+          title: tr('Batch :expiring_batches zimeisha au zinaisha ndani ya siku 30', {'expiring_batches': expiringBatches}),
+          subtitle: tr('Thamani :a (kwa bei ya kununua)', {'a': formatTsh(asInt(expiring['value_at_cost']))}),
           screen: ExpiryScreen(session: widget.session),
         ),
       if (runningLow.isNotEmpty)
-        (icon: Icons.inventory_2_outlined, color: warnAmber, title: 'Bidhaa ${runningLow.length} zinakaribia kuisha', subtitle: _names(runningLow), screen: stock),
+        (icon: Icons.inventory_2_outlined, color: warnAmber, title: tr('Bidhaa :running_low zinakaribia kuisha', {'running_low': runningLow.length}), subtitle: _names(runningLow), screen: stock),
       if (voided > 0)
-        (icon: Icons.cancel_outlined, color: dangerRed, title: 'Mauzo $voided yamefutwa leo', subtitle: 'Angalia sababu kwenye mauzo ya leo', screen: sales),
+        (icon: Icons.cancel_outlined, color: dangerRed, title: tr('Mauzo :voided yamefutwa leo', {'voided': voided}), subtitle: tr('Angalia sababu kwenye mauzo ya leo'), screen: sales),
       if (discount > 0)
-        (icon: Icons.local_offer_outlined, color: warnAmber, title: 'Punguzo leo: ${formatTsh(discount)}', subtitle: 'Jumla ya punguzo zote zilizotolewa', screen: sales),
+        (icon: Icons.local_offer_outlined, color: warnAmber, title: tr('Punguzo leo: :a', {'a': formatTsh(discount)}), subtitle: tr('Jumla ya punguzo zote zilizotolewa'), screen: sales),
     ];
   }
 
@@ -553,12 +554,12 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.only(left: 4, bottom: 8),
-              child: Text('Tahadhari', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              child: T('Tahadhari', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             ),
             if (alerts.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Hakuna tahadhari. Kila kitu kiko sawa.', style: TextStyle(color: mutedText)),
+                child: T('Hakuna tahadhari. Kila kitu kiko sawa.', style: TextStyle(color: mutedText)),
               ),
             for (final a in alerts)
               ListTile(
@@ -609,11 +610,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            item(Icons.home_rounded, 'Nyumbani', null, active: true),
-            item(Icons.receipt_long_outlined, _shopView ? 'Mauzo' : 'Mauzo yangu', () => _open(SalesListScreen(session: widget.session))),
+            item(Icons.home_rounded, tr('Nyumbani'), null, active: true),
+            item(Icons.receipt_long_outlined, _shopView ? tr('Mauzo') : tr('Mauzo yangu'), () => _open(SalesListScreen(session: widget.session))),
             // Stock is used every day, next to sales; reports live under Zaidi.
-            if (_can(Perm.viewStock)) item(Icons.inventory_2_outlined, 'Hisa', () => _open(StockScreen(session: widget.session))),
-            item(Icons.more_horiz_rounded, 'Zaidi', _showMore),
+            if (_can(Perm.viewStock)) item(Icons.inventory_2_outlined, tr('Hisa'), () => _open(StockScreen(session: widget.session))),
+            item(Icons.more_horiz_rounded, tr('Zaidi'), _showMore),
           ],
         ),
       ),
@@ -641,13 +642,13 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.point_of_sale_outlined),
-              title: const Text('Zamu na hesabu ya fedha'),
+              title: const T('Zamu na hesabu ya fedha'),
               onTap: () => go(sheet, ShiftScreen(session: widget.session)),
             ),
             if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
               ListTile(
                 leading: const Icon(Icons.local_shipping_outlined),
-                title: Text(_can(Perm.confirmDeliveries) ? 'Mizigo ya kuthibitisha' : 'Mizigo yangu'),
+                title: Text(_can(Perm.confirmDeliveries) ? tr('Mizigo ya kuthibitisha') : tr('Mizigo yangu')),
                 onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
               ),
             // Made for a laptop (web): many lines with a keyboard. On a phone it
@@ -655,69 +656,79 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_can(Perm.receive))
               ListTile(
                 leading: const Icon(Icons.table_chart_outlined),
-                title: const Text('Ingiza kwa wingi'),
-                subtitle: Text(MediaQuery.of(sheet).size.width >= 900 ? 'Hisa ya mwanzo, mizigo mikubwa' : 'Bora kwenye kompyuta'),
+                title: const T('Ingiza kwa wingi'),
+                subtitle: Text(MediaQuery.of(sheet).size.width >= 900 ? tr('Hisa ya mwanzo, mizigo mikubwa') : tr('Bora kwenye kompyuta')),
                 onTap: () => go(sheet, BulkEntryScreen(session: widget.session)),
               ),
             if (_can(Perm.prepareOrders))
               ListTile(
                 leading: const Icon(Icons.shopping_cart_checkout_rounded),
-                title: const Text('Agiza mzigo'),
-                subtitle: const Text('Zitakazoisha kabla mzigo ujao'),
+                title: const T('Agiza mzigo'),
+                subtitle: const T('Zitakazoisha kabla mzigo ujao'),
                 onTap: () => go(sheet, ReorderScreen(session: widget.session)),
               ),
             if (_can(Perm.receive) || _can(Perm.prepareOrders))
               ListTile(
                 leading: const Icon(Icons.storefront_outlined),
-                title: const Text('Wasambazaji'),
+                title: const T('Wasambazaji'),
                 onTap: () => go(sheet, SuppliersScreen(session: widget.session)),
               ),
             if (_can(Perm.viewStock))
               ListTile(
                 leading: const Icon(Icons.hourglass_bottom_rounded),
-                title: const Text('Muda wa kuisha'),
+                title: const T('Muda wa kuisha'),
                 onTap: () => go(sheet, ExpiryScreen(session: widget.session)),
               ),
             if (_can(Perm.viewShopSales))
               ListTile(
                 leading: const Icon(Icons.bar_chart_rounded),
-                title: const Text('Ripoti'),
-                subtitle: const Text('Inakuja hivi karibuni'),
+                title: const T('Ripoti'),
+                subtitle: const T('Inakuja hivi karibuni'),
                 onTap: () {
                   Navigator.of(sheet).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ripoti zinakuja hivi karibuni.')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('Ripoti zinakuja hivi karibuni.')));
                 },
               ),
             if (_can(Perm.manageDevices))
               ListTile(
                 leading: const Icon(Icons.phonelink_lock),
-                title: const Text('Simu zinazoruhusiwa'),
+                title: const T('Vifaa vinavyoruhusiwa'),
                 onTap: () => go(sheet, DevicesScreen(session: widget.session)),
               ),
             // Never delegable: only the owner decides who may do what.
             if (widget.session.user!.isOwner)
               ListTile(
                 leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: const Text('Wafanyakazi na ruhusa'),
-                subtitle: const Text('Toa au ondoa ruhusa, kwa muda au kudumu'),
+                title: const T('Wafanyakazi na ruhusa'),
+                subtitle: const T('Toa au ondoa ruhusa, kwa muda au kudumu'),
                 onTap: () => go(sheet, StaffPermissionsScreen(session: widget.session)),
               ),
             if (!widget.session.user!.isOwner)
               ListTile(
                 leading: const Icon(Icons.badge_outlined),
-                title: const Text('Taarifa zangu'),
-                subtitle: const Text('Duka limehifadhi nini kukuhusu, na nani ameangalia'),
+                title: const T('Taarifa zangu'),
+                subtitle: const T('Duka limehifadhi nini kukuhusu, na nani ameangalia'),
                 onTap: () => go(sheet, MyProfileScreen(session: widget.session)),
               ),
             ListTile(
               leading: const Icon(Icons.pin_outlined),
-              title: const Text('Badilisha PIN yangu'),
+              title: const T('Badilisha PIN yangu'),
               onTap: () => go(sheet, ChangePinScreen(session: widget.session)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.translate_rounded),
+              title: const T('Lugha'),
+              trailing: LanguageSwitch(
+                onChanged: (code) {
+                  Navigator.of(sheet).pop();
+                  widget.session.setLanguage(code);
+                },
+              ),
             ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: dangerRed),
-              title: const Text('Toka', style: TextStyle(color: dangerRed)),
+              title: const T('Toka', style: TextStyle(color: dangerRed)),
               onTap: () {
                 Navigator.of(sheet).pop();
                 widget.session.logout();

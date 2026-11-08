@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/staff.dart';
 import 'api_client.dart';
+import 'i18n.dart';
 import 'ids.dart';
 
 /// Who is signed in on this phone, and the token that proves it.
@@ -96,7 +97,30 @@ class Session extends ChangeNotifier {
     user = Staff.fromJson(data['user'] as Map<String, dynamic>);
     await _storage.write(key: _tokenKey, value: api.token);
     await _storage.write(key: _userKey, value: jsonEncode(user!.toJson()));
+    await _syncLanguage();
     notifyListeners();
+  }
+
+  /// Just signed in. Picked a language on the sign-in screen? That becomes this
+  /// person's choice (saved on the server, so the web follows). Otherwise the
+  /// app switches to the language they chose before, on any phone or the web.
+  Future<void> _syncLanguage() async {
+    if (lang.takeSignedOutChoice()) {
+      await setLanguage(lang.code);
+    } else {
+      await lang.apply(user?.locale);
+    }
+  }
+
+  /// The language switch while signed in: this phone now, and the person's
+  /// account (web and other phones) too. Offline: the phone still switches.
+  Future<void> setLanguage(String code) async {
+    await lang.apply(code);
+    try {
+      await api.patch('me/locale', {'locale': code});
+    } on ApiException {
+      // offline: it's saved next time they switch
+    }
   }
 
   /// Re-read who I am and what I may do now (the owner may have granted or
@@ -109,6 +133,8 @@ class Session extends ChangeNotifier {
       final changed = fresh.permissions.join(',') != user?.permissions.join(',') || fresh.mustChangePin != user?.mustChangePin;
       user = fresh;
       await _storage.write(key: _userKey, value: jsonEncode(fresh.toJson()));
+      // Switched language on the web (or another phone)? Follow it here.
+      await lang.apply(fresh.locale);
       if (changed) notifyListeners(); // screens redraw with the new buttons
     } on ApiException {
       // offline or similar: keep what we had

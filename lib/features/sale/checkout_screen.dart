@@ -7,6 +7,7 @@ import '../../core/money.dart';
 import '../../core/units.dart';
 import 'cart.dart';
 import 'quantity_dialog.dart';
+import '../../core/i18n.dart';
 
 /// Checkout: the basket in full, quantities, discount, payment, "Kamilisha".
 ///
@@ -46,7 +47,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         // We don't know if it was saved. Freeze the basket; the retry
         // button resends the SAME sale id, so it can never count twice.
         _cart.markUncertain();
-        _showMessage('Mtandao umekatika. Mauzo hayajathibitishwa. Bonyeza "Tuma tena".');
+        _showMessage(tr('Mtandao umekatika. Mauzo hayajathibitishwa. Bonyeza "Tuma tena".'));
       } else {
         // A clear "no" from the server: nothing was saved, the basket can be fixed.
         // The message is already the right Swahili sentence,
@@ -71,7 +72,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: brandGreen, size: 48),
-        title: const Text('Mauzo yamekamilika'),
+        title: const T('Mauzo yamekamilika'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -81,7 +82,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ],
         ),
         actions: [
-          FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Mteja anayefuata')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(), child: const T('Mteja anayefuata')),
         ],
       ),
     );
@@ -90,12 +91,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _editDiscount() async {
     final value = await askText(
       context,
-      title: 'Punguzo (TSh)',
-      label: 'Kiasi',
-      helper: 'Jumla: ${formatTsh(_cart.subtotal)}',
+      title: tr('Punguzo (TSh)'),
+      label: tr('Kiasi'),
+      helper: tr('Jumla: :a', {'a': formatTsh(_cart.subtotal)}),
       initial: _cart.discount == 0 ? '' : '${_cart.discount}',
       digitsOnly: true,
-      clearLabel: 'Ondoa', // "Ondoa" returns '' = no discount
+      clearLabel: tr('Ondoa'), // "Ondoa" returns '' = no discount
     );
     if (value != null) _cart.setDiscount(int.tryParse(value) ?? 0);
   }
@@ -104,7 +105,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final value = await askQuantity(context, line.product, line.quantity, unit: line.unit);
     if (value == null || !mounted) return;
     if (!_cart.setQuantity(line.product.id, value)) {
-      _showMessage('Hisa haitoshi: ${line.product.name} (zilizopo ${describeStock(line.product.onHand, line.product.units)}).');
+      _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': line.product.name, 'a': describeStock(line.product.onHand, line.product.units)}));
     }
   }
 
@@ -124,10 +125,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         // may or may not have been recorded, so the back button is blocked.
         canPop: !_cart.uncertain,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _showMessage('Tuma mauzo haya kwanza kabla ya kutoka.');
+          if (!didPop) _showMessage(tr('Tuma mauzo haya kwanza kabla ya kutoka.'));
         },
         child: Scaffold(
-          appBar: AppBar(title: Text('Kikapu · ${_cart.itemCount} bidhaa')),
+          appBar: AppBar(title: Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount}))),
           body: _cart.isEmpty ? _buildEmpty() : _buildBasket(),
         ),
       ),
@@ -139,9 +140,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Kikapu ni tupu.', style: TextStyle(color: mutedText)),
+          const T('Kikapu ni tupu.', style: TextStyle(color: mutedText)),
           const SizedBox(height: 12),
-          FilledButton.tonal(onPressed: () => Navigator.of(context).pop(), child: const Text('Rudi kutafuta')),
+          FilledButton.tonal(onPressed: () => Navigator.of(context).pop(), child: const T('Rudi kutafuta')),
         ],
       ),
     );
@@ -156,9 +157,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: const Color(0xFFFFF1D6), borderRadius: BorderRadius.circular(10)),
-            child: const Text(
-              'Mauzo haya hayajathibitishwa kwa sababu ya mtandao. Kikapu kimefungwa. '
-              'Bonyeza "Tuma tena" hadi yathibitishwe. Hayatahesabiwa mara mbili.',
+            child: Text(
+              tr('Mauzo haya hayajathibitishwa kwa sababu ya mtandao. Kikapu kimefungwa. Bonyeza "Tuma tena" hadi yathibitishwe. Hayatahesabiwa mara mbili.'),
               style: TextStyle(color: warnAmber, fontWeight: FontWeight.w600),
             ),
           ),
@@ -193,7 +193,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
           IconButton(
-            tooltip: line.quantity == 1 ? 'Ondoa' : 'Punguza',
+            tooltip: line.quantity == 1 ? tr('Ondoa') : tr('Punguza'),
             onPressed: _cart.canEdit ? () => _cart.setQuantity(p.id, line.quantity - 1) : null,
             icon: Icon(line.quantity == 1 ? Icons.delete_outline : Icons.remove_circle_outline),
           ),
@@ -209,11 +209,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Ongeza',
+            tooltip: tr('Ongeza'),
             onPressed: _cart.canEdit
                 ? () {
                     if (!_cart.setQuantity(p.id, line.quantity + 1)) {
-                      _showMessage('Hisa haitoshi: ${p.name} (zilizopo ${describeStock(p.onHand, p.units)}).');
+                      _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': p.name, 'a': describeStock(p.onHand, p.units)}));
                     }
                   }
                 : null,
@@ -247,19 +247,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   TextButton.icon(
                     onPressed: _cart.canEdit ? _editDiscount : null,
                     icon: const Icon(Icons.local_offer_outlined, size: 18),
-                    label: Text(_cart.discount > 0 ? 'Punguzo ${formatTsh(_cart.discount)}' : 'Punguzo'),
+                    label: Text(_cart.discount > 0 ? tr('Punguzo :a', {'a': formatTsh(_cart.discount)}) : tr('Punguzo')),
                   ),
                   const Spacer(),
-                  const Text('Jumla ', style: TextStyle(color: mutedText)),
+                  const T('Jumla ', style: TextStyle(color: mutedText)),
                   Text(formatTsh(_cart.total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                 ],
               ),
               const SizedBox(height: 8),
               SegmentedButton<String>(
                 segments: const [
-                  ButtonSegment(value: 'cash', label: Text('Taslimu')),
-                  ButtonSegment(value: 'mobile', label: Text('Simu')),
-                  ButtonSegment(value: 'insurance', label: Text('Bima')),
+                  ButtonSegment(value: 'cash', label: T('Taslimu')),
+                  ButtonSegment(value: 'mobile', label: T('Simu')),
+                  ButtonSegment(value: 'insurance', label: T('Bima')),
                 ],
                 selected: {_cart.paymentMethod},
                 onSelectionChanged: _cart.canEdit ? (s) => _cart.setPaymentMethod(s.first) : null,
@@ -272,7 +272,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   child: _submitting
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : Text(
-                          _cart.uncertain ? 'Tuma tena · ${formatTsh(_cart.total)}' : 'Kamilisha mauzo · ${formatTsh(_cart.total)}',
+                          _cart.uncertain ? tr('Tuma tena · :a', {'a': formatTsh(_cart.total)}) : tr('Kamilisha mauzo · :a', {'a': formatTsh(_cart.total)}),
                           style: const TextStyle(fontSize: 17),
                         ),
                 ),

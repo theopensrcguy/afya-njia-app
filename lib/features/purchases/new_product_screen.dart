@@ -9,6 +9,7 @@ import '../../core/money.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'new_product.dart';
+import '../../core/i18n.dart';
 
 /// "Bidhaa mpya": a product arriving for the first time.
 ///
@@ -129,20 +130,20 @@ class _NewProductScreenState extends State<NewProductScreen> {
   // ------------------------------------------------------------- units
 
   Future<void> _pickBase() async {
-    final name = await _unitSheet('Inahesabiwa kwa nini? (kipimo kidogo kabisa)');
+    final name = await _unitSheet(tr('Inahesabiwa kwa nini? (kipimo kidogo kabisa)'));
     if (name != null && mounted) setState(() => _baseUnit = name);
   }
 
   Future<void> _addPack() async {
-    final name = await _unitSheet('Kipimo kingine');
+    final name = await _unitSheet(tr('Kipimo kingine'));
     if (name == null || !mounted) return;
     final base = unitLabel(_baseUnit, 2);
     final v = await askText(context,
-        title: '${unitLabel(name)} moja ina $base ngapi?', label: 'Idadi ya $base', digitsOnly: true, required: true);
+        title: tr(':a moja ina :base ngapi?', {'a': unitLabel(name), 'base': base}), label: tr('Idadi ya :base', {'base': base}), digitsOnly: true, required: true);
     final n = int.tryParse(v ?? '') ?? 0;
     if (n < 2 || !mounted) return;
     if (_packs.any((p) => p.baseQuantity == n || p.name == name)) {
-      setState(() => _error = 'Kipimo hicho tayari kipo.');
+      setState(() => _error = tr('Kipimo hicho tayari kipo.'));
       return;
     }
     setState(() {
@@ -154,7 +155,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
   Future<void> _changeSize(DraftUnit u) async {
     final base = unitLabel(_baseUnit, 2);
     final v = await askText(context,
-        title: '${unitLabel(u.name)} moja ina $base ngapi?', label: 'Idadi ya $base', initial: '${u.baseQuantity}', digitsOnly: true, required: true);
+        title: tr(':a moja ina :base ngapi?', {'a': unitLabel(u.name), 'base': base}), label: tr('Idadi ya :base', {'base': base}), initial: '${u.baseQuantity}', digitsOnly: true, required: true);
     final n = int.tryParse(v ?? '') ?? 0;
     if (n < 2 || !mounted) return;
     setState(() {
@@ -186,16 +187,16 @@ class _NewProductScreenState extends State<NewProductScreen> {
     final name = _fromCatalogue ? (widget.initial?.name ?? '${widget.variant?['name'] ?? widget.item?['name']}') : _name.text.trim();
     String? error;
     if (name.isEmpty) {
-      error = 'Andika jina la bidhaa.';
+      error = tr('Andika jina la bidhaa.');
     } else if (_similar.isNotEmpty && !_differentConfirmed) {
-      error = 'Jibu swali la njano kwanza.';
+      error = tr('Jibu swali la njano kwanza.');
     }
     final units = [DraftUnit(name: _baseUnit, baseQuantity: 1), ..._packs];
     if (error == null && widget.canPrice) {
       for (final u in units) {
         final p = int.tryParse(_priceFor(u.baseQuantity).text.trim());
         if (p == null || p < 1) {
-          error = 'Weka bei ya kuuza kwa ${unitLabel(u.name)}.';
+          error = tr('Weka bei ya kuuza kwa :a.', {'a': unitLabel(u.name)});
           break;
         }
         u.price = p;
@@ -243,7 +244,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Bidhaa mpya'), backgroundColor: pageBackground),
+      appBar: AppBar(title: const T('Bidhaa mpya'), backgroundColor: pageBackground),
       body: Column(children: [
         Expanded(
           child: ListView(
@@ -257,7 +258,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
                   child: Row(children: [
                     SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                     SizedBox(width: 10),
-                    Text('Inaangalia kama unayo tayari…', style: TextStyle(color: mutedText)),
+                    T('Inaangalia kama unayo tayari…', style: TextStyle(color: mutedText)),
                   ]),
                 ),
               if (_similar.isNotEmpty && !_differentConfirmed) _similarCard(),
@@ -266,19 +267,19 @@ class _NewProductScreenState extends State<NewProductScreen> {
                   padding: const EdgeInsets.only(bottom: 12, left: 4),
                   child: Row(children: [
                     Expanded(
-                      child: Text('Imewekwa: tofauti na ${_similar.first['name']}.',
+                      child: Text(tr('Imewekwa: tofauti na :a.', {'a': _similar.first['name']}),
                           style: const TextStyle(fontSize: 12, color: mutedText)),
                     ),
-                    TextButton(onPressed: () => setState(() => _differentConfirmed = false), child: const Text('Badilisha')),
+                    TextButton(onPressed: () => setState(() => _differentConfirmed = false), child: const T('Badilisha')),
                   ]),
                 ),
               _card([
                 TextField(
                   controller: _brand,
-                  decoration: const InputDecoration(
-                    labelText: 'Jina la kibiashara (si lazima)',
-                    hintText: 'mfano: Amoxil',
-                    helperText: 'Wateja wakiuliza kwa jina hili, utafutaji utaipata.',
+                  decoration: InputDecoration(
+                    labelText: tr('Jina la kibiashara (si lazima)'),
+                    hintText: tr('mfano: Amoxil'),
+                    helperText: tr('Wateja wakiuliza kwa jina hili, utafutaji utaipata.'),
                   ),
                 ),
               ]),
@@ -296,7 +297,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
             child: FilledButton(
               onPressed: _checking ? null : _save,
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-              child: Text(widget.initial == null ? 'Endelea: kifungashio, batch, EXP' : 'Hifadhi'),
+              child: Text(widget.initial == null ? tr('Endelea: kifungashio, batch, EXP') : tr('Hifadhi')),
             ),
           ),
         ),
@@ -316,25 +317,25 @@ class _NewProductScreenState extends State<NewProductScreen> {
     final src = widget.item?['source'] ?? widget.initial?.source;
     if (_fromCatalogue) {
       return _card([
-        Text('KUTOKA KATALOGI YA ${sources[src] ?? 'TMDA'}',
+        Text(tr('KUTOKA KATALOGI YA :a', {'a': tr(sources[src] ?? 'TMDA')}),
             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: brandGreen, letterSpacing: 0.4)),
         const SizedBox(height: 4),
         Text(widget.initial?.name ?? '${widget.variant?['name'] ?? widget.item?['name']}',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        const Text('Jina hili halibadilishwi', style: TextStyle(fontSize: 12, color: mutedText)),
+        const T('Jina hili halibadilishwi', style: TextStyle(fontSize: 12, color: mutedText)),
       ]);
     }
     return _card([
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(color: const Color(0xFFFBEFD6), borderRadius: BorderRadius.circular(8)),
-        child: const Text('nje ya katalogi', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: warnAmber)),
+        child: const T('nje ya katalogi', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: warnAmber)),
       ),
       const SizedBox(height: 8),
       TextField(
         controller: _name,
         textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(labelText: 'Jina la bidhaa', helperText: 'Mwenye duka ataliona na anaweza kulisahihisha.'),
+        decoration: InputDecoration(labelText: tr('Jina la bidhaa'), helperText: tr('Mwenye duka ataliona na anaweza kulisahihisha.')),
       ),
     ]);
   }
@@ -348,24 +349,26 @@ class _NewProductScreenState extends State<NewProductScreen> {
         const Row(children: [
           Icon(Icons.warning_amber_rounded, color: warnAmber),
           SizedBox(width: 8),
-          Text('Je, ni hii unayo tayari?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF6B4100))),
+          T('Je, ni hii unayo tayari?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF6B4100))),
         ]),
         const SizedBox(height: 4),
-        const Text('Bidhaa moja ikiandikwa mara mbili, mauzo na hisa yake vinagawanyika.',
+        const T('Bidhaa moja ikiandikwa mara mbili, mauzo na hisa yake vinagawanyika.',
             style: TextStyle(fontSize: 12, color: Color(0xFF6B4100))),
         for (final p in _similar) ...[
           const SizedBox(height: 10),
           Text('${p['name']}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF6B4100))),
           Text(
-            '${p['reason'] == 'looks_like' ? 'Jina linafanana' : 'Dawa ile ile'} · kwenye hisa: '
-            '${describeStock(asInt(p['on_hand']), Product.fromJson(p).units)}',
+            tr(':why · kwenye hisa: :stock', {
+              'why': p['reason'] == 'looks_like' ? tr('Jina linafanana') : tr('Dawa ile ile'),
+              'stock': describeStock(asInt(p['on_hand']), Product.fromJson(p).units),
+            }),
             style: const TextStyle(fontSize: 12, color: Color(0xFF6B4100)),
           ),
           const SizedBox(height: 6),
           FilledButton(
             onPressed: () => _useExisting(p),
             style: FilledButton.styleFrom(backgroundColor: warnAmber, minimumSize: const Size.fromHeight(44)),
-            child: const Text('Ndiyo, ni hiyo'),
+            child: const T('Ndiyo, ni hiyo'),
           ),
         ],
         const SizedBox(height: 8),
@@ -379,7 +382,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
             side: const BorderSide(color: warnAmber, width: 2),
             minimumSize: const Size.fromHeight(44),
           ),
-          child: const Text('Hapana, ni tofauti'),
+          child: const T('Hapana, ni tofauti'),
         ),
       ]),
     );
@@ -387,23 +390,23 @@ class _NewProductScreenState extends State<NewProductScreen> {
 
   Widget _unitsCard() {
     return _card([
-      const Text('Inauzwa kwa vipimo gani?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-      Text('Hisa inahesabiwa kwa ${unitLabel(_baseUnit)} moja moja', style: const TextStyle(fontSize: 12, color: mutedText)),
+      const T('Inauzwa kwa vipimo gani?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+      Text(tr('Hisa inahesabiwa kwa :a moja moja', {'a': unitLabel(_baseUnit)}), style: const TextStyle(fontSize: 12, color: mutedText)),
       const SizedBox(height: 8),
       ListTile(
         contentPadding: EdgeInsets.zero,
         title: Text(unitLabel(_baseUnit), style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: const Text('kipimo kidogo kabisa'),
-        trailing: TextButton(onPressed: _pickBase, child: const Text('Badilisha')),
+        subtitle: const T('kipimo kidogo kabisa'),
+        trailing: TextButton(onPressed: _pickBase, child: const T('Badilisha')),
       ),
       for (final u in _packs)
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(unitLabel(u.name), style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text('= ${unitLabel(_baseUnit, u.baseQuantity)} ${u.baseQuantity} (gusa kubadilisha)'),
+          subtitle: Text(tr('= :a :base_quantity (gusa kubadilisha)', {'a': unitLabel(_baseUnit, u.baseQuantity), 'base_quantity': u.baseQuantity})),
           onTap: () => _changeSize(u),
           trailing: IconButton(
-            tooltip: 'Ondoa',
+            tooltip: tr('Ondoa'),
             icon: const Icon(Icons.close),
             onPressed: () => setState(() {
               _packs.remove(u);
@@ -414,7 +417,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
       if (_packs.length < 5)
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(onPressed: _addPack, icon: const Icon(Icons.add), label: const Text('Kipimo kingine (kadi, boksi…)')),
+          child: TextButton.icon(onPressed: _addPack, icon: const Icon(Icons.add), label: const T('Kipimo kingine (kadi, boksi…)')),
         ),
     ]);
   }
@@ -423,7 +426,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
     final units = [DraftUnit(name: _baseUnit, baseQuantity: 1), ..._packs];
     final base = int.tryParse(_priceFor(1).text.trim());
     return _card([
-      const Text('Bei ya kuuza', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+      const T('Bei ya kuuza', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
       for (final u in units)
         Padding(
           padding: const EdgeInsets.only(top: 10),
@@ -434,15 +437,15 @@ class _NewProductScreenState extends State<NewProductScreen> {
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               labelText: u.baseQuantity == 1
-                  ? '${unitLabel(u.name)} 1 (TSh)'
-                  : '${unitLabel(u.name)} (${unitLabel(_baseUnit, u.baseQuantity)} ${u.baseQuantity}) (TSh)',
+                  ? tr(':a 1 (TSh)', {'a': unitLabel(u.name)})
+                  : tr(':a (:b :base_quantity) (TSh)', {'a': unitLabel(u.name), 'b': unitLabel(_baseUnit, u.baseQuantity), 'base_quantity': u.baseQuantity}),
               // A whole kadi is usually a little cheaper than its tablets one by one.
-              helperText: u.baseQuantity > 1 && base != null ? 'Moja moja ingekuwa ${formatTsh(base * u.baseQuantity)}' : null,
+              helperText: u.baseQuantity > 1 && base != null ? tr('Moja moja ingekuwa :a', {'a': formatTsh(base * u.baseQuantity)}) : null,
             ),
           ),
         ),
       const SizedBox(height: 8),
-      const Text('Faida itaonekana ukiweka bei ya kununua, hatua inayofuata.', style: TextStyle(fontSize: 12, color: mutedText)),
+      const T('Faida itaonekana ukiweka bei ya kununua, hatua inayofuata.', style: TextStyle(fontSize: 12, color: mutedText)),
     ]);
   }
 
@@ -455,9 +458,9 @@ class _NewProductScreenState extends State<NewProductScreen> {
           SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Bei ya kuuza: mwenye duka ataiweka', style: TextStyle(fontWeight: FontWeight.w800)),
+              T('Bei ya kuuza: mwenye duka ataiweka', style: TextStyle(fontWeight: FontWeight.w800)),
               SizedBox(height: 2),
-              Text('Wewe rekodi kilichokuja tu. Bidhaa hii haitauzwa mpaka mzigo uthibitishwe na bei iwekwe.',
+              T('Wewe rekodi kilichokuja tu. Bidhaa hii haitauzwa mpaka mzigo uthibitishwe na bei iwekwe.',
                   style: TextStyle(fontSize: 13)),
             ]),
           ),
@@ -470,8 +473,8 @@ class _NewProductScreenState extends State<NewProductScreen> {
       Row(children: [
         const Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Agiza ikifika', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            Text('Itaonekana kwenye "Chache"', style: TextStyle(fontSize: 12, color: mutedText)),
+            T('Agiza ikifika', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            T('Itaonekana kwenye "Chache"', style: TextStyle(fontSize: 12, color: mutedText)),
           ]),
         ),
         IconButton.filledTonal(

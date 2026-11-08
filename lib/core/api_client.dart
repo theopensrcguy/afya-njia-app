@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../config.dart';
+import 'i18n.dart';
 
 /// Every failure the screens need to show, in one shape.
 ///
@@ -71,6 +72,9 @@ class ApiClient {
         // Without this, Laravel answers errors with an HTML page instead of JSON.
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        // Kiswahili / English for the server's messages. After sign-in the
+        // server uses the person's own saved choice instead.
+        'X-Lang': lang.code,
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
@@ -97,7 +101,7 @@ class ApiClient {
         const Duration(seconds: 30));
     if (res.statusCode == 200) return res.bodyBytes;
     if (res.statusCode == 401) onUnauthorized?.call();
-    throw ApiException('Imeshindwa kupakua faili (${res.statusCode}).', status: res.statusCode);
+    throw ApiException(tr('Imeshindwa kupakua faili (:status_code).', {'status_code': res.statusCode}), status: res.statusCode);
   }
 
   /// The network part shared by _send and getBytes: no internet, timeout.
@@ -105,11 +109,11 @@ class ApiClient {
     try {
       return await request().timeout(timeout);
     } on TimeoutException {
-      throw ApiException('Seva haijajibu. Jaribu tena.', code: 'timeout');
+      throw ApiException(tr('Seva haijajibu. Jaribu tena.'), code: 'timeout');
     } on http.ClientException {
       // No internet, server down, or (in a browser) the server refusing this
       // website (CORS). One message: the person can't fix the difference.
-      throw ApiException('Hakuna mtandao au seva haipatikani. Angalia Wi-Fi au data.', code: 'offline');
+      throw ApiException(tr('Hakuna mtandao au seva haipatikani. Angalia Wi-Fi au data.'), code: 'offline');
     }
   }
 
@@ -122,15 +126,15 @@ class ApiClient {
 
     if (res.statusCode == 401) {
       onUnauthorized?.call();
-      throw ApiException('Muda wa kuingia umeisha. Ingia tena.', code: 'session_expired', status: 401);
+      throw ApiException(tr('Muda wa kuingia umeisha. Ingia tena.'), code: 'session_expired', status: 401);
     }
     if (res.statusCode == 429) {
-      throw ApiException('Majaribio mengi. Subiri dakika moja.', code: 'too_many_attempts', status: 429);
+      throw ApiException(tr('Majaribio mengi. Subiri dakika moja.'), code: 'too_many_attempts', status: 429);
     }
 
     final message = (data is Map && data['message'] is String)
         ? data['message'] as String
-        : 'Hitilafu ya seva (${res.statusCode}).';
+        : tr('Hitilafu ya seva (:status_code).', {'status_code': res.statusCode});
     final code = (data is Map && data['code'] is String) ? data['code'] as String : 'error';
     throw ApiException(
       message,

@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'brand.dart';
+import 'i18n.dart';
 
 /// Open the camera, read ONE barcode, come back with it (null if closed).
 /// Used while receiving: scanning the box teaches the shop its barcode.
-Future<String?> scanOnce(BuildContext context, {String title = 'Skani barcode ya boksi'}) {
-  return Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => _ScanOnce(title: title)));
+Future<String?> scanOnce(BuildContext context, {String? title}) {
+  return Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => _ScanOnce(title: title ?? tr('Skani barcode ya boksi'))));
 }
 
 class _ScanOnce extends StatefulWidget {

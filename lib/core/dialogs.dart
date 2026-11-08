@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'brand.dart';
+import 'i18n.dart';
 
 /// A dialog that asks for one piece of text (a reason, an amount).
 ///
@@ -20,7 +21,7 @@ Future<String?> askText(
   String? hint,
   String? helper,
   String initial = '',
-  String confirm = 'Weka',
+  String? confirm,
   String? clearLabel,
   bool danger = false,
   bool digitsOnly = false,
@@ -35,7 +36,7 @@ Future<String?> askText(
       hint: hint,
       helper: helper,
       initial: initial,
-      confirm: confirm,
+      confirm: confirm ?? tr('Weka'),
       clearLabel: clearLabel,
       danger: danger,
       digitsOnly: digitsOnly,
@@ -116,7 +117,7 @@ class _TextDialogState extends State<_TextDialog> {
               labelText: widget.label,
               hintText: widget.hint,
               helperText: widget.helper,
-              errorText: _showRequired ? 'Hii ni lazima' : null,
+              errorText: _showRequired ? tr('Hii ni lazima') : null,
             ),
           ),
         ],
@@ -125,7 +126,7 @@ class _TextDialogState extends State<_TextDialog> {
         if (widget.clearLabel != null)
           TextButton(onPressed: () => Navigator.of(context).pop(''), child: Text(widget.clearLabel!))
         else
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ghairi')),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi')),
         FilledButton(
           style: widget.danger ? FilledButton.styleFrom(backgroundColor: dangerRed) : null,
           onPressed: _submit,

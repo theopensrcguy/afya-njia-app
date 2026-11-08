@@ -14,6 +14,7 @@ import '../../core/units.dart';
 import '../../models/product.dart';
 import '../purchases/new_product.dart';
 import '../purchases/new_product_screen.dart';
+import '../../core/i18n.dart';
 
 /// "Ingiza kwa wingi": many lines at once, on a laptop.
 ///
@@ -148,7 +149,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
     final picked = await showDialog<(String, int)>(
       context: context,
       builder: (dialog) => SimpleDialog(
-        title: Text('Kifungashio cha ${p.name}'),
+        title: Text(tr('Kifungashio cha :name', {'name': p.name})),
         children: [
           for (final u in p.units)
             SimpleDialogOption(
@@ -157,7 +158,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
             ),
           SimpleDialogOption(
             onPressed: () => Navigator.of(dialog).pop(('', 0)),
-            child: const Text('Kingine… (mfano boksi ya 50)', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w700)),
+            child: const T('Kingine… (mfano boksi ya 50)', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -219,7 +220,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
     _rows.add(_Row());
     setState(() {
       _bannerOk = matched == lines.length;
-      _banner = 'Mistari ${lines.length} imebandikwa. ${lines.length - matched == 0 ? 'Bidhaa zote zimetambuliwa.' : 'Bidhaa ${lines.length - matched} hazijatambuliwa: zichague (bofya jina).'}';
+      _banner = tr('Mistari :lines imebandikwa. :a', {'lines': lines.length, 'a': lines.length - matched == 0 ? tr('Bidhaa zote zimetambuliwa.') : tr('Bidhaa :a hazijatambuliwa: zichague (bofya jina).', {'a': lines.length - matched})});
     });
   }
 
@@ -234,7 +235,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
       if (!mounted) return;
       if (orders.isEmpty) {
         setState(() {
-          _banner = 'Hakuna agizo linalosubiriwa kutoka kwa msambazaji huyu.';
+          _banner = tr('Hakuna agizo linalosubiriwa kutoka kwa msambazaji huyu.');
           _bannerOk = false;
         });
         return;
@@ -257,7 +258,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
             ..packs.text = '${l['packs']}');
         }
         _rows.add(_Row());
-        _banner = 'Mistari imejazwa kutoka agizo. Ongeza batch, EXP na bei kutoka ankara.';
+        _banner = tr('Mistari imejazwa kutoka agizo. Ongeza batch, EXP na bei kutoka ankara.');
         _bannerOk = true;
       });
     } on ApiException catch (e) {
@@ -293,7 +294,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
     if (rows.isEmpty) return;
     if (rows.any((r) => r.problem != null)) {
       setState(() {
-        _banner = 'Rekebisha mistari yenye rangi nyekundu kwanza.';
+        _banner = tr('Rekebisha mistari yenye rangi nyekundu kwanza.');
         _bannerOk = false;
       });
       return;
@@ -315,8 +316,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
       if (dryRun) {
         setState(() {
           _bannerOk = true;
-          _banner = 'Kila kitu kiko sawa: mistari ${send.length}'
-              '${_costs ? ' · ${formatTsh(asInt(res['total_cost']))}' : ''}. Bonyeza Hifadhi.';
+          _banner = tr('Kila kitu kiko sawa: mistari :send:a. Bonyeza Hifadhi.', {'send': send.length, 'a': _costs ? ' · ${formatTsh(asInt(res['total_cost']))}' : ''});
         });
       } else {
         final pending = res['status'] == 'pending';
@@ -332,8 +332,8 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
           _invoiceTotal.clear();
           _bannerOk = true;
           _banner = pending
-              ? 'Imehifadhiwa: mistari ${send.length}. Inasubiri kuthibitishwa (Mizigo ya kuthibitisha).'
-              : 'Imehifadhiwa: mistari ${send.length} imeingia kwenye hisa.';
+              ? tr('Imehifadhiwa: mistari :send. Inasubiri kuthibitishwa (Mizigo ya kuthibitisha).', {'send': send.length})
+              : tr('Imehifadhiwa: mistari :send imeingia kwenye hisa.', {'send': send.length});
         });
       }
     } on ApiException catch (e) {
@@ -369,7 +369,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: pageBackground,
-        title: const Text('Ingiza kwa wingi', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const T('Ingiza kwa wingi', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
       body: Shortcuts(
         shortcuts: const {SingleActivator(LogicalKeyboardKey.keyN, control: true): _NewRowIntent()},
@@ -381,15 +381,15 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
               Wrap(spacing: 16, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 SegmentedButton<bool>(
                   segments: const [
-                    ButtonSegment(value: true, label: Text('Hisa ya mwanzo')),
-                    ButtonSegment(value: false, label: Text('Mzigo wa msambazaji')),
+                    ButtonSegment(value: true, label: T('Hisa ya mwanzo')),
+                    ButtonSegment(value: false, label: T('Mzigo wa msambazaji')),
                   ],
                   selected: {_opening},
                   showSelectedIcon: false,
                   style: SegmentedButton.styleFrom(selectedBackgroundColor: brandGreen, selectedForegroundColor: Colors.white),
                   onSelectionChanged: (v) => setState(() => _opening = v.first),
                 ),
-                const Text('Tab = kisanduku kinachofuata · Enter kwenye bei = mstari mpya · Ctrl+N = mstari mpya',
+                const T('Tab = kisanduku kinachofuata · Enter kwenye bei = mstari mpya · Ctrl+N = mstari mpya',
                     style: TextStyle(fontSize: 12, color: mutedText)),
               ]),
               const SizedBox(height: 12),
@@ -409,33 +409,33 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const Text('Mstari mpya')),
+                child: TextButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const T('Mstari mpya')),
               ),
               const SizedBox(height: 8),
               Wrap(spacing: 12, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                OutlinedButton.icon(onPressed: _paste, icon: const Icon(Icons.content_paste), label: const Text('Bandika kutoka Excel')),
+                OutlinedButton.icon(onPressed: _paste, icon: const Icon(Icons.content_paste), label: const T('Bandika kutoka Excel')),
                 Text(
-                  'Mistari ${rows.length}${drafts > 0 ? ' · bidhaa mpya $drafts' : ''}${_costs ? ' · ${formatTsh(total)}' : ''}',
+                  tr('Mistari :rows:a:b', {'rows': rows.length, 'a': drafts > 0 ? tr(' · bidhaa mpya :drafts', {'drafts': drafts}) : '', 'b': _costs ? ' · ${formatTsh(total)}' : ''}),
                   style: const TextStyle(color: mutedText),
                 ),
                 if (problems > 0)
-                  Text('Matatizo $problems ya kurekebisha', style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w800)),
+                  Text(tr('Matatizo :problems ya kurekebisha', {'problems': problems}), style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w800)),
                 if (problems == 0 && warnings > 0)
-                  Text('Onyo $warnings (unaweza kuhifadhi)', style: const TextStyle(color: warnAmber, fontWeight: FontWeight.w800)),
+                  Text(tr('Onyo :warnings (unaweza kuhifadhi)', {'warnings': warnings}), style: const TextStyle(color: warnAmber, fontWeight: FontWeight.w800)),
                 OutlinedButton(
                   onPressed: _busy || rows.isEmpty ? null : () => _submit(dryRun: true),
-                  child: const Text('Kagua'),
+                  child: const T('Kagua'),
                 ),
                 FilledButton(
                   onPressed: _busy || rows.isEmpty || problems > 0 ? null : () => _submit(dryRun: false),
                   style: FilledButton.styleFrom(minimumSize: const Size(180, 48)),
-                  child: Text(_busy ? 'Inatuma…' : 'Hifadhi mistari ${rows.where((r) => !r.isExpired).length}'),
+                  child: Text(_busy ? tr('Inatuma…') : tr('Hifadhi mistari :a', {'a': rows.where((r) => !r.isExpired).length})),
                 ),
               ]),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 10),
                 child: Text(
-                  'Hakuna kinachoingia kwenye hisa mpaka ubonyeze Hifadhi. "Kagua" inaangalia kila kitu bila kuhifadhi.',
+                  tr('Hakuna kinachoingia kwenye hisa mpaka ubonyeze Hifadhi. "Kagua" inaangalia kila kitu bila kuhifadhi.'),
                   style: TextStyle(fontSize: 12, color: mutedText),
                 ),
               ),
@@ -451,9 +451,8 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: softCard(radius: 16),
-        child: const Text(
-          'Hisa ya mwanzo: kila kitu kilichopo dukani siku ya kuanza. Hesabu kutoka kwenye rafu, si kutoka kumbukumbu. '
-          'Bila msambazaji: Agiza itajifunza msambazaji wa kila bidhaa mzigo wa kwanza ukifika.',
+        child: Text(
+          tr('Hisa ya mwanzo: kila kitu kilichopo dukani siku ya kuanza. Hesabu kutoka kwenye rafu, si kutoka kumbukumbu. Bila msambazaji: Agiza itajifunza msambazaji wa kila bidhaa mzigo wa kwanza ukifika.'),
           style: TextStyle(fontSize: 13),
         ),
       );
@@ -466,20 +465,20 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
         SizedBox(
           width: 240,
           child: InputDecorator(
-            decoration: const InputDecoration(labelText: 'Msambazaji'),
+            decoration: InputDecoration(labelText: tr('Msambazaji')),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<int>(
                 value: _supplierId,
                 isDense: true,
                 isExpanded: true,
-                hint: const Text('Chagua'),
+                hint: const T('Chagua'),
                 items: [for (final s in _suppliers) DropdownMenuItem(value: asInt(s['id']), child: Text('${s['name']}'))],
                 onChanged: (v) => setState(() => _supplierId = v),
               ),
             ),
           ),
         ),
-        SizedBox(width: 160, child: TextField(controller: _invoice, decoration: const InputDecoration(labelText: 'Namba ya ankara'))),
+        SizedBox(width: 160, child: TextField(controller: _invoice, decoration: InputDecoration(labelText: tr('Namba ya ankara')))),
         SizedBox(
           width: 160,
           child: TextField(
@@ -487,16 +486,16 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(labelText: 'Jumla ya ankara'),
+            decoration: InputDecoration(labelText: tr('Jumla ya ankara')),
           ),
         ),
         if (inv != null && _costs)
           Text(
-            inv == total ? '✓ Inalingana na mistari' : 'Mistari ${formatTsh(total)} · tofauti ${formatTsh((inv - total).abs())}',
+            inv == total ? tr('✓ Inalingana na mistari') : tr('Mistari :a · tofauti :b', {'a': formatTsh(total), 'b': formatTsh((inv - total).abs())}),
             style: TextStyle(fontWeight: FontWeight.w800, color: inv == total ? brandGreen : warnAmber),
           ),
         if (_supplierId != null)
-          TextButton.icon(onPressed: _fillFromOrder, icon: const Icon(Icons.playlist_add), label: const Text('Jaza kutoka agizo')),
+          TextButton.icon(onPressed: _fillFromOrder, icon: const Icon(Icons.playlist_add), label: const T('Jaza kutoka agizo')),
       ]),
     );
   }
@@ -521,7 +520,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
                   for (var i = 0; i < heads.length; i++)
                     SizedBox(
                       width: _widths[i],
-                      child: Text(heads[i], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: mutedText)),
+                      child: Text(tr(heads[i]), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: mutedText)),
                     ),
                 ]),
               ),
@@ -607,7 +606,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
                 _rows[index + 1].nameFocus.requestFocus();
               }
             },
-            decoration: dec('kwa ${r.packName.isEmpty ? 'kifungashio' : unitLabel(r.packName)}'),
+            decoration: dec(tr('kwa :a', {'a': r.packName.isEmpty ? tr('kifungashio') : unitLabel(r.packName)})),
           )),
           cell(7, Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -617,7 +616,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
                     child: Text(
                       r.draft!.hasPrices
                           ? r.draft!.units.map((u) => '${unitLabel(u.name)} ${formatTsh(u.price!)}').join(' · ')
-                          : 'Mwenye duka ataweka',
+                          : tr('Mwenye duka ataweka'),
                       style: const TextStyle(fontSize: 12, color: brandGreen, fontWeight: FontWeight.w700),
                     ),
                   )
@@ -627,7 +626,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
                   ),
           )),
           cell(8, IconButton(
-            tooltip: 'Futa mstari',
+            tooltip: tr('Futa mstari'),
             onPressed: () => _removeRow(r),
             icon: const Icon(Icons.close, size: 18),
           )),
@@ -702,7 +701,7 @@ class _Row {
 
   String get packLabel {
     if (product == null) return '—';
-    if (packName.isEmpty) return 'Chagua';
+    if (packName.isEmpty) return tr('Chagua');
     final base = product!.units.first.name;
     return packSize > 1 ? '${unitLabel(packName)} (${unitLabel(base, packSize)} $packSize)' : unitLabel(packName);
   }
@@ -711,36 +710,36 @@ class _Row {
   String? get problem {
     if (serverError != null) return serverError;
     if (isEmpty) return null;
-    if (product == null) return name.text.trim().isEmpty ? 'Chagua bidhaa' : 'Chagua "${name.text.trim()}" kwenye orodha (bofya jina)';
-    if ((int.tryParse(packs.text) ?? 0) < 1) return 'Andika idadi';
-    if (batch.text.trim().isEmpty) return 'Andika namba ya batch (iko kwenye boksi)';
-    if (expiry == null) return 'EXP iandikwe kama 06/2028';
-    if (cost.text.isEmpty) return 'Andika bei ya kununua kwa ${unitLabel(packName)}';
+    if (product == null) return name.text.trim().isEmpty ? tr('Chagua bidhaa') : tr('Chagua ":a" kwenye orodha (bofya jina)', {'a': name.text.trim()});
+    if ((int.tryParse(packs.text) ?? 0) < 1) return tr('Andika idadi');
+    if (batch.text.trim().isEmpty) return tr('Andika namba ya batch (iko kwenye boksi)');
+    if (expiry == null) return tr('EXP iandikwe kama 06/2028');
+    if (cost.text.isEmpty) return tr('Andika bei ya kununua kwa :a', {'a': unitLabel(packName)});
     return null;
   }
 
   /// Saved anyway, but worth a look.
   String? warning(bool costs) {
-    if (isExpired) return 'Imeisha muda: mstari huu hautaingizwa kwenye hisa. Iondoe kwenye rafu.';
+    if (isExpired) return tr('Imeisha muda: mstari huu hautaingizwa kwenye hisa. Iondoe kwenye rafu.');
     final e = expiry;
     if (e != null) {
       final now = DateTime.now();
       final months = (e.$1 - now.year) * 12 + e.$2 - now.month;
-      if (months < 2) return 'Inaisha karibuni (${e.$2}/${e.$1}): iuze kwanza';
+      if (months < 2) return tr('Inaisha karibuni (:a/:b): iuze kwanza', {'a': e.$2, 'b': e.$1});
     }
     final c = int.tryParse(cost.text);
     if (costs && c != null && product != null && packSize > 0) {
       final perBase = c / packSize;
       final p = draft != null ? (draft!.units.first.price ?? 0) : product!.units.first.price;
-      if (p > 0 && p < perBase) return 'Unauza ${unitLabel(product!.units.first.name)} ${formatTsh(p)}, unanunua ${formatTsh(perBase.round())}';
+      if (p > 0 && p < perBase) return tr('Unauza :a :b, unanunua :c', {'a': unitLabel(product!.units.first.name), 'b': formatTsh(p), 'c': formatTsh(perBase.round())});
     }
     return null;
   }
 
   /// Neutral information.
   String? get note => draft != null
-      ? (draft!.offCatalogue ? 'Bidhaa mpya · nje ya katalogi' : 'Bidhaa mpya · kutoka katalogi')
-      : (linkId != null ? 'Jina la katalogi litaunganishwa na bidhaa hii' : null);
+      ? (draft!.offCatalogue ? tr('Bidhaa mpya · nje ya katalogi') : tr('Bidhaa mpya · kutoka katalogi'))
+      : (linkId != null ? tr('Jina la katalogi litaunganishwa na bidhaa hii') : null);
 }
 
 /// The name cell: type, then pick from your products, this sheet's new
@@ -810,7 +809,7 @@ class _NameCell extends StatelessWidget {
           ),
         ),
         IconButton(
-          tooltip: 'Badilisha bidhaa',
+          tooltip: tr('Badilisha bidhaa'),
           icon: const Icon(Icons.edit_outlined, size: 18),
           // Back to typing, keeping the name.
           onPressed: onClear,
@@ -838,8 +837,8 @@ class _NameCell extends StatelessWidget {
         controller: controller,
         focusNode: focus,
         onSubmitted: (_) => onSubmit(),
-        decoration: const InputDecoration(
-          hintText: 'Andika jina…',
+        decoration: InputDecoration(
+          hintText: tr('Andika jina…'),
           isDense: true,
           border: OutlineInputBorder(),
           contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
@@ -856,12 +855,12 @@ class _NameCell extends StatelessWidget {
               for (final o in options)
                 ListTile(
                   dense: true,
-                  title: Text(o.kind == _Kind.typed ? 'Ongeza "${o.label}" kama bidhaa mpya' : o.label,
+                  title: Text(o.kind == _Kind.typed ? tr('Ongeza ":label" kama bidhaa mpya', {'label': o.label}) : o.label,
                       style: TextStyle(fontWeight: FontWeight.w700, color: o.kind == _Kind.typed ? brandGreen : null)),
                   subtitle: o.subtitle == null ? null : Text(o.subtitle!),
                   trailing: switch (o.kind) {
-                    _Kind.catalogue => const Text('+ Mpya', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
-                    _Kind.draft => const Text('mpya', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
+                    _Kind.catalogue => const T('+ Mpya', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
+                    _Kind.draft => const T('mpya', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
                     _ => null,
                   },
                   onTap: () => onSelect(o),
@@ -883,20 +882,20 @@ class _Option {
         item = null,
         variant = null,
         label = product.name,
-        subtitle = 'Bidhaa zako · zipo ${describeStock(product.onHand, product.units)}';
+        subtitle = tr('Bidhaa zako · zipo :a', {'a': describeStock(product.onHand, product.units)});
   _Option.draft(NewProductDraft this.draft)
       : kind = _Kind.draft,
         product = null,
         item = null,
         variant = null,
         label = draft.name,
-        subtitle = 'Mpya kwenye karatasi hii';
+        subtitle = tr('Mpya kwenye karatasi hii');
   _Option.catalogue(Map<String, dynamic> this.item, Map<String, dynamic> this.variant)
       : kind = _Kind.catalogue,
         product = null,
         draft = null,
         label = '${variant['name']}',
-        subtitle = 'Katalogi (${'${item['source']}'.toUpperCase()})';
+        subtitle = tr('Katalogi (:a)', {'a': '${item['source']}'.toUpperCase()});
   _Option.typed(String text)
       : kind = _Kind.typed,
         product = null,
@@ -904,7 +903,7 @@ class _Option {
         item = null,
         variant = null,
         label = text,
-        subtitle = 'Nje ya katalogi';
+        subtitle = tr('Nje ya katalogi');
 
   final _Kind kind;
   final Product? product;
@@ -939,10 +938,10 @@ class _OtherPackDialogState extends State<_OtherPackDialog> {
   Widget build(BuildContext context) {
     final size = int.tryParse(_size.text) ?? 0;
     return AlertDialog(
-      title: const Text('Kifungashio kingine'),
+      title: const T('Kifungashio kingine'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         InputDecorator(
-          decoration: const InputDecoration(labelText: 'Jina'),
+          decoration: InputDecoration(labelText: tr('Jina')),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _name,
@@ -959,14 +958,14 @@ class _OtherPackDialogState extends State<_OtherPackDialog> {
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(labelText: 'Ina ${unitLabel(widget.baseUnit, 2)} ngapi?'),
+          decoration: InputDecoration(labelText: tr('Ina :a ngapi?', {'a': unitLabel(widget.baseUnit, 2)})),
         ),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ghairi')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi')),
         FilledButton(
           onPressed: _name == null || size < 1 ? null : () => Navigator.of(context).pop((_name!, size)),
-          child: const Text('Weka'),
+          child: const T('Weka'),
         ),
       ],
     );
@@ -992,13 +991,12 @@ class _PasteDialogState extends State<_PasteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Bandika kutoka Excel'),
+      title: const T('Bandika kutoka Excel'),
       content: SizedBox(
         width: 640,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(
-            'Nakili mistari kwenye Excel au Google Sheets (bila kichwa), kisha bandika hapa (Ctrl+V).\n'
-            'Mpangilio wa safu: Bidhaa · Kifungashio · Ukubwa · Idadi · Batch · EXP · Bei ya kununua',
+          Text(
+            tr('Nakili mistari kwenye Excel au Google Sheets (bila kichwa), kisha bandika hapa (Ctrl+V).\nMpangilio wa safu: Bidhaa · Kifungashio · Ukubwa · Idadi · Batch · EXP · Bei ya kununua'),
             style: TextStyle(fontSize: 12, color: mutedText),
           ),
           const SizedBox(height: 10),
@@ -1006,13 +1004,13 @@ class _PasteDialogState extends State<_PasteDialog> {
             controller: _c,
             autofocus: true,
             maxLines: 10,
-            decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Paracetamol 500mg\tboksi\t100\t5\tP131\t06/2028\t2000'),
+            decoration: InputDecoration(border: OutlineInputBorder(), hintText: 'Paracetamol 500mg\tboksi\t100\t5\tP131\t06/2028\t2000'),
           ),
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ghairi')),
-        FilledButton(onPressed: () => Navigator.of(context).pop(_c.text), child: const Text('Bandika')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi')),
+        FilledButton(onPressed: () => Navigator.of(context).pop(_c.text), child: const T('Bandika')),
       ],
     );
   }

@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
 import 'supplier_form.dart';
+import '../../core/i18n.dart';
 
 /// "+255..." / "0712..." → "255712..." (for wa.me and tel:).
 String? tzNumber(String? phone) {
@@ -60,11 +61,11 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(backgroundColor: pageBackground, title: const Text('Wasambazaji')),
+      appBar: AppBar(backgroundColor: pageBackground, title: const T('Wasambazaji')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _add,
         icon: const Icon(Icons.add),
-        label: const Text('Msambazaji mpya'),
+        label: const T('Msambazaji mpya'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -73,7 +74,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 96), children: [
                 if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed)),
                 if (_list.isEmpty && _error == null)
-                  const Padding(padding: EdgeInsets.all(32), child: Text('Bado hakuna msambazaji.', textAlign: TextAlign.center)),
+                  const Padding(padding: EdgeInsets.all(32), child: T('Bado hakuna msambazaji.', textAlign: TextAlign.center)),
                 for (final s in _list)
                   Container(
                     margin: const EdgeInsets.only(bottom: 10),
@@ -134,7 +135,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   Future<void> _open(Uri uri) async {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Haikufunguka kwenye simu hii.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('Haikufunguka kwenye simu hii.')));
     }
   }
 
@@ -155,8 +156,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: pageBackground,
-        title: Text(s == null ? 'Msambazaji' : '${s['name']}'),
-        actions: [if (s != null) TextButton(onPressed: _edit, child: const Text('Hariri'))],
+        title: Text(s == null ? tr('Msambazaji') : '${s['name']}'),
+        actions: [if (s != null) TextButton(onPressed: _edit, child: const T('Hariri'))],
       ),
       body: s == null
           ? Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator())
@@ -165,27 +166,27 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: softCard(radius: 20),
                 child: Row(children: [
-                  _stat('${s['deliveries'] ?? 0}', 'Mizigo'),
-                  _stat(s['last_delivery_at'] == null ? '—' : timeAgo(DateTime.parse('${s['last_delivery_at']}')), 'Wa mwisho'),
-                  _stat('${s['open_orders'] ?? 0}', 'Maagizo wazi'),
-                  if (s['bought_90_days'] != null) _stat(formatTsh(asInt(s['bought_90_days'])), 'Siku 90'),
+                  _stat('${s['deliveries'] ?? 0}', tr('Mizigo')),
+                  _stat(s['last_delivery_at'] == null ? '—' : timeAgo(DateTime.parse('${s['last_delivery_at']}')), tr('Wa mwisho')),
+                  _stat('${s['open_orders'] ?? 0}', tr('Maagizo wazi')),
+                  if (s['bought_90_days'] != null) _stat(formatTsh(asInt(s['bought_90_days'])), tr('Siku 90')),
                 ]),
               ),
               const SizedBox(height: 12),
               Container(
                 decoration: softCard(radius: 20),
                 child: Column(children: [
-                  row(Icons.person_outline, 'Mtu wa kuongea naye', s['contact_person']),
-                  row(Icons.call_outlined, 'Simu', s['phone'],
+                  row(Icons.person_outline, tr('Mtu wa kuongea naye'), s['contact_person']),
+                  row(Icons.call_outlined, tr('Simu'), s['phone'],
                       onTap: tzNumber(s['phone'] as String?) == null ? null : () => _open(Uri.parse('tel:+${tzNumber(s['phone'] as String?)}'))),
-                  row(Icons.chat_outlined, 'WhatsApp', s['whatsapp_number'],
+                  row(Icons.chat_outlined, tr('WhatsApp'), s['whatsapp_number'],
                       onTap: tzNumber(s['whatsapp_number'] as String?) == null
                           ? null
                           : () => _open(Uri.parse('https://wa.me/${tzNumber(s['whatsapp_number'] as String?)}'))),
-                  row(Icons.mail_outline, 'Barua pepe', s['email'], onTap: () => _open(Uri.parse('mailto:${s['email']}'))),
-                  row(Icons.place_outlined, 'Mahali', s['location']),
-                  row(Icons.badge_outlined, 'TIN', s['tin']),
-                  row(Icons.notes, 'Maelezo', s['notes']),
+                  row(Icons.mail_outline, tr('Barua pepe'), s['email'], onTap: () => _open(Uri.parse('mailto:${s['email']}'))),
+                  row(Icons.place_outlined, tr('Mahali'), s['location']),
+                  row(Icons.badge_outlined, tr('TIN'), s['tin']),
+                  row(Icons.notes, tr('Maelezo'), s['notes']),
                 ]),
               ),
             ]),

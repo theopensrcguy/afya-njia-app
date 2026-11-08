@@ -5,6 +5,7 @@ import '../../core/brand.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'cart.dart';
+import '../../core/i18n.dart';
 
 /// "How many?" with a number keypad: for quantities like 21 capsules (a 7-day
 /// course), where tapping + twenty times is slow and easy to get wrong.
@@ -51,7 +52,7 @@ class _QuantityDialogState extends State<_QuantityDialog> {
     final value = int.tryParse(_controller.text.trim()) ?? 0;
     final max = Cart.maxOf(widget.product, widget.unit);
     if (value > max) {
-      setState(() => _error = 'Zinapatikana $max ${unitLabel(widget.unit.name, max)} tu.');
+      setState(() => _error = tr('Zinapatikana :max :a tu.', {'max': max, 'a': unitLabel(widget.unit.name, max)}));
       return;
     }
     Navigator.of(context).pop(value);
@@ -75,15 +76,15 @@ class _QuantityDialogState extends State<_QuantityDialog> {
           if (_error != null) setState(() => _error = null);
         },
         decoration: InputDecoration(
-          labelText: 'Idadi (${unitLabel(u.name, 2)})',
-          helperText: 'Zilizopo: ${describeStock(p.onHand, p.units)} · 0 = ondoa',
+          labelText: tr('Idadi (:a)', {'a': unitLabel(u.name, 2)}),
+          helperText: tr('Zilizopo: :a · 0 = ondoa', {'a': describeStock(p.onHand, p.units)}),
           errorText: _error,
           errorStyle: const TextStyle(color: dangerRed),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ghairi')),
-        FilledButton(onPressed: _save, child: const Text('Weka')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi')),
+        FilledButton(onPressed: _save, child: const T('Weka')),
       ],
     );
   }
