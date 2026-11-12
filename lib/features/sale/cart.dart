@@ -26,8 +26,8 @@ class PaymentPart {
   int amount; // TSh; for the LAST row of a split it is worked out (the rest)
 }
 
-/// Why a split payment can't be sent yet.
-enum SplitProblem { missingAmount, overTotal, sameMethodTwice }
+/// Why the payment can't be sent yet.
+enum SplitProblem { missingAmount, overTotal, sameMethodTwice, needCustomer, customerNotApproved, overCreditLimit }
 
 /// The basket for one sale, kept OUT of the screen on purpose.
 ///
@@ -49,7 +49,23 @@ class Cart extends ChangeNotifier {
   /// discount or a quantity changes afterwards.
   List<PaymentPart>? split;
 
-  static const methods = ['cash', 'mobile', 'insurance'];
+  static const methods = ['cash', 'mobile', 'insurance', 'credit'];
+
+  /// Deni is offered only to someone allowed to sell on credit (set by the counter).
+  bool creditAllowed = false;
+  List<String> get allowedMethods => [for (final m in methods) if (m != 'credit' || creditAllowed) m];
+
+  /// Who takes the credit part: {id, name, credit_status, available, owes} from GET customers.
+  Map<String, dynamic>? customer;
+
+  void setCustomer(Map<String, dynamic>? c) {
+    if (!canEdit) return;
+    customer = c;
+    notifyListeners();
+  }
+
+  /// The part of this sale paid later (deni).
+  int get creditDue => payments.where((p) => p.method == 'credit').fold<int>(0, (s, p) => s + p.amount);
 
   /// This sale's id, created on the phone. Sent with the sale so the server
   /// can recognise a retry. A new id is made only after a sale is confirmed.
@@ -178,9 +194,9 @@ class Cart extends ChangeNotifier {
 
   /// A third way (e.g. insurance + M-Pesa + cash), typed, before "the rest".
   void addSplitPart() {
-    if (!canEdit || split == null || split!.length >= methods.length) return;
+    if (!canEdit || split == null || split!.length >= allowedMethods.length) return;
     final used = split!.map((p) => p.method).toSet();
-    split!.insert(split!.length - 1, PaymentPart(methods.firstWhere((m) => !used.contains(m))));
+    split!.insert(split!.length - 1, PaymentPart(allowedMethods.firstWhere((m) => !used.contains(m))));
     notifyListeners();
   }
 
@@ -201,11 +217,21 @@ class Cart extends ChangeNotifier {
 
   /// Null when the payment can be sent. The server checks the same again.
   SplitProblem? get splitProblem {
-    if (split == null) return null;
-    final ps = payments;
-    if (ps.take(ps.length - 1).any((p) => p.amount <= 0)) return SplitProblem.missingAmount;
-    if (ps.last.amount <= 0) return SplitProblem.overTotal;
-    if (ps.map((p) => p.method).toSet().length != ps.length) return SplitProblem.sameMethodTwice;
+    if (split != null) {
+      final ps = payments;
+      if (ps.take(ps.length - 1).any((p) => p.amount <= 0)) return SplitProblem.missingAmount;
+      if (ps.last.amount <= 0) return SplitProblem.overTotal;
+      if (ps.map((p) => p.method).toSet().length != ps.length) return SplitProblem.sameMethodTwice;
+    }
+    // Deni: someone approved must take it, within what they may still owe.
+    final credit = creditDue;
+    if (credit > 0) {
+      final c = customer;
+      if (c == null) return SplitProblem.needCustomer;
+      if (c['credit_status'] != 'approved') return SplitProblem.customerNotApproved;
+      final available = c['available'] as int?;
+      if (available != null && credit > available) return SplitProblem.overCreditLimit;
+    }
     return null;
   }
 
@@ -239,6 +265,7 @@ class Cart extends ChangeNotifier {
     discount = 0;
     paymentMethod = 'cash';
     split = null;
+    customer = null;
     uncertain = false;
     saleId = randomId();
     notifyListeners();
@@ -262,5 +289,6 @@ class Cart extends ChangeNotifier {
         else
           'payment_method': paymentMethod,
         'discount': discount,
+        if (creditDue > 0 && customer != null) 'customer_id': customer!['id'],
       };
 }

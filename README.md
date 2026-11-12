@@ -156,3 +156,9 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
 - **Where the rules live:** in `Cart` (`split`, `payments`, `splitProblem`), not in the screen. Kamilisha stays disabled while a part has no amount, the parts exceed the total, or a method is used twice.
 - **What's sent:** `POST sales` gets `payments: [{method, amount}]` instead of `payment_method`. The server checks the parts add up exactly, so a wrong sum is refused and nothing leaves the shelf.
 - **Receipt and lists:** the receipt dialog shows each part. The sales list and home card show "Simu 15,000 + Taslimu 5,000" (`paymentText()` in `core/format.dart`).
+
+## Madeni and Matumizi (v0.21)
+- **Kamilisha:** **Deni** (credit) is a way to pay for someone with `sell_on_credit`, alone or in a split. "Deni la nani?" (`features/credit/customer_picker.dart`) chooses or adds the customer. `Cart.splitProblem` refuses until the customer is chosen, approved and within their limit; the server checks it all again. The sale sends `customer_id`, and the WhatsApp receipt names who took the credit.
+- **Zaidi → Madeni** (`features/credit/madeni_screen.dart`): owing / waiting / all. Tap a customer for their history, **Pokea malipo** (receive payment), and, with `manage_credit`, approve, set a limit or block. Home has a Madeni tile with the total, or "wanasubiri" (waiting) for whoever approves.
+- **Zaidi → Matumizi** (`features/expenses/matumizi_screen.dart`): today / this month / last month, totals by type, **Ongeza matumizi** (type chips plus "Aina mpya", amount, cash/mobile/bank, date, note). Long-press an entry to void it.
+- **Permissions:** `Perm.sellOnCredit`, `Perm.manageCredit`, `Perm.recordExpenses`.

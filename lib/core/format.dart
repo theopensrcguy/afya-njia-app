@@ -5,7 +5,7 @@ import 'units.dart';
 
 /// How each payment method is called, in the chosen language.
 Map<String, String> get paymentLabels =>
-    {'cash': tr('Taslimu'), 'mobile': lang.isEnglish ? 'Mobile money' : 'Simu', 'insurance': tr('Bima'), 'mixed': tr('Mchanganyiko')};
+    {'cash': tr('Taslimu'), 'mobile': lang.isEnglish ? 'Mobile money' : 'Simu', 'insurance': tr('Bima'), 'credit': tr('Deni'), 'mixed': tr('Mchanganyiko')};
 
 /// How a sale was paid, for a list: "Taslimu", or for a split sale
 /// "Simu 15,000 + Taslimu 5,000" (from the server's `payments`).

@@ -15,4 +15,7 @@ abstract final class Perm {
   static const viewShopSales = 'view_shop_sales';
   static const manageDevices = 'manage_devices';
   static const prepareOrders = 'prepare_orders';
+  static const sellOnCredit = 'sell_on_credit';
+  static const manageCredit = 'manage_credit';
+  static const recordExpenses = 'record_expenses';
 }

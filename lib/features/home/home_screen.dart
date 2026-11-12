@@ -10,6 +10,8 @@ import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../auth/change_pin_screen.dart';
 import '../devices/devices_screen.dart';
+import '../credit/madeni_screen.dart';
+import '../expenses/matumizi_screen.dart';
 import '../expiry/expiry_screen.dart';
 import '../bulk/bulk_entry_screen.dart';
 import '../orders/reorder_screen.dart';
@@ -392,6 +394,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ------------------------------------------------------------------ tiles
 
+  String _debtsLabel(Map t) {
+    final d = (t['debts'] as Map?) ?? const {};
+    final total = asInt(d['total']);
+    final pending = asInt(d['pending']);
+    if (pending > 0 && _can(Perm.manageCredit)) return tr('Madeni · :n wanasubiri', {'n': pending});
+    return total > 0 ? tr('Madeni · :a', {'a': formatTsh(total)}) : tr('Madeni');
+  }
+
   Widget _tiles() {
     final t = _today ?? const {};
     final expiring = asInt(((t['expiring_30_days'] as Map?) ?? const {})['batches']);
@@ -410,6 +420,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _tile(Icons.inventory_outlined, _can(Perm.confirmDeliveries) ? tr('Mizigo ya kuthibitisha') : tr('Mizigo yangu'),
               () => _open(PurchasesScreen(session: widget.session)), color: brandGreen),
       ],
+      // Madeni: what customers owe now (and who waits for approval).
+      if (!_shopView && (_can(Perm.sellOnCredit) || _can(Perm.manageCredit)))
+        _tile(Icons.account_balance_wallet_outlined, _debtsLabel(t), () => _open(MadeniScreen(session: widget.session)),
+            color: const Color(0xFF2F6FB0)),
       if (_can(Perm.viewStock)) ...[
         _tile(Icons.hourglass_bottom_rounded, expiring > 0 ? tr('Muda · :expiring', {'expiring': expiring}) : tr('Muda wa kuisha'),
             () => _open(ExpiryScreen(session: widget.session)), color: const Color(0xFFD0533C)),
@@ -689,6 +703,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.of(sheet).pop();
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('Ripoti zinakuja hivi karibuni.')));
                 },
+              ),
+            if (_can(Perm.sellOnCredit) || _can(Perm.manageCredit))
+              ListTile(
+                leading: const Icon(Icons.account_balance_wallet_outlined),
+                title: const T('Madeni'),
+                subtitle: const T('Wanaodaiwa, malipo, kuidhinisha'),
+                onTap: () => go(sheet, MadeniScreen(session: widget.session)),
+              ),
+            if (_can(Perm.recordExpenses))
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const T('Matumizi'),
+                subtitle: const T('Kodi, umeme, mishahara…'),
+                onTap: () => go(sheet, MatumiziScreen(session: widget.session)),
               ),
             if (_can(Perm.manageDevices))
               ListTile(

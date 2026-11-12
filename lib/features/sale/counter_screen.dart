@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/money.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
@@ -49,6 +50,8 @@ class _CounterScreenState extends State<CounterScreen> {
   @override
   void initState() {
     super.initState();
+    // Deni (credit) is a way to pay only for someone allowed to sell on credit.
+    _cart.creditAllowed = widget.session.user!.can(Perm.sellOnCredit);
     // Show the catalog straight away. Wait for the first frame: setState()
     // is not allowed while the screen is still being created.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -154,7 +157,7 @@ class _CounterScreenState extends State<CounterScreen> {
   Future<void> _openCheckout() async {
     FocusScope.of(context).unfocus(); // close the keyboard first
     final completed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CheckoutScreen(api: _api, cart: _cart)),
+      MaterialPageRoute(builder: (_) => CheckoutScreen(api: _api, cart: _cart, canApproveCredit: widget.session.user!.can(Perm.manageCredit))),
     );
     if (!mounted) return;
     // Stock changed after a sale (or a stock error at checkout): refresh the numbers.

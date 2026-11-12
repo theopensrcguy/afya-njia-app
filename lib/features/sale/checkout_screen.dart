@@ -8,6 +8,7 @@ import '../../core/dialogs.dart';
 import '../../core/format.dart' show paymentLabels;
 import '../../core/money.dart';
 import '../../core/units.dart';
+import '../credit/customer_picker.dart';
 import 'cart.dart';
 import 'quantity_dialog.dart';
 import '../../core/i18n.dart';
@@ -22,10 +23,13 @@ import '../../core/i18n.dart';
 /// so a change here shows there instantly and nothing has to be synced.
 /// Pops with `true` when a sale was completed.
 class CheckoutScreen extends StatefulWidget {
-  const CheckoutScreen({super.key, required this.api, required this.cart});
+  const CheckoutScreen({super.key, required this.api, required this.cart, this.canApproveCredit = false});
 
   final ApiClient api;
   final Cart cart;
+
+  /// A new customer added here is approved at once (else they wait for the owner).
+  final bool canApproveCredit;
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -87,6 +91,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       '*${tr('Jumla')}: ${formatTsh(sale['total'] as int)}*',
       for (final p in parts) '${paymentLabels[p['method']] ?? p['method']}: ${formatTsh(p['amount'] as int)}',
       '',
+      if (_cart.customer != null && parts.any((p) => p['method'] == 'credit')) '${tr('Deni la')}: ${_cart.customer!['name']}',
       if (sale['seller'] != null) tr('Umehudumiwa na :name', {'name': sale['seller']}),
       tr('Asante!'),
     ].join('\n');
@@ -314,10 +319,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               const SizedBox(height: 8),
               if (_cart.isSplit) _buildSplit() else ...[
                 SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'cash', label: T('Taslimu')),
-                    ButtonSegment(value: 'mobile', label: T('Simu')),
-                    ButtonSegment(value: 'insurance', label: T('Bima')),
+                  showSelectedIcon: false,
+                  segments: [
+                    const ButtonSegment(value: 'cash', label: T('Taslimu')),
+                    const ButtonSegment(value: 'mobile', label: T('Simu')),
+                    const ButtonSegment(value: 'insurance', label: T('Bima')),
+                    if (_cart.creditAllowed) const ButtonSegment(value: 'credit', label: T('Deni')),
                   ],
                   selected: {_cart.paymentMethod},
                   onSelectionChanged: _cart.canEdit ? (s) => _cart.setPaymentMethod(s.first) : null,
@@ -331,6 +338,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 ),
               ],
+              if (_cart.creditDue > 0) _buildCustomer(),
               const SizedBox(height: 8),
               SizedBox(
                 height: 56,
@@ -349,6 +357,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Deni: who takes it. Tap to choose (or add) a customer.
+  Widget _buildCustomer() {
+    final c = _cart.customer;
+    final problem = _cart.splitProblem;
+    final msg = switch (problem) {
+      SplitProblem.needCustomer => tr('Chagua mteja anayechukua kwa deni.'),
+      SplitProblem.customerNotApproved => tr(':name bado hajaidhinishwa kukopa.', {'name': c?['name'] ?? ''}),
+      SplitProblem.overCreditLimit => tr(':name anaweza kuchukua deni la hadi :a tu.', {'name': c?['name'] ?? '', 'a': formatTsh((c?['available'] as num?)?.toInt() ?? 0)}),
+      _ => null,
+    };
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(border: Border.all(color: const Color(0xFFDDE5E0)), borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: const Icon(Icons.person_outline),
+        title: Text(c == null ? tr('Deni la nani?') : '${c['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: msg != null
+            ? Text(msg, style: const TextStyle(color: dangerRed))
+            : Text('${tr('Deni')}: ${formatTsh(_cart.creditDue)}${c != null ? ' · ${customerLine(c)}' : ''}'),
+        trailing: Text(c == null ? tr('Chagua') : tr('Badilisha'), style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w700)),
+        onTap: _cart.canEdit
+            ? () async {
+                final picked = await pickCustomer(context, api: widget.api, canApprove: widget.canApproveCredit);
+                if (picked != null) _cart.setCustomer(picked);
+              }
+            : null,
       ),
     );
   }
@@ -375,7 +413,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   initialValue: parts[i].method,
                   isDense: true,
                   decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                  items: [for (final m in Cart.methods) DropdownMenuItem(value: m, child: Text(paymentLabels[m] ?? m))],
+                  items: [for (final m in _cart.allowedMethods) DropdownMenuItem(value: m, child: Text(paymentLabels[m] ?? m))],
                   onChanged: _cart.canEdit ? (m) => _cart.setSplitMethod(i, m!) : null,
                 ),
               ),
@@ -408,7 +446,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ]),
           ),
         Row(children: [
-          if (parts.length < Cart.methods.length)
+          if (parts.length < _cart.allowedMethods.length)
             TextButton(onPressed: _cart.canEdit ? _cart.addSplitPart : null, child: const T('+ njia nyingine')),
           const Spacer(),
           if (problem != null)
@@ -418,6 +456,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   SplitProblem.missingAmount => tr('Weka kiasi kwa kila njia.'),
                   SplitProblem.overTotal => tr('Kiasi kimezidi jumla.'),
                   SplitProblem.sameMethodTwice => tr('Njia moja imerudiwa.'),
+                  // Shown by the customer box below instead.
+                  SplitProblem.needCustomer || SplitProblem.customerNotApproved || SplitProblem.overCreditLimit => '',
                 },
                 textAlign: TextAlign.right,
                 style: const TextStyle(color: dangerRed, fontSize: 12),
