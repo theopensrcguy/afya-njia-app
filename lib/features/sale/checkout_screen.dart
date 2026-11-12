@@ -46,6 +46,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final sale = await widget.api.post('sales', _cart.toRequest()) as Map<String, dynamic>;
       if (!mounted) return;
+      if (sale['status'] == 'awaiting_credit') {
+        // A credit REQUEST: held until the owner says yes. The answer shows on Madeni.
+        await _showRequested(sale);
+        _cart.clear();
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
       await _showReceipt(sale);
       _cart.clear();
       if (mounted) Navigator.of(context).pop(true);
@@ -104,6 +111,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (!opened && dialogContext.mounted) {
       ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(tr('WhatsApp haikufunguka kwenye simu hii.'))));
     }
+  }
+
+  Future<void> _showRequested(Map<String, dynamic> sale) {
+    final credit = ((sale['payments'] as List?) ?? const []).cast<Map<String, dynamic>>()
+        .where((p) => p['method'] == 'credit').fold<int>(0, (s, p) => s + (p['amount'] as num).toInt());
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialog) => AlertDialog(
+        icon: const Icon(Icons.hourglass_top_rounded, color: warnAmber, size: 44),
+        title: const T('Ombi la deni limetumwa'),
+        content: Text(
+          '${tr('Deni la :a kwa :name linasubiri idhini ya mmiliki. Dawa zimewekwa pembeni.', {'a': formatTsh(credit), 'name': _cart.customer?['name'] ?? ''})}\n\n'
+          '${tr('Angalia jibu kwenye Zaidi → Madeni. Ukikubaliwa, mpe mteja dawa.')}',
+        ),
+        actions: [FilledButton(onPressed: () => Navigator.of(dialog).pop(), child: const T('Sawa'))],
+      ),
+    );
   }
 
   Future<void> _showReceipt(Map<String, dynamic> sale) {

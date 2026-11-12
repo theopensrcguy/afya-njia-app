@@ -398,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final d = (t['debts'] as Map?) ?? const {};
     final total = asInt(d['total']);
     final pending = asInt(d['pending']);
-    if (pending > 0 && _can(Perm.manageCredit)) return tr('Madeni · :n wanasubiri', {'n': pending});
+    if (pending > 0 && _can(Perm.manageCredit)) return tr('Maombi ya deni · :n', {'n': pending});
     return total > 0 ? tr('Madeni · :a', {'a': formatTsh(total)}) : tr('Madeni');
   }
 

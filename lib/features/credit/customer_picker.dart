@@ -21,7 +21,7 @@ Future<Map<String, dynamic>?> pickCustomer(BuildContext context, {required ApiCl
 
 /// One line about what a customer owes and may still take.
 String customerLine(Map<String, dynamic> c) {
-  if (c['credit_status'] != 'approved') return '${c['credit_status_label']}';
+  if (c['credit_status'] == 'blocked') return '${c['credit_status_label']}';
   final owes = (c['owes'] as num?)?.toInt() ?? 0;
   final available = (c['available'] as num?)?.toInt();
   return [
@@ -126,7 +126,7 @@ class _CustomerPickerState extends State<_CustomerPicker> {
                           ListTile(
                             title: Text('${c['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                             subtitle: Text(customerLine(c),
-                                style: TextStyle(color: c['credit_status'] == 'approved' ? mutedText : warnAmber)),
+                                style: TextStyle(color: c['credit_status'] == 'blocked' ? dangerRed : mutedText)),
                             onTap: () => Navigator.of(context).pop(c),
                           ),
                         ListTile(
@@ -201,7 +201,7 @@ class _NewCustomerDialogState extends State<_NewCustomerDialog> {
           if (!widget.canApprove)
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
-              child: T('Mteja mpya anasubiri idhini ya mmiliki kabla ya kukopa.', style: TextStyle(color: mutedText)),
+              child: T('Kila deni lako litasubiri idhini ya mmiliki.', style: TextStyle(color: mutedText)),
             ),
           TextField(controller: _name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Jina'))),
           TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: tr('Simu (si lazima)'), hintText: '07XX XXX XXX')),

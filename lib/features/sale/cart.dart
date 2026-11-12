@@ -228,7 +228,7 @@ class Cart extends ChangeNotifier {
     if (credit > 0) {
       final c = customer;
       if (c == null) return SplitProblem.needCustomer;
-      if (c['credit_status'] != 'approved') return SplitProblem.customerNotApproved;
+      if (c['credit_status'] == 'blocked') return SplitProblem.customerNotApproved;
       final available = c['available'] as int?;
       if (available != null && credit > available) return SplitProblem.overCreditLimit;
     }

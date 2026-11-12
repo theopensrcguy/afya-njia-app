@@ -26,8 +26,9 @@ class MadeniScreen extends StatefulWidget {
 
 class _MadeniScreenState extends State<MadeniScreen> {
   List<Map<String, dynamic>> _customers = [];
+  List<Map<String, dynamic>> _requests = [];
   Map<String, dynamic> _summary = const {};
-  String _filter = 'owing'; // owing | pending | all
+  String _filter = 'owing'; // owing | all
   bool _loading = true;
   String? _error;
 
@@ -42,9 +43,11 @@ class _MadeniScreenState extends State<MadeniScreen> {
 
   Future<void> _load() async {
     try {
-      final r = await _api.get('customers') as Map<String, dynamic>;
+      final results = await Future.wait([_api.get('customers'), _api.get('credit-requests')]);
+      final r = results[0] as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
+        _requests = (results[1] as List).cast<Map<String, dynamic>>();
         _customers = (r['customers'] as List).cast<Map<String, dynamic>>();
         _summary = (r['summary'] as Map).cast<String, dynamic>();
         _error = null;
@@ -58,12 +61,87 @@ class _MadeniScreenState extends State<MadeniScreen> {
 
   List<Map<String, dynamic>> get _shown => _customers.where((c) {
         final owes = (c['owes'] as num?)?.toInt() ?? 0;
-        return switch (_filter) { 'owing' => owes > 0, 'pending' => c['credit_status'] == 'pending', _ => true };
+        return _filter == 'all' || owes > 0;
       }).toList();
 
   Future<void> _open(Map<String, dynamic> c) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CustomerScreen(session: widget.session, id: c['id'] as int)));
     _load();
+  }
+
+  void _toast(String text, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? dangerRed : null));
+  }
+
+  Future<void> _approve(Map<String, dynamic> r) async {
+    try {
+      await _api.post('credit-requests/${r['id']}/approve');
+      _toast(tr('Deni limekubaliwa.'));
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+    _load();
+  }
+
+  /// Decline (approver) or withdraw (the seller who asked): the medicine goes back on the shelf.
+  Future<void> _decline(Map<String, dynamic> r) async {
+    final reason = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: T(_canApprove ? 'Kataa ombi hili?' : 'Ondoa ombi lako?'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const T('Dawa zinarudi kwenye hisa.', style: TextStyle(color: mutedText)),
+          TextField(controller: reason, decoration: InputDecoration(labelText: tr('Sababu'))),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialog).pop(false), child: const T('Ghairi')),
+          FilledButton(onPressed: () => Navigator.of(dialog).pop(true), style: FilledButton.styleFrom(backgroundColor: dangerRed),
+              child: T(_canApprove ? 'Kataa' : 'Ondoa ombi')),
+        ],
+      ),
+    );
+    if (ok != true || reason.text.trim().isEmpty) return;
+    try {
+      await _api.post('credit-requests/${r['id']}/decline', {'reason': reason.text.trim()});
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+    _load();
+  }
+
+  Widget _request(Map<String, dynamic> r) {
+    final status = '${r['status']}';
+    final (bg, label) = switch (status) {
+      'awaiting_credit' => (const Color(0xFFFFF3D6), tr('Inasubiri idhini')),
+      'completed' => (const Color(0xFFE3F2EA), tr('Imekubaliwa: mpe mteja dawa')),
+      _ => (const Color(0xFFFBE9E5), '${tr('Imekataliwa')}${r['reason'] != null ? ': ${r['reason']}' : ''}'),
+    };
+    final lines = ((r['lines'] as List?) ?? const []).cast<Map<String, dynamic>>()
+        .map((l) => '${l['name']} ×${l['quantity']}${l['unit'] != null ? ' ${l['unit']}' : ''}').join(', ');
+    return Card(
+      color: bg,
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${(r['customer'] as Map?)?['name'] ?? ''} · ${tr('deni')} ${formatTsh((r['credit'] as num).toInt())}',
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+          Text('${r['seller'] ?? ''} · ${r['receipt_number']}', style: const TextStyle(color: mutedText, fontSize: 12)),
+          Text(lines, style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (status == 'awaiting_credit')
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: () => _decline(r), child: T(_canApprove ? 'Kataa' : 'Ondoa ombi', style: const TextStyle(color: dangerRed))),
+              if (_canApprove) FilledButton(onPressed: () => _approve(r), child: const T('Kubali')),
+            ]),
+        ]),
+      ),
+    );
   }
 
   Future<void> _add() async {
@@ -98,9 +176,16 @@ class _MadeniScreenState extends State<MadeniScreen> {
                     ]),
                   ),
                 ),
+                if (_requests.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(pending > 0 && _canApprove ? '${tr('Maombi ya deni')} · $pending' : tr('Maombi ya deni'),
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  for (final r in _requests) _request(r),
+                ],
                 const SizedBox(height: 8),
                 Wrap(spacing: 8, children: [
-                  for (final (k, label) in [('owing', tr('Wanaodaiwa')), ('pending', pending > 0 ? '${tr('Wanasubiri idhini')} · $pending' : tr('Wanasubiri idhini')), ('all', tr('Wote'))])
+                  for (final (k, label) in [('owing', tr('Wanaodaiwa')), ('all', tr('Wote'))])
                     ChoiceChip(label: Text(label), selected: _filter == k, onSelected: (_) => setState(() => _filter = k)),
                 ]),
                 const SizedBox(height: 8),
@@ -117,7 +202,7 @@ class _MadeniScreenState extends State<MadeniScreen> {
                     child: ListTile(
                       onTap: () => _open(c),
                       title: Text('${c['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text(customerLine(c), style: TextStyle(color: c['credit_status'] == 'approved' ? mutedText : warnAmber)),
+                      subtitle: Text(customerLine(c), style: TextStyle(color: c['credit_status'] == 'blocked' ? dangerRed : mutedText)),
                       trailing: _owes(c),
                     ),
                   ),
@@ -225,7 +310,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text(status == 'approved' ? tr('Idhinisha :name kukopa?', {'name': c['name']}) : '${c['name']}'),
+        title: Text('${c['name']}: ${tr('kikomo cha deni')}'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             controller: limit,
@@ -237,7 +322,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialog).pop(false), child: const T('Ghairi')),
-          FilledButton(onPressed: () => Navigator.of(dialog).pop(true), child: Text(status == 'approved' ? tr('Idhinisha') : tr('Hifadhi'))),
+          FilledButton(onPressed: () => Navigator.of(dialog).pop(true), child: const T('Hifadhi')),
         ],
       ),
     );
@@ -283,8 +368,10 @@ class _CustomerScreenState extends State<CustomerScreen> {
             PopupMenuButton<String>(
               onSelected: (v) => v == 'block' ? _block() : _approve(status: 'approved'),
               itemBuilder: (_) => [
-                PopupMenuItem(value: 'limit', child: T(c['credit_status'] == 'approved' ? 'Badilisha kikomo' : 'Idhinisha')),
-                if (c['credit_status'] != 'blocked') const PopupMenuItem(value: 'block', child: T('Zuia kukopa')),
+                const PopupMenuItem(value: 'limit', child: T('Badilisha kikomo')),
+                c['credit_status'] == 'blocked'
+                    ? const PopupMenuItem(value: 'unblock', child: T('Ruhusu kukopa tena'))
+                    : const PopupMenuItem(value: 'block', child: T('Zuia kukopa')),
               ],
             ),
         ],
@@ -300,8 +387,6 @@ class _CustomerScreenState extends State<CustomerScreen> {
             _owes(c),
           ]),
           const SizedBox(height: 12),
-          if (c['credit_status'] == 'pending' && _canApprove)
-            FilledButton.icon(onPressed: () => _approve(status: 'approved'), icon: const Icon(Icons.verified_outlined), label: const T('Idhinisha')),
           if (owes > 0)
             FilledButton.icon(onPressed: _pay, icon: const Icon(Icons.payments_outlined), label: const T('Pokea malipo')),
           const SizedBox(height: 16),

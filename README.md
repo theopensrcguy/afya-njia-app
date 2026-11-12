@@ -162,3 +162,12 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
 - **Zaidi → Madeni** (`features/credit/madeni_screen.dart`): owing / waiting / all. Tap a customer for their history, **Pokea malipo** (receive payment), and, with `manage_credit`, approve, set a limit or block. Home has a Madeni tile with the total, or "wanasubiri" (waiting) for whoever approves.
 - **Zaidi → Matumizi** (`features/expenses/matumizi_screen.dart`): today / this month / last month, totals by type, **Ongeza matumizi** (type chips plus "Aina mpya", amount, cash/mobile/bank, date, note). Long-press an entry to void it.
 - **Permissions:** `Perm.sellOnCredit`, `Perm.manageCredit`, `Perm.recordExpenses`.
+
+
+## Credit approved per request (v0.21.1)
+- **Sending a request:** at Kamilisha, a seller without `manage_credit` who uses Deni sends a **request**. The app says "Ombi la deni limetumwa" (credit request sent), the basket clears, and the medicine stays set aside on the server.
+- **Maombi ya deni (credit requests)**, at the top of **Zaidi → Madeni**:
+  - **Approvers** see every waiting request, with **Kubali** (approve) / **Kataa** (decline).
+  - **Sellers** see their own: waiting (with **Ondoa ombi**, withdraw), approved ("mpe mteja dawa", give the medicine) or declined. Answers stay visible for 24 hours.
+- **Home:** the Madeni tile shows "Maombi ya deni · n" to approvers.
+- **Customers:** no longer need approval; blocking (and the optional limit) stays.
