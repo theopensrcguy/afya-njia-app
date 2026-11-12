@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
@@ -68,11 +69,43 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _isUncertain(ApiException e) =>
       e.code == 'offline' || e.code == 'timeout' || (e.status != null && e.status! >= 500);
 
+  /// The receipt as plain text: what WhatsApp sends. Built from the basket
+  /// (still full while the dialog is open) and the server's sale.
+  String _receiptText(Map<String, dynamic> sale) {
+    final shop = (sale['shop'] as Map?) ?? const {};
+    final parts = (sale['payments'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final discount = (sale['discount'] as num?)?.toInt() ?? 0;
+    return [
+      '*${shop['name'] ?? ''}*',
+      if ((shop['location'] ?? '').toString().isNotEmpty) '${shop['location']}',
+      '${tr('Risiti')} ${sale['receipt_number']}',
+      '',
+      for (final l in _cart.lines)
+        '${l.product.name}\n  ${l.quantity} ${unitLabel(l.unit.name, l.quantity)} × ${formatTsh(l.unit.price)} = ${formatTsh(l.lineTotal)}',
+      '',
+      if (discount > 0) '${tr('Punguzo')}: -${formatTsh(discount)}',
+      '*${tr('Jumla')}: ${formatTsh(sale['total'] as int)}*',
+      for (final p in parts) '${paymentLabels[p['method']] ?? p['method']}: ${formatTsh(p['amount'] as int)}',
+      '',
+      if (sale['seller'] != null) tr('Umehudumiwa na :name', {'name': sale['seller']}),
+      tr('Asante!'),
+    ].join('\n');
+  }
+
+  /// Opens WhatsApp with the receipt typed in; the seller picks the customer's chat.
+  Future<void> _shareReceipt(Map<String, dynamic> sale, BuildContext dialogContext) async {
+    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(_receiptText(sale))}');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && dialogContext.mounted) {
+      ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(tr('WhatsApp haikufunguka kwenye simu hii.'))));
+    }
+  }
+
   Future<void> _showReceipt(Map<String, dynamic> sale) {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (receipt) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: brandGreen, size: 48),
         title: const T('Mauzo yamekamilika'),
         content: Column(
@@ -89,8 +122,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ],
           ],
         ),
+        actionsOverflowButtonSpacing: 8,
         actions: [
-          FilledButton(onPressed: () => Navigator.of(context).pop(), child: const T('Mteja anayefuata')),
+          OutlinedButton.icon(
+            onPressed: () => _shareReceipt(sale, receipt),
+            icon: const Icon(Icons.share_outlined, size: 18),
+            label: const T('Tuma kwa WhatsApp'),
+          ),
+          FilledButton(onPressed: () => Navigator.of(receipt).pop(), child: const T('Mteja anayefuata')),
         ],
       ),
     );
@@ -228,8 +267,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             icon: const Icon(Icons.add_circle_outline),
           ),
           SizedBox(
-            width: 88,
+            width: 80,
             child: Text(formatTsh(line.lineTotal), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          // × : the whole line out, whatever the quantity.
+          IconButton(
+            tooltip: tr('Ondoa'),
+            visualDensity: VisualDensity.compact,
+            onPressed: _cart.canEdit ? () => _cart.setQuantity(p.id, 0) : null,
+            icon: const Icon(Icons.close, size: 20, color: mutedText),
           ),
         ],
       ),
