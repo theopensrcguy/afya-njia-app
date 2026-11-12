@@ -14,6 +14,7 @@ import '../expiry/expiry_screen.dart';
 import '../bulk/bulk_entry_screen.dart';
 import '../orders/reorder_screen.dart';
 import '../suppliers/suppliers_screen.dart';
+import '../support/support_screen.dart';
 import '../purchases/purchases_screen.dart';
 import '../purchases/receive_screen.dart';
 import '../sale/counter_screen.dart';
@@ -714,6 +715,12 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.pin_outlined),
               title: const T('Badilisha PIN yangu'),
               onTap: () => go(sheet, ChangePinScreen(session: widget.session)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.support_agent_rounded),
+              title: const T('Msaada'),
+              subtitle: const T('Uliza Saola, ona majibu'),
+              onTap: () => go(sheet, SupportScreen(session: widget.session)),
             ),
             ListTile(
               leading: const Icon(Icons.translate_rounded),

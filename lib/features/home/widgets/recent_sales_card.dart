@@ -84,7 +84,7 @@ class RecentSalesCard extends StatelessWidget {
               children: [
                 Text(itemsSummary((s['items'] as List?) ?? const []),
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                Text('${s['user']} · ${paymentLabels[method] ?? method}',
+                Text('${s['user']} · ${paymentText(s)}',
                     style: const TextStyle(fontSize: 12, color: mutedText)),
               ],
             ),

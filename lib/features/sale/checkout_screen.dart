@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
+import '../../core/format.dart' show paymentLabels;
 import '../../core/money.dart';
 import '../../core/units.dart';
 import 'cart.dart';
@@ -79,6 +81,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Text(sale['receipt_number'] as String, style: const TextStyle(color: mutedText)),
             const SizedBox(height: 8),
             Text(formatTsh(sale['total'] as int), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            // Paid in parts: say how, so the seller can check before the customer leaves.
+            if ((sale['payments'] as List?)?.length case final n? when n > 1) ...[
+              const SizedBox(height: 6),
+              for (final p in (sale['payments'] as List).cast<Map<String, dynamic>>())
+                Text('${paymentLabels[p['method']] ?? p['method']}: ${formatTsh(p['amount'] as int)}', style: const TextStyle(color: mutedText)),
+            ],
           ],
         ),
         actions: [
@@ -236,7 +244,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
+        // With the keyboard up (typing the M-Pesa part) the panel may not fit: let it scroll.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6),
+          child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -255,20 +266,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'cash', label: T('Taslimu')),
-                  ButtonSegment(value: 'mobile', label: T('Simu')),
-                  ButtonSegment(value: 'insurance', label: T('Bima')),
-                ],
-                selected: {_cart.paymentMethod},
-                onSelectionChanged: _cart.canEdit ? (s) => _cart.setPaymentMethod(s.first) : null,
-              ),
-              const SizedBox(height: 12),
+              if (_cart.isSplit) _buildSplit() else ...[
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'cash', label: T('Taslimu')),
+                    ButtonSegment(value: 'mobile', label: T('Simu')),
+                    ButtonSegment(value: 'insurance', label: T('Bima')),
+                  ],
+                  selected: {_cart.paymentMethod},
+                  onSelectionChanged: _cart.canEdit ? (s) => _cart.setPaymentMethod(s.first) : null,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _cart.canEdit ? _cart.startSplit : null,
+                    icon: const Icon(Icons.call_split, size: 18),
+                    label: const T('Gawanya malipo'),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
               SizedBox(
                 height: 56,
                 child: FilledButton(
-                  onPressed: _submitting ? null : _completeSale,
+                  // A split that doesn't add up can't be sent (the server would refuse it anyway).
+                  onPressed: _submitting || (_cart.splitProblem != null && !_cart.uncertain) ? null : _completeSale,
                   child: _submitting
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : Text(
@@ -279,8 +301,84 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             ],
           ),
+          ),
         ),
       ),
+    );
+  }
+
+  /// Paid in parts: type every part except the last, which is "the rest".
+  Widget _buildSplit() {
+    final parts = _cart.split!;
+    final sent = _cart.payments;
+    final problem = _cart.splitProblem;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          const Expanded(child: T('Malipo kwa njia zaidi ya moja', style: TextStyle(fontWeight: FontWeight.w700))),
+          TextButton(onPressed: _cart.canEdit ? _cart.endSplit : null, child: const T('Njia moja')),
+        ]),
+        for (var i = 0; i < parts.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('method-$i-${parts.length}'),
+                  initialValue: parts[i].method,
+                  isDense: true,
+                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                  items: [for (final m in Cart.methods) DropdownMenuItem(value: m, child: Text(paymentLabels[m] ?? m))],
+                  onChanged: _cart.canEdit ? (m) => _cart.setSplitMethod(i, m!) : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 130,
+                child: i < parts.length - 1
+                    ? TextFormField(
+                        key: ValueKey('amount-$i-${parts.length}'),
+                        initialValue: parts[i].amount > 0 ? '${parts[i].amount}' : '',
+                        enabled: _cart.canEdit,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        textAlign: TextAlign.right,
+                        decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, hintText: tr('kiasi')),
+                        onChanged: (v) => _cart.setSplitAmount(i, int.tryParse(v) ?? 0),
+                      )
+                    // The last row: worked out, never typed.
+                    : Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text(formatTsh(sent.last.amount), style: TextStyle(fontWeight: FontWeight.w700, color: sent.last.amount > 0 ? null : dangerRed)),
+                        T('kinachobaki', style: const TextStyle(fontSize: 11, color: mutedText)),
+                      ]),
+              ),
+              if (parts.length > 2)
+                IconButton(
+                  tooltip: tr('Ondoa'),
+                  onPressed: _cart.canEdit ? () => _cart.removeSplitPart(i) : null,
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+            ]),
+          ),
+        Row(children: [
+          if (parts.length < Cart.methods.length)
+            TextButton(onPressed: _cart.canEdit ? _cart.addSplitPart : null, child: const T('+ njia nyingine')),
+          const Spacer(),
+          if (problem != null)
+            Flexible(
+              child: Text(
+                switch (problem) {
+                  SplitProblem.missingAmount => tr('Weka kiasi kwa kila njia.'),
+                  SplitProblem.overTotal => tr('Kiasi kimezidi jumla.'),
+                  SplitProblem.sameMethodTwice => tr('Njia moja imerudiwa.'),
+                },
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: dangerRed, fontSize: 12),
+              ),
+            ),
+        ]),
+      ],
     );
   }
 }

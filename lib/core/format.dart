@@ -5,7 +5,20 @@ import 'units.dart';
 
 /// How each payment method is called, in the chosen language.
 Map<String, String> get paymentLabels =>
-    {'cash': tr('Taslimu'), 'mobile': lang.isEnglish ? 'Mobile money' : 'Simu', 'insurance': tr('Bima')};
+    {'cash': tr('Taslimu'), 'mobile': lang.isEnglish ? 'Mobile money' : 'Simu', 'insurance': tr('Bima'), 'mixed': tr('Mchanganyiko')};
+
+/// How a sale was paid, for a list: "Taslimu", or for a split sale
+/// "Simu 15,000 + Taslimu 5,000" (from the server's `payments`).
+String paymentText(Map<String, dynamic> sale) {
+  final parts = (sale['payments'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+  if (parts.length > 1) {
+    return parts.map((p) => '${paymentLabels[p['method']] ?? p['method']} ${_thousands(p['amount'] as int)}').join(' + ');
+  }
+  final m = sale['payment_method'];
+  return paymentLabels[m] ?? '$m';
+}
+
+String _thousands(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 
 String _two(int n) => n.toString().padLeft(2, '0');
 

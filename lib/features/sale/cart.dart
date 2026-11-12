@@ -18,6 +18,17 @@ class CartLine {
   int get baseQuantity => unit.baseQuantity * quantity;
 }
 
+/// One way of paying part of a sale: 15,000 by M-Pesa.
+class PaymentPart {
+  PaymentPart(this.method, [this.amount = 0]);
+
+  String method; // cash | mobile | insurance
+  int amount; // TSh; for the LAST row of a split it is worked out (the rest)
+}
+
+/// Why a split payment can't be sent yet.
+enum SplitProblem { missingAmount, overTotal, sameMethodTwice }
+
 /// The basket for one sale, kept OUT of the screen on purpose.
 ///
 /// Why separate: the rules (can't add more than is in stock, totals, building
@@ -31,6 +42,14 @@ class Cart extends ChangeNotifier {
 
   String paymentMethod = 'cash'; // cash | mobile | insurance
   int discount = 0;
+
+  /// Paid in parts (e.g. M-Pesa + cash), or null = all one way ([paymentMethod]).
+  /// The person types every part except the LAST, which is always "the rest":
+  /// so the parts add up to the total by construction, even when the
+  /// discount or a quantity changes afterwards.
+  List<PaymentPart>? split;
+
+  static const methods = ['cash', 'mobile', 'insurance'];
 
   /// This sale's id, created on the phone. Sent with the sale so the server
   /// can recognise a retry. A new id is made only after a sale is confirmed.
@@ -127,6 +146,69 @@ class Cart extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get isSplit => split != null;
+
+  /// Start paying in parts. The usual case is "some by M-Pesa, the rest cash",
+  /// so the typed row is the non-cash one and cash takes the rest.
+  void startSplit() {
+    if (!canEdit) return;
+    split = paymentMethod == 'cash'
+        ? [PaymentPart('mobile'), PaymentPart('cash')]
+        : [PaymentPart(paymentMethod), PaymentPart('cash')];
+    notifyListeners();
+  }
+
+  void endSplit() {
+    if (!canEdit) return;
+    split = null;
+    notifyListeners();
+  }
+
+  void setSplitAmount(int i, int amount) {
+    if (!canEdit || split == null || i >= split!.length - 1) return;
+    split![i].amount = amount < 0 ? 0 : amount;
+    notifyListeners();
+  }
+
+  void setSplitMethod(int i, String method) {
+    if (!canEdit || split == null || i >= split!.length) return;
+    split![i].method = method;
+    notifyListeners();
+  }
+
+  /// A third way (e.g. insurance + M-Pesa + cash), typed, before "the rest".
+  void addSplitPart() {
+    if (!canEdit || split == null || split!.length >= methods.length) return;
+    final used = split!.map((p) => p.method).toSet();
+    split!.insert(split!.length - 1, PaymentPart(methods.firstWhere((m) => !used.contains(m))));
+    notifyListeners();
+  }
+
+  void removeSplitPart(int i) {
+    if (!canEdit || split == null || split!.length <= 2) return;
+    split!.removeAt(i);
+    notifyListeners();
+  }
+
+  /// The parts as they'd be sent; the last one gets whatever is left.
+  List<PaymentPart> get payments {
+    final parts = split;
+    if (parts == null) return [PaymentPart(paymentMethod, total)];
+    final typed = [for (final p in parts.take(parts.length - 1)) PaymentPart(p.method, p.amount)];
+    final rest = total - typed.fold<int>(0, (s, p) => s + p.amount);
+    return [...typed, PaymentPart(parts.last.method, rest)];
+  }
+
+  /// Null when the payment can be sent. The server checks the same again.
+  SplitProblem? get splitProblem {
+    if (split == null) return null;
+    final ps = payments;
+    if (ps.take(ps.length - 1).any((p) => p.amount <= 0)) return SplitProblem.missingAmount;
+    if (ps.last.amount <= 0) return SplitProblem.overTotal;
+    if (ps.map((p) => p.method).toSet().length != ps.length) return SplitProblem.sameMethodTwice;
+    return null;
+  }
+
   void setDiscount(int value) {
     if (!canEdit) return;
     discount = value < 0 ? 0 : value;
@@ -156,6 +238,7 @@ class Cart extends ChangeNotifier {
     _lines.clear();
     discount = 0;
     paymentMethod = 'cash';
+    split = null;
     uncertain = false;
     saleId = randomId();
     notifyListeners();
@@ -173,7 +256,11 @@ class Cart extends ChangeNotifier {
               if (line.unit.id != null) 'unit_id': line.unit.id,
             },
         ],
-        'payment_method': paymentMethod,
+        // Paid in parts: the server checks they add up to the total exactly.
+        if (split != null)
+          'payments': [for (final p in payments) {'method': p.method, 'amount': p.amount}]
+        else
+          'payment_method': paymentMethod,
         'discount': discount,
       };
 }

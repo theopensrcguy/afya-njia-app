@@ -109,7 +109,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
         title: Text(names, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, decoration: strike)),
         subtitle: Text(
           '${soldAt != null ? formatTime(soldAt) : ''} · ${s['receipt_number']}'
-          ' · ${paymentLabels[s['payment_method']] ?? s['payment_method']}'
+          ' · ${paymentText(s)}'
           '${_allSales ? ' · $seller' : ''}'
           '${voided ? tr('\nImefutwa: :a', {'a': s['void_reason'] ?? ''}) : ''}',
           style: TextStyle(color: voided ? dangerRed : mutedText),
@@ -139,7 +139,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('${s['receipt_number']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              Text(tr('Na :a · :b', {'a': (s['user'] as Map?)?['name'] ?? '', 'b': paymentLabels[s['payment_method']] ?? s['payment_method']}),
+              Text(tr('Na :a · :b', {'a': (s['user'] as Map?)?['name'] ?? '', 'b': paymentText(s)}),
                   style: const TextStyle(color: mutedText)),
               const Divider(height: 24),
               for (final i in items)

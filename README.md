@@ -133,3 +133,26 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api
 flutter build web --dart-define=API_BASE_URL=https://api.example.co.tz/api   # for the server
 ```
 The browser signs in with a PIN like a phone; the first time, the owner approves it (Vifaa). In `.env` on the server set `CORS_ALLOWED_ORIGINS` to the web app's address.
+
+## Shared colours (v0.12)
+`lib/core/brand.dart` now holds the same named colours as the web pages (`public/css/afya.css` in the backend): `primaryStrong` for green text on mint, `primarySoft`, `infoBlue` for "waiting for you", `warnSoft` and `dangerSoft` chip backgrounds, `momoPurple` for mobile money, `barNormal` / `barBest` for charts and `chartPalette`. `dangerRed` is now #C2412D, as on the web. The Flutter web build is set aside: the laptop uses the Laravel pages.
+
+## Umesahau PIN? (v0.16)
+`lib/features/auth/forgot_pin_screen.dart`, opened from every mode of the PIN screen: phone number → 6-digit code by SMS → new PIN twice. The server decides everything (same answer for unknown numbers, 5 tries, sign-out everywhere); back on the PIN screen the phone number is filled in.
+
+## Kiswahili / English (v0.17)
+- `lib/core/i18n.dart`: `tr('Hifadhi')` gives the text in the chosen language; `T('Hifadhi')` is a `Text` that does the same and can stay `const`. Placeholders like the server: `tr('Bidhaa :n', {'n': 3})`. English lives in `lib/core/i18n_en.dart` (Kiswahili is the key; a missing text shows in Kiswahili).
+- **Switch:** *Kiswahili | English* at the top of the PIN screen, and *Zaidi → Lugha*. Signed in, the choice is saved on the person's account (`PATCH me/locale`) so the web follows; on sign-in, and on every home load, the app takes the person's saved language. Before sign-in the phone remembers the last one (secure storage).
+- **Switching redraws everything:** open screens close and home is drawn fresh (the home screen is keyed on the language), so no screen keeps old text.
+- Every request sends `X-Lang`, so server messages (wrong PIN, not enough stock…) arrive in the same language.
+- Lists kept as `const` (months, bands, statuses) stay Kiswahili in code and are translated where they're shown, e.g. `Text(tr(label))`.
+
+## Msaada (v0.18)
+`lib/features/support/support_screen.dart`, from *Zaidi → Msaada*: the shop's support requests (owner: all; staff: their own), *Omba msaada* to write to Saola, and each request as a conversation with a reply box and *Funga ombi*. Saola's replies also arrive by SMS. Uses `GET/POST support`, `GET support/{id}`, `POST support/{id}/reply|close`. A paused pharmacy gets `403 pharmacy_inactive` with a message the app shows as-is.
+
+## Split payments (v0.20)
+The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Gawanya malipo** (split payment) shows one row per way of paying.
+- **The rows:** you type every part except the last. The last row is always *kinachobaki* (the rest), so the parts add up to the total even if the discount or a quantity changes afterwards. Up to three ways (cash, mobile, insurance); **Njia moja** (one way) goes back to a single method.
+- **Where the rules live:** in `Cart` (`split`, `payments`, `splitProblem`), not in the screen. Kamilisha stays disabled while a part has no amount, the parts exceed the total, or a method is used twice.
+- **What's sent:** `POST sales` gets `payments: [{method, amount}]` instead of `payment_method`. The server checks the parts add up exactly, so a wrong sum is refused and nothing leaves the shelf.
+- **Receipt and lists:** the receipt dialog shows each part. The sales list and home card show "Simu 15,000 + Taslimu 5,000" (`paymentText()` in `core/format.dart`).
