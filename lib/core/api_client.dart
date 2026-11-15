@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config.dart';
@@ -12,6 +12,12 @@ import 'i18n.dart';
 /// [message] is ready to show the user (the server already writes shop-rule
 /// errors in Swahili). [code] lets code react to a specific case, for example
 /// 'insufficient_stock' or 'session_expired'.
+/// Requests on their way to the server, for the loader (main.dart): any
+/// request shows the thin bar at the top; a save that takes a while also
+/// shows the Afya Njia loader, so nobody wonders whether the app is stuck.
+final apiActivity = ValueNotifier<int>(0);
+final apiSaving = ValueNotifier<int>(0);
+
 class ApiException implements Exception {
   ApiException(this.message, {this.code = 'error', this.status, this.data = const {}});
 
@@ -50,22 +56,22 @@ class ApiClient {
 
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) {
     final uri = Uri.parse('$apiBaseUrl/$path');
-    return _send(() => _http.post(uri, headers: _headers(), body: jsonEncode(body ?? {})));
+    return _send(() => _http.post(uri, headers: _headers(), body: jsonEncode(body ?? {})), saving: true);
   }
 
   Future<dynamic> patch(String path, [Map<String, dynamic>? body]) {
     final uri = Uri.parse('$apiBaseUrl/$path');
-    return _send(() => _http.patch(uri, headers: _headers(), body: jsonEncode(body ?? {})));
+    return _send(() => _http.patch(uri, headers: _headers(), body: jsonEncode(body ?? {})), saving: true);
   }
 
   Future<dynamic> delete(String path) {
     final uri = Uri.parse('$apiBaseUrl/$path');
-    return _send(() => _http.delete(uri, headers: _headers()));
+    return _send(() => _http.delete(uri, headers: _headers()), saving: true);
   }
 
   Future<dynamic> put(String path, [Map<String, dynamic>? body]) {
     final uri = Uri.parse('$apiBaseUrl/$path');
-    return _send(() => _http.put(uri, headers: _headers(), body: jsonEncode(body ?? {})));
+    return _send(() => _http.put(uri, headers: _headers(), body: jsonEncode(body ?? {})), saving: true);
   }
 
   Map<String, String> _headers() => {
@@ -117,8 +123,16 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> _send(Future<http.Response> Function() request, {Duration timeout = const Duration(seconds: 15)}) async {
-    final res = await _sendRaw(request, timeout);
+  Future<dynamic> _send(Future<http.Response> Function() request, {Duration timeout = const Duration(seconds: 15), bool saving = false}) async {
+    apiActivity.value++;
+    if (saving) apiSaving.value++;
+    final http.Response res;
+    try {
+      res = await _sendRaw(request, timeout);
+    } finally {
+      apiActivity.value--;
+      if (saving) apiSaving.value--;
+    }
 
     final dynamic data = res.body.isEmpty ? null : _tryDecode(res.body);
 

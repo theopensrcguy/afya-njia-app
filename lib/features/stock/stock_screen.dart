@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
@@ -9,6 +10,7 @@ import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import '../purchases/receive_screen.dart';
+import 'deletions_screen.dart';
 import 'product_stock_screen.dart';
 import '../../core/i18n.dart';
 
@@ -33,6 +35,7 @@ class _StockScreenState extends State<StockScreen> {
   late String _filter = widget.initialFilter;
   String _query = '';
   bool _loading = true;
+  int _deletions = 0; // requests to delete stock: waiting (approvers) or mine
   String? _error;
 
   ApiClient get _api => widget.session.api;
@@ -77,6 +80,9 @@ class _StockScreenState extends State<StockScreen> {
     try {
       final data = await _api.get('stock') as Map<String, dynamic>;
       if (mounted) setState(() => _data = data);
+      _api.get('stock-deletions').then((r) {
+        if (mounted) setState(() => _deletions = ((r as Map)['requests'] as List).length);
+      }).catchError((_) {});
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -115,7 +121,21 @@ class _StockScreenState extends State<StockScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const T('Hisa'), backgroundColor: pageBackground),
+      appBar: AppBar(title: const T('Hisa'), backgroundColor: pageBackground, actions: [
+        // Requests to delete stock (approvers: waiting for them; others: their own).
+        IconButton(
+          tooltip: tr('Maombi ya kufuta hisa'),
+          onPressed: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeletionsScreen(session: widget.session)));
+            if (mounted) _load();
+          },
+          icon: Badge(
+            isLabelVisible: _deletions > 0,
+            label: Text('$_deletions'),
+            child: const Icon(Icons.delete_sweep_outlined),
+          ),
+        ),
+      ]),
       floatingActionButton: !widget.session.user!.can(Perm.receive) ? null : FloatingActionButton.extended(
         onPressed: () async {
           final saved = await Navigator.of(context).push<bool>(
@@ -129,7 +149,7 @@ class _StockScreenState extends State<StockScreen> {
         label: const T('Pokea mzigo'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(

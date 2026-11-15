@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
@@ -108,7 +109,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     return Scaffold(
       appBar: AppBar(title: const T('Vifaa vinavyoruhusiwa')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               // Pull down to refresh: the helper's request appears the moment he types his PIN.
               onRefresh: _load,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/i18n.dart';
@@ -113,7 +114,7 @@ class _MatumiziScreenState extends State<MatumiziScreen> {
       appBar: AppBar(backgroundColor: pageBackground, title: const T('Matumizi')),
       floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const T('Ongeza matumizi')),
       body: d == null
-          ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator())
+          ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [

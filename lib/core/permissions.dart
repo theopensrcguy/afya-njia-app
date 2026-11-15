@@ -18,4 +18,8 @@ abstract final class Perm {
   static const sellOnCredit = 'sell_on_credit';
   static const manageCredit = 'manage_credit';
   static const recordExpenses = 'record_expenses';
+  static const approveDeletions = 'approve_deletions';
+  static const transferStock = 'transfer_stock';
+  static const approveTransfers = 'approve_transfers';
+  static const viewCustomers = 'view_customers';
 }

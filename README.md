@@ -171,3 +171,72 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
   - **Sellers** see their own: waiting (with **Ondoa ombi**, withdraw), approved ("mpe mteja dawa", give the medicine) or declined. Answers stay visible for 24 hours.
 - **Home:** the Madeni tile shows "Maombi ya deni · n" to approvers.
 - **Customers:** no longer need approval; blocking (and the optional limit) stays.
+
+## Aina (categories) (v0.22)
+- **Counter:** with the search empty, a row of chips: Zote (all), then each category that has products (Dawa, Vipodozi…), then Haijapangwa (not sorted). A chip lists that category (`GET products?category=`) and hides Haraka; typing searches everything.
+- **Product page:** "Aina: …" opens a picker (`PATCH products/{id}` with `category_id`), for whoever may change prices.
+- **New product in a delivery:** optional category chips. Left empty, the server guesses from the catalogue: medicines → Dawa, supplies → Vifaa tiba / Mama na mtoto.
+
+## Agiza, Maagizo, new products (v0.23)
+- **Agiza views:** Pendekezo / Tahadhari / Zote (`GET reorder?view=`), each with its count. Only suggested lines start with an amount; in Zote there is a name filter.
+  - Choices made in one view stay when switching views; changing "Wiki 1 / Wiki 2 / Mwezi 1" starts again.
+- **Bidhaa mpya from Agiza:** the product picker has "Bidhaa mpya (haipo dukani)", which uses the new-product form and `POST products/new` (with *create_products*); the product is then added to the order.
+- **Order screen (`OrderSendScreen`):** each line has −/+ (0 leaves it out). **Hifadhi rasimu** saves a draft; `orderId` reopens a draft (PATCH) to finish and send it.
+- **Maagizo (`orders/orders_screen.dart`):** from Agiza's app bar, the "yametumwa" banner, or the "Rasimu n hazijatumwa" banner.
+  - Status chips and a supplier filter (including "Bila msambazaji").
+  - Each order opens to its lines and message. Drafts: Maliza na tuma / Futa. Sent orders: Fungua WhatsApp tena / Ghairi. Any order: Nakili ujumbe.
+- **Units (`stock/unit_picker.dart`):** standard units, then the shop's own (`GET units`), then "+ Kipimo kingine…". Used by the new-product form, "+ Nyingine" packaging in a delivery line, and Agiza.
+- **Delivery:** a "Bidhaa mpya (haipo dukani)" button at the top of the product search. It asks for the generic name, searches the shop and the catalogue with it, and opens the form straight away when nothing matches.
+  - The form says "Jina la dawa (generic)" and "Jina la kampuni / brand", and sends `generic_name` for products that aren't in the catalogue.
+
+### v0.23.1: a supplier per line
+- In Agiza each product shows "Kutoka: <supplier> ▾". Tapping it chooses another supplier (or none yet), and the list regroups (`_supplierOf`), so each supplier gets its own order. After a list is sent, only that list's products are cleared.
+
+### v0.23.2: list menu
+- Each Agiza list has a ⋮ menu with three items. "Agiza zote kutoka kwa…" sets one supplier for every product in it (each can still be changed under its name). "Chagua zote" keeps amounts already set and puts 1 on the rest. "Ondoa zote" sets every amount to 0.
+
+### v0.23.4: continue a draft
+- `ReorderScreen(draftId:)`: loads `GET purchase-orders/{id}` and shows a "Rasimu" card on top. Its lines use the same amount/packaging controls; its products are left out of the lists below.
+  - The card has: "Ongeza bidhaa", "Badilisha" (supplier), **Hifadhi rasimu** (`PATCH`, stays), and **Angalia na tuma** (`OrderSendScreen(orderId:)`; once sent, the screen closes).
+  - The lists' ⋮ menu gains "Weka zilizochaguliwa kwenye rasimu". `PopScope` asks before leaving unsaved changes.
+- Maagizo → draft: **Endelea kuandaa** (continue) or **Iko tayari: tuma** (send as it is).
+
+### v0.23.5: a supplier per product in a draft
+- Draft lines carry `supplier_id`. The draft card shows one section per supplier, each with **Tuma kwa …** (`_sendDraftPart`): it saves the draft first, then opens `OrderSendScreen(draftPart: true)`.
+  - That screen posts `purchase-orders/{id}/send` with only those lines, and hides "Hifadhi rasimu" there.
+- "Kutoka:" on a draft product changes only that product. "Zote: …" in the card's header sets every product.
+- Maagizo → draft: **Endelea kuhariri** (continue editing).
+
+### v0.23.6: floating drafts button
+- `ReorderScreen` has a `FloatingActionButton.extended` "Rasimu n" (`_showDrafts`: `GET purchase-orders?status=draft`, each with **Endelea kuhariri** → `ReorderScreen(draftId:)`). It flashes "Rasimu imehifadhiwa ✓" when a new draft was saved. The old drafts banner is gone, and the list has bottom padding so the button never covers it.
+
+### v0.23.7: loader
+- `core/loader.dart`:
+  - **`AfyaLoader`**: the green "A" mark breathing inside a turning ring. It is used for every screen's first load (it replaces the plain `CircularProgressIndicator()`).
+  - **`ActivityLayer`**: over every screen. It shows a thin bar while any request is out, and a centred loader "Inashughulikia…" when a save (POST/PATCH/PUT/DELETE) takes more than ~0.9 s.
+- `ApiClient` counts requests in `apiActivity` / `apiSaving` (ValueNotifiers).
+
+## Futa hisa with approval; units (v0.24)
+- `features/stock/deletions_screen.dart`:
+  - `askDeleteStock()` asks for the reason; an approver's deletion happens at once.
+  - `DeletionsScreen`: approvers see "Idhinisha / Kataa", others "Ghairi ombi". It opens from the Hisa app bar icon, whose badge shows the count.
+- Product page: a 🗑 on each batch, and "Futa bidhaa hii" / "Omba kufuta bidhaa hii" at the bottom. History shows "Imefutwa".
+- `Perm.approveDeletions`; `confirmDialog()` in `core/dialogs.dart`.
+- Units editor: names come from `pickUnitName`: standard units, the shop's own, then "+ Kipimo kingine…".
+
+## Uhamisho wa hisa and Maduka yangu (v0.25)
+- `features/transfers/transfers_screen.dart` (Zaidi → Uhamisho wa hisa):
+  - this shop's code (copy), linked shops, link requests (Kubali / Kataa) and "Unganisha na duka jingine";
+  - incoming transfers: **Pokea** shows where each line goes, **Kataa** sends it back;
+  - waiting for approval: **Idhinisha, tuma** / Ghairi;
+  - the history.
+- `new_transfer_screen.dart`: the shop, the products (search), the amount and its unit side by side, and a note.
+- `my_shops_screen.dart` (Zaidi → Maduka yangu, owners): the shops, **Fungua** switches (`Session.switchShop`: a new token, back to home), and "Ongeza duka langu jingine" (code + that shop's owner PIN).
+- `Perm.transferStock`, `Perm.approveTransfers`. Product history shows the transfer movements.
+
+## Wateja: a customer on any sale, and refill reminders (v0.26)
+- **Checkout** (`features/sale/checkout_screen.dart`): "Weka mteja (si lazima)" when the sale has no credit. Picking someone who hasn't agreed opens "Muulize mteja"; only a yes puts the customer on the sale (`Cart.toRequest` sends `customer_id` on credit, or when `consent` is true). After the sale, the receipt dialog offers **Mkumbushe kurudia dawa** for a customer who agreed and has a phone.
+- `features/customers/customer_consent.dart`: `askCustomerConsent`, `askRefillReminder`, `customerAgreed`, `phoneText`, `dayText`.
+- `features/customers/customers_screen.dart` (Zaidi → Wateja, `Perm.viewCustomers`): who to remind today (WhatsApp opens on their chat with the message; "Nimemtumia" marks it; SMS when the server has a provider), reminders coming up, reminded and not back, and the customers who agreed; tapping one shows what they bought and "Ondoa ridhaa".
+- `pickCustomer(..., forCredit: false)` shows phones instead of debts.
+- The reminder message is written by the server and never names the medicine.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
@@ -62,7 +63,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(_allSales ? tr('Mauzo ya leo') : tr('Mauzo yangu ya leo'))),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(

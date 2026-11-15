@@ -10,11 +10,13 @@ import '../suppliers/supplier_form.dart';
 import '../suppliers/suppliers_screen.dart';
 import '../../core/i18n.dart';
 
-/// The order as the supplier will read it, then one tap to WhatsApp.
+/// The order as the supplier will read it, then one tap to WhatsApp, or
+/// "Hifadhi rasimu" to finish it later (a draft doesn't count as ordered).
 ///
 /// The order is saved BEFORE WhatsApp opens: from then on it counts as "on
 /// its way" (not suggested again), and the next delivery from this supplier
 /// closes it. No prices in the message: the supplier's invoice has them.
+/// Amounts can still be changed here (and a draft's, when it is reopened).
 class OrderSendScreen extends StatefulWidget {
   const OrderSendScreen({
     super.key,
@@ -23,7 +25,16 @@ class OrderSendScreen extends StatefulWidget {
     this.suppliers = const [],
     required this.cover,
     required this.lines,
+    this.orderId,
+    this.draftPart = false,
   });
+
+  /// One supplier's part of the draft [orderId]: sending it makes its own order,
+  /// and the rest stays in the draft (no "Hifadhi rasimu" here: it was just saved).
+  final bool draftPart;
+
+  /// A draft being finished: saving changes it instead of making a new order.
+  final int? orderId;
 
   final Session session;
   final Map<String, dynamic>? supplier;
@@ -41,6 +52,7 @@ class OrderSendScreen extends StatefulWidget {
 
 class _OrderSendScreenState extends State<OrderSendScreen> {
   late Map<String, dynamic>? _supplier = widget.supplier;
+  late final List<Map<String, dynamic>> _lines = [for (final l in widget.lines) {...l}];
   bool _busy = false;
   String? _error;
 
@@ -51,11 +63,58 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
 
   String get _preview {
     final s = _supplier;
+    final kept = _kept;
     final rows = [
-      for (var i = 0; i < widget.lines.length; i++)
-        '${i + 1}. ${widget.lines[i]['name']}: ${widget.lines[i]['pack_name']} ${widget.lines[i]['packs']}',
+      for (var i = 0; i < kept.length; i++) '${i + 1}. ${kept[i]['name']}: ${kept[i]['pack_name']} ${kept[i]['packs']}',
     ];
     return tr('Habari:a,\nNaomba mzigo huu:\n\n:b\n\nAsante.', {'a': s != null ? ' ${s['name']}' : '', 'b': rows.join('\n')});
+  }
+
+  List<Map<String, dynamic>> get _kept => _lines.where((l) => asInt(l['packs']) > 0).toList();
+
+  Map<String, dynamic> _body({required bool draft}) => {
+        'supplier_id': _supplier?['id'],
+        'cover_days': widget.cover,
+        'draft': draft,
+        'lines': [
+          for (final l in _kept)
+            {
+              'product_id': asInt(l['product_id']),
+              'pack_name': l['pack_name'],
+              'pack_size': asInt(l['pack_size']),
+              'packs': asInt(l['packs']),
+              if (l['suggested_packs'] != null) 'suggested_packs': asInt(l['suggested_packs']),
+            },
+        ],
+      };
+
+  Future<Map<String, dynamic>> _save({required bool draft}) async {
+    if (widget.draftPart) {
+      final b = _body(draft: false)..remove('draft')..remove('cover_days');
+      return await _api.post('purchase-orders/${widget.orderId}/send', b) as Map<String, dynamic>;
+    }
+    final body = _body(draft: draft);
+    final r = widget.orderId == null ? await _api.post('purchase-orders', body) : await _api.patch('purchase-orders/${widget.orderId}', body);
+    return r as Map<String, dynamic>;
+  }
+
+  /// Not ready to send: keep it as a draft (rasimu), on the phone and the web.
+  Future<void> _saveDraft() async {
+    if (_kept.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await _save(draft: true);
+      if (!mounted) return;
+      _toast(tr('Rasimu imehifadhiwa. Itume ukiwa tayari.'));
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   /// The supplier's details (WhatsApp number, phone, location...), saved for next time.
@@ -67,25 +126,13 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
 
   /// Save the order, then hand its message to WhatsApp (or the clipboard).
   Future<void> _send({required bool whatsapp}) async {
+    if (_kept.isEmpty) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final order = await _api.post('purchase-orders', {
-        'supplier_id': ?_supplier?['id'],
-        'cover_days': widget.cover,
-        'lines': [
-          for (final l in widget.lines)
-            {
-              'product_id': asInt(l['product_id']),
-              'pack_name': l['pack_name'],
-              'pack_size': asInt(l['pack_size']),
-              'packs': asInt(l['packs']),
-              'suggested_packs': asInt(l['suggested_packs']),
-            },
-        ],
-      }) as Map<String, dynamic>;
+      final order = await _save(draft: false);
       final message = '${order['message']}';
       if (!mounted) return;
 
@@ -120,7 +167,7 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
         backgroundColor: pageBackground,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s == null ? tr('Agizo') : tr('Agizo · :a', {'a': s['name']}), style: const TextStyle(fontWeight: FontWeight.w800)),
-          const T('Angalia, kisha tuma', style: TextStyle(fontSize: 12, color: mutedText)),
+          T(widget.orderId == null ? 'Angalia, kisha tuma' : 'Rasimu: maliza, kisha tuma', style: const TextStyle(fontSize: 12, color: mutedText)),
         ]),
       ),
       body: Column(children: [
@@ -144,8 +191,34 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
               child: T('Jina la duka linaongezwa mwishoni. Bei hazitumwi: msambazaji ataleta ankara.',
                   style: TextStyle(fontSize: 12, color: mutedText)),
             ),
+            // Last changes before sending: how many of each (0 = leave it out).
+            Container(
+              margin: const EdgeInsets.only(top: 16),
+              decoration: softCard(radius: 18),
+              child: Column(children: [
+                for (final l in _lines)
+                  ListTile(
+                    dense: true,
+                    title: Text('${l['name']}', style: TextStyle(fontWeight: FontWeight.w700, color: asInt(l['packs']) > 0 ? inkColor : mutedText)),
+                    subtitle: Text('${l['pack_name']}${asInt(l['pack_size']) > 1 ? ' (${l['pack_size']})' : ''}'),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(
+                        tooltip: tr('Punguza'),
+                        onPressed: asInt(l['packs']) > 0 ? () => setState(() => l['packs'] = asInt(l['packs']) - 1) : null,
+                        icon: const Icon(Icons.remove_circle_outline, color: brandGreen),
+                      ),
+                      SizedBox(width: 34, child: Text('${l['packs']}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                      IconButton(
+                        tooltip: tr('Ongeza'),
+                        onPressed: () => setState(() => l['packs'] = asInt(l['packs']) + 1),
+                        icon: const Icon(Icons.add_circle, color: brandGreen),
+                      ),
+                    ]),
+                  ),
+              ]),
+            ),
             // No supplier yet: choose one, so the order can close when they deliver.
-            if (widget.supplier == null && widget.suppliers.isNotEmpty) ...[
+            if ((widget.supplier == null || (widget.orderId != null && !widget.draftPart)) && widget.suppliers.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.fromLTRB(4, 16, 4, 6),
                 child: T('Unamtumia nani?', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -181,17 +254,29 @@ class _OrderSendScreenState extends State<OrderSendScreen> {
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               FilledButton.icon(
-                onPressed: _busy ? null : () => _send(whatsapp: true),
+                onPressed: _busy || _kept.isEmpty ? null : () => _send(whatsapp: true),
                 icon: const Icon(Icons.chat_rounded),
                 label: Text(_busy ? tr('Inahifadhi…') : tr('Fungua WhatsApp na tuma')),
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
               ),
               const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _busy ? null : () => _send(whatsapp: false),
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                child: const T('Nakili ujumbe (SMS au simu)'),
-              ),
+              Row(children: [
+                if (!widget.draftPart) Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy || _kept.isEmpty ? null : _saveDraft,
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    child: const T('Hifadhi rasimu'),
+                  ),
+                ),
+                if (!widget.draftPart) const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy || _kept.isEmpty ? null : () => _send(whatsapp: false),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    child: const T('Nakili ujumbe', textAlign: TextAlign.center),
+                  ),
+                ),
+              ]),
             ]),
           ),
         ),

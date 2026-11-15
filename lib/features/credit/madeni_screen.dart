@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
@@ -159,7 +160,7 @@ class _MadeniScreenState extends State<MadeniScreen> {
       appBar: AppBar(backgroundColor: pageBackground, title: const T('Madeni')),
       floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.person_add_alt_1_outlined), label: const T('Mteja mpya')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
@@ -353,7 +354,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
     if (c == null) {
       return Scaffold(
         appBar: AppBar(backgroundColor: pageBackground),
-        body: Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator()),
+        body: Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const AfyaLoader()),
       );
     }
     final owes = (c['owes'] as num).toInt();

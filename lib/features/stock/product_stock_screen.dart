@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
@@ -9,6 +10,7 @@ import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
+import 'deletions_screen.dart';
 import '../../models/product.dart';
 import 'units_editor_screen.dart';
 import '../../core/i18n.dart';
@@ -48,6 +50,13 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
   Future<void> _load() async {
     try {
       final p = await _api.get('stock/${widget.productId}') as Map<String, dynamic>;
+      if (_categories.isEmpty) {
+        try {
+          _categories = ((await _api.get('product-categories') as Map<String, dynamic>)['categories'] as List).cast<Map<String, dynamic>>();
+        } on ApiException {
+          // The name just shows "…".
+        }
+      }
       if (mounted) setState(() => _p = p);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -60,6 +69,56 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
   }
 
   // ------------------------------------------------------------------ edits
+
+  /// Aina: which shelf the product sits on (the till's shelves, the report's categories).
+  List<Map<String, dynamic>> _categories = [];
+
+  Future<void> _editCategory() async {
+    if (_categories.isEmpty) {
+      try {
+        final r = await _api.get('product-categories') as Map<String, dynamic>;
+        _categories = (r['categories'] as List).cast<Map<String, dynamic>>();
+      } on ApiException catch (e) {
+        return _toast(e.message, error: true);
+      }
+    }
+    if (!mounted) return;
+    final current = _p!['category_id'];
+    final picked = await showModalBottomSheet<Object>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 8), child: T('Aina ya bidhaa', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+          for (final c in _categories)
+            ListTile(
+              title: Text('${c['name']}'),
+              trailing: current == c['id'] ? const Icon(Icons.check_circle, color: brandGreen) : null,
+              onTap: () => Navigator.of(sheet).pop(c['id']),
+            ),
+          ListTile(
+            title: const T('Haijapangwa'),
+            trailing: current == null ? const Icon(Icons.check_circle, color: brandGreen) : null,
+            onTap: () => Navigator.of(sheet).pop(0),
+          ),
+        ]),
+      ),
+    );
+    if (picked == null) return;
+    try {
+      await _api.patch('products/${widget.productId}', {'category_id': picked == 0 ? null : picked});
+      _toast(tr('Aina imewekwa.'));
+      _load();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
+  String get _categoryName {
+    final id = _p?['category_id'];
+    final c = _categories.where((c) => c['id'] == id);
+    return c.isNotEmpty ? '${c.first['name']}' : (id == null ? tr('Haijapangwa') : '…');
+  }
 
   Future<void> _editReorderLevel() async {
     final units = _units;
@@ -92,6 +151,26 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
 
   /// Remove stock that isn't on the shelf any more: damaged, lost, expired,
   /// returned. Always with a reason; the owner sees it in the history.
+  /// Futa: the product (all its stock) or one batch. Deleted at once by
+  /// someone allowed to approve; anyone else's request waits for approval.
+  Future<void> _delete({Map<String, dynamic>? batch}) async {
+    final done = await askDeleteStock(
+      context,
+      api: _api,
+      canApprove: _can(Perm.approveDeletions),
+      productId: widget.productId,
+      productName: widget.name,
+      batch: batch,
+      quantityText: batch == null ? null : describeStock(asInt(batch['quantity']), _units),
+    );
+    if (!done || !mounted) return;
+    if (batch == null && _can(Perm.approveDeletions)) {
+      Navigator.of(context).pop(true); // the product is gone from the list
+    } else {
+      _load();
+    }
+  }
+
   Future<void> _adjust({Map<String, dynamic>? expiredBatch}) async {
     final batches = ((_p!['batches'] as List?) ?? const []).cast<Map<String, dynamic>>();
     if (batches.isEmpty) {
@@ -124,7 +203,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                       Text(_error!, style: const TextStyle(color: dangerRed)),
                       TextButton(onPressed: _load, child: const T('Jaribu tena')),
                     ])
-                  : const CircularProgressIndicator(),
+                  : const AfyaLoader(),
             )
           : RefreshIndicator(
               onRefresh: _load,
@@ -147,6 +226,13 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                     icon: const Icon(Icons.tune),
                     label: const T('Rekebisha hisa (imeharibika, imepotea…)'),
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: cardColor),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: () => _delete(),
+                    icon: const Icon(Icons.delete_forever_outlined),
+                    label: T(_can(Perm.approveDeletions) ? 'Futa bidhaa hii' : 'Omba kufuta bidhaa hii'),
+                    style: TextButton.styleFrom(foregroundColor: dangerRed),
                   ),
                 ],
               ),
@@ -201,6 +287,16 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
               child: Text(tr('Kiwango cha kuagiza: :a', {'a': describeStock(reorder, units)}),
                   style: const TextStyle(fontSize: 13, color: mutedText)),
             ),
+            if (_can(Perm.editPrices)) const Icon(Icons.edit_outlined, size: 18, color: mutedText),
+          ]),
+        ),
+      ),
+      InkWell(
+        onTap: _can(Perm.editPrices) ? _editCategory : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Expanded(child: Text(tr('Aina: :a', {'a': _categoryName}), style: const TextStyle(fontSize: 13, color: mutedText))),
             if (_can(Perm.editPrices)) const Icon(Icons.edit_outlined, size: 18, color: mutedText),
           ]),
         ),
@@ -345,6 +441,12 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
             ),
             Text(describeStock(asInt(batches[i]['quantity']), units),
                 style: TextStyle(fontWeight: FontWeight.w800, color: batches[i]['is_expired'] == true ? dangerRed : null)),
+            // A batch recorded by mistake: deleted with approval.
+            IconButton(
+              tooltip: tr('Futa batch hii'),
+              onPressed: () => _delete(batch: batches[i]),
+              icon: const Icon(Icons.delete_outline, color: mutedText),
+            ),
           ]),
         ),
     ]);
@@ -365,6 +467,10 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
     'adjustment': ('Marekebisho', '!'),
     'expired': ('Imeisha muda', '!'),
     'return_to_supplier': ('Imerudishwa kwa msambazaji', '!'),
+    'deleted': ('Imefutwa', '!'),
+    'transfer_out': ('Imehamishiwa duka jingine', '−'),
+    'transfer_in': ('Imetoka duka jingine', '+'),
+    'transfer_return': ('Uhamisho umerudi', '+'),
   };
 
   Widget _historyCard() {

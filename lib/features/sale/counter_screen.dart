@@ -43,6 +43,12 @@ class _CounterScreenState extends State<CounterScreen> {
 
   /// The Haraka tiles: (product, the unit it usually sells in).
   List<(Product, String?)> _haraka = [];
+
+  /// Aina (shelves): Dawa, Mama na mtoto, Vipodozi… With the search box empty,
+  /// tapping one lists that shelf's products. null = Haraka + everything.
+  List<Map<String, dynamic>> _shelves = [];
+  int _unsorted = 0;
+  String? _shelf;
   String? _part; // asubuhi | mchana | jioni
 
   ApiClient get _api => widget.session.api;
@@ -57,6 +63,7 @@ class _CounterScreenState extends State<CounterScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _search('');
       _loadHaraka();
+      _loadShelves();
     });
   }
 
@@ -118,13 +125,57 @@ class _CounterScreenState extends State<CounterScreen> {
     _debounce = Timer(const Duration(milliseconds: 300), () => _search(text));
   }
 
+  Future<void> _loadShelves() async {
+    try {
+      final r = await _api.get('product-categories') as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _shelves = (r['categories'] as List).cast<Map<String, dynamic>>().where((c) => ((c['products'] as num?) ?? 0) > 0).toList();
+        _unsorted = (r['unsorted'] as num?)?.toInt() ?? 0;
+      });
+    } on ApiException {
+      // No shelves: the counter works as before.
+    }
+  }
+
+  void _pickShelf(String? id) {
+    setState(() => _shelf = id);
+    _search('');
+  }
+
+  Widget _buildShelves() {
+    final chips = <(String?, String)>[
+      (null, tr('Zote')),
+      for (final c in _shelves) ('${c['id']}', '${c['name']}'),
+      if (_unsorted > 0) ('none', tr('Haijapangwa')),
+    ];
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        children: [
+          for (final (id, label) in chips)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(label: Text(label), selected: _shelf == id, onSelected: (_) => _pickShelf(id)),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _search(String query) async {
     setState(() {
       _searching = true;
       _searchError = null;
     });
     try {
-      final data = await _api.get('products', query: {'q': query.trim()}) as List<dynamic>;
+      final data = await _api.get('products', query: {
+        'q': query.trim(),
+        // A shelf only while the box is empty: typing searches everything.
+        if (query.trim().isEmpty && _shelf != null) 'category': _shelf!,
+      }) as List<dynamic>;
       if (!mounted) return;
       // Ignore late answers for an old query (the user kept typing).
       if (query != _searchController.text) return;
@@ -262,7 +313,8 @@ class _CounterScreenState extends State<CounterScreen> {
               listenable: _cart,
               builder: (context, _) => Column(children: [
                 // Haraka only while not searching: typing means you know what you want.
-                if (_searchController.text.trim().isEmpty && _haraka.isNotEmpty) _buildHaraka(),
+                if (_searchController.text.trim().isEmpty && _shelves.isNotEmpty) _buildShelves(),
+                if (_searchController.text.trim().isEmpty && _shelf == null && _haraka.isNotEmpty) _buildHaraka(),
                 Expanded(child: _buildResults()),
               ]),
             ),

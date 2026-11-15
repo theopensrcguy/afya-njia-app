@@ -136,3 +136,28 @@ class _TextDialogState extends State<_TextDialog> {
     );
   }
 }
+
+/// Yes / no, said plainly. Returns true only on "yes".
+Future<bool?> confirmDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirm,
+  bool danger = false,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(d).pop(false), child: Text(tr('Ghairi'))),
+        FilledButton(
+          onPressed: () => Navigator.of(d).pop(true),
+          style: danger ? FilledButton.styleFrom(backgroundColor: dangerRed) : null,
+          child: Text(confirm),
+        ),
+      ],
+    ),
+  );
+}

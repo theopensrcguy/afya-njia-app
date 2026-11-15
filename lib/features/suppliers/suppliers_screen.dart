@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
@@ -68,7 +69,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         label: const T('Msambazaji mpya'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 96), children: [
@@ -160,7 +161,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         actions: [if (s != null) TextButton(onPressed: _edit, child: const T('Hariri'))],
       ),
       body: s == null
-          ? Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator())
+          ? Center(child: _error != null ? Text(_error!) : const AfyaLoader())
           : ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 24), children: [
               Container(
                 padding: const EdgeInsets.all(16),

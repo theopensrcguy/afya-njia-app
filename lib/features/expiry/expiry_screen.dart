@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
@@ -86,7 +87,7 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
     return Scaffold(
       appBar: AppBar(title: const T('Muda wa kuisha')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : _error != null
               ? Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [

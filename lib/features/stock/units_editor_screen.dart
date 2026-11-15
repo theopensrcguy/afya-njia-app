@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
-import '../../core/dialogs.dart';
 import '../../core/units.dart';
+import 'unit_picker.dart';
 import '../../models/product.dart';
 import '../../core/i18n.dart';
 
@@ -131,44 +131,16 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
     );
   }
 
-  /// The standard units, minus ones already used on another row, plus "Nyingine…".
+  /// The standard units, then the shop's own, then "+ Kipimo kingine…" (typed once, offered from then on).
+  /// Fixing a name recorded by mistake keeps the stock: it is counted in the smallest unit.
   Future<void> _pickName(int i) async {
     final taken = {for (var j = 0; j < _rows.length; j++) if (j != i) _rows[j].name};
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: cardColor,
-      builder: (sheet) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            for (final (name, label) in standardUnits)
-              if (!taken.contains(name))
-                ListTile(
-                  title: Text(label),
-                  trailing: _rows[i].name == name ? const Icon(Icons.check, color: brandGreen) : null,
-                  onTap: () => Navigator.of(sheet).pop(name),
-                ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const T('Nyingine…'),
-              subtitle: const T('Kama haipo kwenye orodha'),
-              onTap: () => Navigator.of(sheet).pop(''),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    var name = picked;
-    if (name.isEmpty) {
-      final typed = await askText(context, title: tr('Kipimo kingine'), label: tr('Jina la kipimo'), hint: tr('mfano: roli'), required: true);
-      if (typed == null || !mounted) return;
-      name = normalUnitName(typed);
-      if (taken.contains(name)) {
-        setState(() => _error = tr('":name" tayari kipo.', {'name': name}));
-        return;
-      }
+    final picked = await pickUnitName(context, api: widget.api, title: i == 0 ? tr('Kipimo cha hisa') : tr('Kipimo'));
+    if (picked == null || picked.isEmpty || !mounted) return;
+    final name = picked;
+    if (taken.contains(name)) {
+      setState(() => _error = tr('":name" tayari kipo.', {'name': name}));
+      return;
     }
     setState(() {
       _rows[i].name = name;

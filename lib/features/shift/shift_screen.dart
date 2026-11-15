@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
@@ -142,7 +143,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
     return Scaffold(
       appBar: AppBar(title: const T('Zamu na fedha')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(

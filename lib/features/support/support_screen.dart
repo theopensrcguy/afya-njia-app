@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
@@ -79,7 +80,7 @@ class _SupportScreenState extends State<SupportScreen> {
         label: const T('Omba msaada'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 96), children: [
@@ -280,7 +281,7 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
         ],
       ),
       body: t == null
-          ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator())
+          ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const AfyaLoader())
           : Column(children: [
               Expanded(
                 child: RefreshIndicator(

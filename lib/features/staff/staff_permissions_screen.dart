@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
@@ -86,7 +87,7 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
         label: const T('Ongeza mfanyakazi'),
       ),
       body: _data == null
-          ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const CircularProgressIndicator())
+          ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const AfyaLoader())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(

@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/i18n.dart';
 import '../../core/money.dart';
+import '../customers/customer_consent.dart';
 
 /// "Deni la nani?": pick the customer who takes (part of) the sale on credit,
 /// or add a new one. A new customer added by someone who can't approve waits
 /// for the owner (the server decides; the sheet just says so).
 ///
 /// Returns the chosen customer {id, name, credit_status, available, owes}, or null.
-Future<Map<String, dynamic>?> pickCustomer(BuildContext context, {required ApiClient api, required bool canApprove}) {
+Future<Map<String, dynamic>?> pickCustomer(BuildContext context, {required ApiClient api, required bool canApprove, bool forCredit = true}) {
   return showModalBottomSheet<Map<String, dynamic>>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => _CustomerPicker(api: api, canApprove: canApprove),
+    builder: (_) => _CustomerPicker(api: api, canApprove: canApprove, forCredit: forCredit),
   );
 }
 
@@ -39,10 +41,13 @@ Future<Map<String, dynamic>?> addCustomer(BuildContext context, {required ApiCli
 }
 
 class _CustomerPicker extends StatefulWidget {
-  const _CustomerPicker({required this.api, required this.canApprove});
+  const _CustomerPicker({required this.api, required this.canApprove, required this.forCredit});
 
   final ApiClient api;
   final bool canApprove;
+
+  /// false = a customer for an ordinary sale: debts are not the point.
+  final bool forCredit;
 
   @override
   State<_CustomerPicker> createState() => _CustomerPickerState();
@@ -81,7 +86,7 @@ class _CustomerPickerState extends State<_CustomerPicker> {
     final q = _q.text.trim().toLowerCase();
     final digits = q.replaceAll(RegExp(r'\D'), '');
     return _all.where((c) {
-      if (q.isEmpty) return c['credit_status'] != 'blocked';
+      if (q.isEmpty) return !widget.forCredit || c['credit_status'] != 'blocked';
       final phone = '${c['phone'] ?? ''}';
       return '${c['name']}'.toLowerCase().contains(q) || (digits.length >= 3 && phone.contains(digits.replaceFirst(RegExp(r'^0'), '')));
     }).toList();
@@ -103,7 +108,7 @@ class _CustomerPickerState extends State<_CustomerPicker> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(children: [
-              const Expanded(child: T('Deni la nani?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+              Expanded(child: T(widget.forCredit ? 'Deni la nani?' : 'Mteja ni nani?', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
               TextButton.icon(onPressed: _new, icon: const Icon(Icons.person_add_alt_1_outlined), label: const T('Mteja mpya')),
             ]),
           ),
@@ -118,15 +123,15 @@ class _CustomerPickerState extends State<_CustomerPicker> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: AfyaLoader())
                 : _error != null
                     ? Center(child: Text(_error!, style: const TextStyle(color: dangerRed)))
                     : ListView(children: [
                         for (final c in list)
                           ListTile(
                             title: Text('${c['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text(customerLine(c),
-                                style: TextStyle(color: c['credit_status'] == 'blocked' ? dangerRed : mutedText)),
+                            subtitle: Text(widget.forCredit ? customerLine(c) : [phoneText(c['phone']), if (c['consent'] == true) tr('amekubali')].where((x) => x.isNotEmpty).join(' · '),
+                                style: TextStyle(color: widget.forCredit && c['credit_status'] == 'blocked' ? dangerRed : mutedText)),
                             onTap: () => Navigator.of(context).pop(c),
                           ),
                         ListTile(

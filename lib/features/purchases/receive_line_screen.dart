@@ -11,6 +11,7 @@ import '../../core/money.dart';
 import '../../core/scan_once.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
+import '../stock/unit_picker.dart';
 import 'new_product.dart';
 import 'new_product_screen.dart';
 import 'receive_line.dart';
@@ -169,6 +170,23 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     }
   }
 
+  /// "+ Bidhaa mpya": the name first. The shop's products and the catalogue are
+  /// searched with it (a correct catalogue name beats a typed one, and a product
+  /// the shop already has must not be made twice); with no match, straight to the form.
+  Future<void> _newProductButton() async {
+    final name = await askText(context,
+        title: tr('Bidhaa mpya'), label: tr('Jina la dawa (generic)'), hint: tr('mfano Paracetamol 500mg'), initial: _search.text.trim(), required: true);
+    final q = (name ?? '').trim();
+    if (q.length < 2 || !mounted) return;
+    _search.text = q;
+    await _runSearch(q);
+    if (!mounted) return;
+    if (_results.isEmpty && _catalogue.isEmpty) return _newProduct(typed: q);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(tr('Zinazofanana zimepatikana: chagua hapa chini. Kama sio, bonyeza "Ongeza :a kama bidhaa mpya" mwishoni.', {'a': q})),
+    ));
+  }
+
   /// A product arriving for the first time: from the catalogue, or typed.
   Future<void> _newProduct({Map<String, dynamic>? item, Map<String, dynamic>? variant, String? typed}) async {
     FocusScope.of(context).unfocus();
@@ -271,17 +289,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   }
 
   Future<void> _otherPack() async {
-    final name = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: cardColor,
-      builder: (sheet) => SafeArea(
-        child: ListView(shrinkWrap: true, children: [
-          for (final (n, label) in standardUnits)
-            ListTile(title: Text(label), onTap: () => Navigator.of(sheet).pop(n)),
-        ]),
-      ),
-    );
+    final name = await pickUnitName(context, api: widget.api, title: tr('Kimekuja kwa kifungashio gani?'));
     if (name == null || !mounted) return;
     final base = unitLabel(_product!.units.first.name, 2);
     final size = await askText(context,
@@ -376,6 +384,14 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           children: [
+            // Easy to find: a product the shop never had (generic name, brand, units, prices).
+            OutlinedButton.icon(
+              onPressed: _newProductButton,
+              icon: const Icon(Icons.add_box_outlined),
+              label: const T('Bidhaa mpya (haipo dukani)'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+            ),
+            const SizedBox(height: 4),
             // New products already on this delivery (a second batch of one).
             if (widget.drafts.isNotEmpty) ...[
               _section(tr('MPYA KWENYE MZIGO HUU')),

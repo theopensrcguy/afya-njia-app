@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
@@ -11,7 +12,10 @@ import '../../core/session.dart';
 import '../auth/change_pin_screen.dart';
 import '../devices/devices_screen.dart';
 import '../credit/madeni_screen.dart';
+import '../customers/customers_screen.dart';
 import '../expenses/matumizi_screen.dart';
+import '../transfers/my_shops_screen.dart';
+import '../transfers/transfers_screen.dart';
 import '../expiry/expiry_screen.dart';
 import '../bulk/bulk_entry_screen.dart';
 import '../orders/reorder_screen.dart';
@@ -126,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         bottom: false,
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: AfyaLoader())
             : RefreshIndicator(
                 onRefresh: _load,
                 child: ListView(
@@ -717,6 +721,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const T('Matumizi'),
                 subtitle: const T('Kodi, umeme, mishahara…'),
                 onTap: () => go(sheet, MatumiziScreen(session: widget.session)),
+              ),
+            if (_can(Perm.viewCustomers))
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const T('Wateja'),
+                subtitle: const T('Historia yao, na kuwakumbusha kurudia dawa'),
+                onTap: () => go(sheet, CustomersScreen(session: widget.session)),
+              ),
+            if (_can(Perm.viewStock) && (_can(Perm.transferStock) || _can(Perm.approveTransfers)))
+              ListTile(
+                leading: const Icon(Icons.swap_horiz_rounded),
+                title: const T('Uhamisho wa hisa'),
+                subtitle: const T('Hamisha hisa kwenda duka jingine, au pokea'),
+                onTap: () => go(sheet, TransfersScreen(session: widget.session)),
+              ),
+            if (widget.session.user!.isOwner)
+              ListTile(
+                leading: const Icon(Icons.storefront_rounded),
+                title: const T('Maduka yangu'),
+                subtitle: const T('Badili duka bila kutoka'),
+                onTap: () => go(sheet, MyShopsScreen(session: widget.session)),
               ),
             if (_can(Perm.manageDevices))
               ListTile(

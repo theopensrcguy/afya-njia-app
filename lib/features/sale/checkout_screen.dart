@@ -9,6 +9,7 @@ import '../../core/format.dart' show paymentLabels;
 import '../../core/money.dart';
 import '../../core/units.dart';
 import '../credit/customer_picker.dart';
+import '../customers/customer_consent.dart';
 import 'cart.dart';
 import 'quantity_dialog.dart';
 import '../../core/i18n.dart';
@@ -132,10 +133,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _showReceipt(Map<String, dynamic> sale) {
+    // A customer who agreed (and has a phone) may be reminded before the medicine runs out.
+    final who = sale['customer_id'] != null && customerAgreed(_cart.customer) && '${_cart.customer!['phone'] ?? ''}'.isNotEmpty ? _cart.customer : null;
+    final seen = <int>{};
+    final refill = [for (final l in _cart.lines) if (seen.add(l.product.id)) (productId: l.product.id, name: l.product.name)];
+    String? remindOn;
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (receipt) => AlertDialog(
+      builder: (receipt) => StatefulBuilder(builder: (receipt, setReceipt) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: brandGreen, size: 48),
         title: const T('Mauzo yamekamilika'),
         content: Column(
@@ -150,10 +156,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               for (final p in (sale['payments'] as List).cast<Map<String, dynamic>>())
                 Text('${paymentLabels[p['method']] ?? p['method']}: ${formatTsh(p['amount'] as int)}', style: const TextStyle(color: mutedText)),
             ],
+            if (remindOn != null) ...[
+              const SizedBox(height: 10),
+              Text(tr('Kikumbusho kimewekwa: atakumbushwa :d.', {'d': dayText(remindOn)}), textAlign: TextAlign.center, style: const TextStyle(color: brandGreen)),
+            ],
           ],
         ),
         actionsOverflowButtonSpacing: 8,
         actions: [
+          if (who != null && remindOn == null)
+            OutlinedButton.icon(
+              onPressed: () async {
+                final on = await askRefillReminder(receipt, api: widget.api, customer: who, saleId: (sale['id'] as num).toInt(), lines: refill);
+                if (on != null && receipt.mounted) setReceipt(() => remindOn = on);
+              },
+              icon: const Icon(Icons.notifications_active_outlined, size: 18),
+              label: const T('Mkumbushe kurudia dawa'),
+            ),
           OutlinedButton.icon(
             onPressed: () => _shareReceipt(sale, receipt),
             icon: const Icon(Icons.share_outlined, size: 18),
@@ -161,7 +180,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           FilledButton(onPressed: () => Navigator.of(receipt).pop(), child: const T('Mteja anayefuata')),
         ],
-      ),
+      )),
     );
   }
 
@@ -363,7 +382,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 ),
               ],
-              if (_cart.creditDue > 0) _buildCustomer(),
+              _cart.creditDue > 0 ? _buildCustomer() : _buildOptionalCustomer(),
               const SizedBox(height: 8),
               SizedBox(
                 height: 56,
@@ -382,6 +401,50 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// No credit: a customer is optional, and goes on the sale only if they agree
+  /// (their history, and a reminder before the medicine runs out).
+  Widget _buildOptionalCustomer() {
+    final c = _cart.customer;
+    final agreed = customerAgreed(c);
+    Future<void> ask() async {
+      final cur = _cart.customer;
+      if (cur == null) return;
+      final yes = await askCustomerConsent(context, api: widget.api, customer: cur);
+      if (yes != null && _cart.customer?['id'] == cur['id']) _cart.setCustomer({...cur, ...yes});
+    }
+
+    if (c == null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: _cart.canEdit
+              ? () async {
+                  final picked = await pickCustomer(context, api: widget.api, canApprove: widget.canApproveCredit, forCredit: false);
+                  if (picked == null) return;
+                  _cart.setCustomer(picked);
+                  if (!customerAgreed(picked) && mounted) await ask();
+                }
+              : null,
+          icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+          label: const T('Weka mteja (si lazima)'),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(border: Border.all(color: const Color(0xFFDDE5E0)), borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Icon(agreed ? Icons.verified_user_outlined : Icons.person_outline, color: agreed ? brandGreen : null),
+        title: Text('${c['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(agreed ? tr('Amekubali: mauzo haya yataingia kwenye historia yake.') : tr('Hajakubali: mauzo haya hayatahifadhiwa kwa jina lake.')),
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (!agreed) TextButton(onPressed: _cart.canEdit ? ask : null, child: const T('Amekubali?')),
+          IconButton(onPressed: _cart.canEdit ? () => _cart.setCustomer(null) : null, icon: const Icon(Icons.close), tooltip: tr('Ondoa')),
+        ]),
       ),
     );
   }

@@ -55,7 +55,8 @@ class Cart extends ChangeNotifier {
   bool creditAllowed = false;
   List<String> get allowedMethods => [for (final m in methods) if (m != 'credit' || creditAllowed) m];
 
-  /// Who takes the credit part: {id, name, credit_status, available, owes} from GET customers.
+  /// The customer: who takes the credit part, or (on any sale) someone who agreed to be kept
+  /// on record: {id, name, phone, consent, credit_status, available, owes} from GET customers.
   Map<String, dynamic>? customer;
 
   void setCustomer(Map<String, dynamic>? c) {
@@ -289,6 +290,7 @@ class Cart extends ChangeNotifier {
         else
           'payment_method': paymentMethod,
         'discount': discount,
-        if (creditDue > 0 && customer != null) 'customer_id': customer!['id'],
+        // On credit the customer is needed; otherwise they go on the sale only if they agreed to be kept on record.
+        if (customer != null && (creditDue > 0 || customer!['consent'] == true)) 'customer_id': customer!['id'],
       };
 }

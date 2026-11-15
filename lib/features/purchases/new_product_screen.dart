@@ -8,6 +8,7 @@ import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
+import '../stock/unit_picker.dart';
 import 'new_product.dart';
 import '../../core/i18n.dart';
 
@@ -61,6 +62,10 @@ class _NewProductScreenState extends State<NewProductScreen> {
   late String _baseUnit;
   late List<DraftUnit> _packs; // everything bigger than the base unit
   int _reorderPacks = 0; // in the first pack (or base) unit
+
+  /// Aina: chosen here, or left to the catalogue's guess.
+  List<Map<String, dynamic>> _categories = [];
+  int? _categoryId;
   String? _error;
 
   bool get _fromCatalogue => widget.item != null || (widget.initial?.catalogueItemId != null);
@@ -68,6 +73,10 @@ class _NewProductScreenState extends State<NewProductScreen> {
   @override
   void initState() {
     super.initState();
+    _categoryId = widget.initial?.categoryId;
+    widget.api.get('product-categories').then((r) {
+      if (mounted) setState(() => _categories = ((r as Map<String, dynamic>)['categories'] as List).cast<Map<String, dynamic>>());
+    }).catchError((_) {});
     final d = widget.initial;
     if (d != null) {
       _baseUnit = d.units.first.name;
@@ -166,20 +175,8 @@ class _NewProductScreenState extends State<NewProductScreen> {
     });
   }
 
-  Future<String?> _unitSheet(String title) => showModalBottomSheet<String>(
-        context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        backgroundColor: cardColor,
-        builder: (sheet) => SafeArea(
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800))),
-              for (final (n, label) in standardUnits) ListTile(title: Text(label), onTap: () => Navigator.of(sheet).pop(n)),
-            ]),
-          ),
-        ),
-      );
+  /// Standard units, the shop's own, or "+ Kipimo kingine" (typed once, offered from then on).
+  Future<String?> _unitSheet(String title) => pickUnitName(context, api: widget.api, title: title);
 
   // ------------------------------------------------------------- finish
 
@@ -213,8 +210,10 @@ class _NewProductScreenState extends State<NewProductScreen> {
       d
         ..name = name
         ..brandName = _brand.text.trim()
+        ..genericName = d.offCatalogue ? name : null
         ..units = units
-        ..reorderLevel = _reorderPacks * firstPack;
+        ..reorderLevel = _reorderPacks * firstPack
+        ..categoryId = _categoryId;
       Navigator.of(context).pop(NewProductChoice.draft(d));
       return;
     }
@@ -224,8 +223,11 @@ class _NewProductScreenState extends State<NewProductScreen> {
       variant: widget.variant == null ? null : '${widget.variant!['label']}',
       source: widget.item == null ? null : '${widget.item!['source']}',
       brandName: _brand.text.trim(),
+      // Off the catalogue, what was typed is the medicine's (generic) name.
+      genericName: widget.item == null ? name : null,
       units: units,
       reorderLevel: _reorderPacks * firstPack,
+      categoryId: _categoryId,
     )));
   }
 
@@ -277,7 +279,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
                 TextField(
                   controller: _brand,
                   decoration: InputDecoration(
-                    labelText: tr('Jina la kibiashara (si lazima)'),
+                    labelText: tr('Jina la kampuni / brand (si lazima)'),
                     hintText: tr('mfano: Amoxil'),
                     helperText: tr('Wateja wakiuliza kwa jina hili, utafutaji utaipata.'),
                   ),
@@ -286,6 +288,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
               _unitsCard(),
               widget.canPrice ? _pricesCard() : _noPriceCard(),
               _reorderCard(),
+              if (_categories.isNotEmpty) _categoryCard(),
               if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
             ],
           ),
@@ -335,7 +338,11 @@ class _NewProductScreenState extends State<NewProductScreen> {
       TextField(
         controller: _name,
         textCapitalization: TextCapitalization.sentences,
-        decoration: InputDecoration(labelText: tr('Jina la bidhaa'), helperText: tr('Mwenye duka ataliona na anaweza kulisahihisha.')),
+        decoration: InputDecoration(
+          labelText: tr('Jina la dawa (generic)'),
+          hintText: tr('mfano Paracetamol 500mg'),
+          helperText: tr('Mwenye duka ataliona na anaweza kulisahihisha.'),
+        ),
       ),
     ]);
   }
@@ -466,6 +473,23 @@ class _NewProductScreenState extends State<NewProductScreen> {
           ),
         ]),
       );
+
+  /// Aina: optional. Left empty, a catalogue medicine goes to Dawa, a supply to Vifaa tiba.
+  Widget _categoryCard() {
+    return _card([
+      const T('Aina', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+      const T('Rafu ya kaunta na ripoti (si lazima)', style: TextStyle(fontSize: 12, color: mutedText)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final c in _categories)
+          ChoiceChip(
+            label: Text('${c['name']}'),
+            selected: _categoryId == c['id'],
+            onSelected: (on) => setState(() => _categoryId = on ? c['id'] as int : null),
+          ),
+      ]),
+    ]);
+  }
 
   Widget _reorderCard() {
     final unit = _packs.isEmpty ? _baseUnit : _packs.first.name;

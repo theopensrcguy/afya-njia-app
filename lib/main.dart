@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/loader.dart';
 import 'core/api_client.dart';
 import 'core/brand.dart';
 import 'core/i18n.dart';
@@ -54,7 +55,8 @@ class AfyaNjiaApp extends StatelessWidget {
       builder: (context, child) => GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-        child: child,
+        // The loading bar and the Afya Njia loader, over every screen.
+        child: ActivityLayer(child: child ?? const SizedBox()),
       ),
       theme: ThemeData(
         useMaterial3: true,
@@ -83,7 +85,7 @@ class AfyaNjiaApp extends StatelessWidget {
   /// Which screen: loading, sign-in, choose-your-own-PIN, or home.
   Widget _gate() {
     if (!session.restored) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: AfyaLoader()));
     }
     if (!session.isLoggedIn) return PinScreen(session: session);
     // A PIN someone else set (new staff, owner reset) is only for getting

@@ -101,6 +101,21 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// "Maduka yangu": open another shop of the same owner on this phone,
+  /// without signing out. The server trusts this phone there (the accounts
+  /// were linked with that shop's code and its owner's PIN).
+  Future<void> switchShop(int userId) async {
+    final data = await api.post('my-shops/$userId/switch', {
+      'device_uid': await deviceUid(),
+      'device_name': kIsWeb ? 'Kivinjari (${user?.name ?? ''})' : 'Simu (${user?.name ?? ''})',
+    }) as Map<String, dynamic>;
+    api.token = data['token'] as String;
+    user = Staff.fromJson(data['user'] as Map<String, dynamic>);
+    await _storage.write(key: _tokenKey, value: api.token);
+    await _storage.write(key: _userKey, value: jsonEncode(user!.toJson()));
+    notifyListeners();
+  }
+
   /// Just signed in. Picked a language on the sign-in screen? That becomes this
   /// person's choice (saved on the server, so the web follows). Otherwise the
   /// app switches to the language they chose before, on any phone or the web.

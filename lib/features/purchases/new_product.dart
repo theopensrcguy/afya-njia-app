@@ -30,8 +30,13 @@ class NewProductDraft {
     this.variant,
     this.source,
     this.brandName,
+    this.genericName,
     this.reorderLevel = 0,
+    this.categoryId,
   });
+
+  /// Aina (shelf); null = the server guesses from the catalogue (or leaves it unsorted).
+  int? categoryId;
 
   /// As it will be called. From the catalogue: shown, not editable.
   String name;
@@ -43,6 +48,9 @@ class NewProductDraft {
   /// tmda | nemlit | supplies, for the "KUTOKA KATALOGI" label.
   final String? source;
   String? brandName;
+
+  /// Off the catalogue: the typed name, kept as the medicine's generic name.
+  String? genericName;
 
   /// Smallest first; exactly one with baseQuantity 1 (stock is counted in it).
   List<DraftUnit> units;
@@ -70,7 +78,9 @@ class NewProductDraft {
         if (variant != null) 'variant': variant,
         if (catalogueItemId == null) 'name': name,
         if (brandName != null && brandName!.trim().isNotEmpty) 'brand_name': brandName!.trim(),
+        if (catalogueItemId == null && genericName != null && genericName!.trim().isNotEmpty) 'generic_name': genericName!.trim(),
         'reorder_level': reorderLevel,
+        if (categoryId != null) 'category_id': categoryId,
         'units': [for (final u in units) u.toJson()],
       };
 }
