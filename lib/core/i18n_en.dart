@@ -1204,4 +1204,7 @@ const en = <String, String>{
   'Malipo yamepokelewa. Asante!': 'Payment received. Thank you!',
   'Duka limelipiwa mpaka :d.': 'The shop is paid until :d.',
   'duka hili': 'this shop',
+  // v0.31: phone numbers
+  'Namba ya :country iwe na tarakimu :n baada ya +:code.': 'A :country number has :n digits after +:code.',
+  'Namba hii si ya simu ya mkononi ya :country.': 'This isn\'t a :country mobile number.',
 };

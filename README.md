@@ -257,3 +257,12 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
   - then "Angalia simu yako" while it checks the status every 3 s;
   - then success (paid until …) or failure (with the reason, and "Jaribu tena").
 - `Staff.canPayOnline` (from `GET me`). The home banner's button is **Lipia sasa** when online payment is available. **Maduka yangu** has **Lipia** on each shop the owner can pay for.
+
+## Phone numbers (v0.31)
+- `core/phone_field.dart`: `PhoneField(controller: …)`.
+  - A country code dropdown, then **digits only, up to that country's length** (Tanzania +255: 9), grouped `712 345 678`.
+  - The leading 0 is dropped, a pasted `+254…` switches the country, and there is a hint when the number is too short or isn't a mobile number.
+  - The controller holds the whole number for the server (`255712345678`).
+  - `phoneProblem(full)` reports what's wrong; `parsePhone(raw)` splits a number into country and digits.
+- Used on: sign in (`pin_screen.dart`, white card), Umesahau PIN, the customer consent and new-customer forms, suppliers (phone and WhatsApp), staff profiles (own and emergency phone), and the Lipia dialog.
+- Shop location from the phone's GPS is not in the app yet (it needs the `geolocator` package and location permissions). For now owners set it on the web, and Saola sets it on its visit.

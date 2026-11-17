@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/i18n.dart';
+import '../../core/phone_field.dart';
 
 /// Add or edit a supplier. Only the name is needed; everything else is
 /// filled in when someone has it, and helps later (WhatsApp orders, calls,
@@ -67,7 +68,15 @@ class _SupplierFormScreenState extends State<SupplierFormScreen> {
   }
 
   Widget _field(String key, String label, {String? hint, String? helper, TextInputType? type, int lines = 1, IconData? icon}) =>
-      Padding(
+      type == TextInputType.phone
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                PhoneField(controller: _c[key]!, label: label, helper: helper, icon: icon),
+                if (_fieldErrors[key] != null) Text(_fieldErrors[key]!, style: const TextStyle(color: dangerRed, fontSize: 12)),
+              ]),
+            )
+          : Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
           controller: _c[key],

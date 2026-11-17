@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/i18n.dart';
+import '../../core/phone_field.dart';
 
 /// Did this customer agree that the shop keeps what they buy and reminds them?
 bool customerAgreed(Map<String, dynamic>? c) => c != null && c['consent'] == true;
@@ -81,11 +82,7 @@ class _ConsentDialogState extends State<_ConsentDialog> {
           const T('Anaweza kusitisha wakati wowote. Kumbukumbu zake zinaonwa na wenye ruhusa tu, na ujumbe wa kikumbusho hautaji jina la dawa.',
               style: TextStyle(color: mutedText, fontSize: 13)),
           if (_needsPhone)
-            TextField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(labelText: tr('Simu ya mteja (ya kukumbushwa)'), hintText: '07XX XXX XXX'),
-            ),
+            PhoneField(controller: _phone, label: tr('Simu ya mteja (ya kukumbushwa)')),
           if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: dangerRed))),
         ]),
       ),

@@ -7,6 +7,7 @@ import '../../core/brand.dart';
 import '../../core/i18n.dart';
 import '../../core/loader.dart';
 import '../../core/money.dart';
+import '../../core/phone_field.dart';
 
 /// "Lipia kwa simu": choose the period and the network, then the payer's phone
 /// asks for their mobile money PIN; this window waits for the answer.
@@ -153,7 +154,7 @@ class _PayDialogState extends State<_PayDialog> {
                   ],
                   onChanged: (v) => setState(() => _operator = v),
                 ),
-                TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: tr('Namba itakayolipa'))),
+                PhoneField(controller: _phone, label: tr('Namba itakayolipa')),
                 if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: dangerRed))),
               ]),
             ),

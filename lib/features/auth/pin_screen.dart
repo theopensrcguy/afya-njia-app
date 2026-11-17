@@ -7,6 +7,7 @@ import '../../core/session.dart';
 import '../../models/staff.dart';
 import 'forgot_pin_screen.dart';
 import '../../core/i18n.dart';
+import '../../core/phone_field.dart';
 
 /// Sign in: who you are, then a 4-digit PIN.
 ///
@@ -77,7 +78,7 @@ class _PinScreenState extends State<PinScreen> {
     }
   }
 
-  bool get _phoneReady => _phone.text.replaceAll(RegExp(r'[^0-9]'), '').length >= 9;
+  bool get _phoneReady => _phone.text.isNotEmpty && phoneProblem(_phone.text) == null;
 
   void _tapDigit(String digit) {
     if (_signingIn || _pin.length >= _pinLength) return;
@@ -354,22 +355,18 @@ class _PinScreenState extends State<PinScreen> {
         const SizedBox(height: 6),
         const T('Namba yako ya simu na PIN', style: TextStyle(color: Colors.white70)),
         const SizedBox(height: 18),
-        TextField(
-          controller: _phone,
-          focusNode: _phoneFocus,
-          keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.done,
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]')), LengthLimitingTextInputFormatter(16)],
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: inkColor),
-          onChanged: (_) => setState(() => _error = null),
-          // Enter: on to the PIN (the keypad, or the keyboard's digits).
-          onSubmitted: (_) => _phoneFocus.unfocus(),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            hintText: '0712 345 678',
-            prefixIcon: const Icon(Icons.phone_outlined),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        // White card on the green: country code + the number's digits only (PhoneField).
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+          child: PhoneField(
+            controller: _phone,
+            focusNode: _phoneFocus,
+            textInputAction: TextInputAction.done,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: inkColor),
+            onChanged: (_) => setState(() => _error = null),
+            // Enter: on to the PIN (the keypad, or the keyboard's digits).
+            onSubmitted: (_) => _phoneFocus.unfocus(),
           ),
         ),
         _forgotButton(),

@@ -7,6 +7,7 @@ import '../../core/brand.dart';
 import '../../core/format.dart';
 import '../../core/session.dart';
 import '../../core/i18n.dart';
+import '../../core/phone_field.dart';
 
 /// Personal details of staff, built to protect them as much as the shop:
 /// optional, owner-only, encrypted on the server, NIDA masked (seeing it needs
@@ -307,7 +308,9 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
     }
   }
 
-  Widget _field(String key, String label, {TextInputType? type, String? hint, int lines = 1}) => Padding(
+  Widget _field(String key, String label, {TextInputType? type, String? hint, int lines = 1}) => type == TextInputType.phone
+      ? Padding(padding: const EdgeInsets.only(bottom: 12), child: PhoneField(controller: _fields[key]!, label: label))
+      : Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
           controller: _fields[key],

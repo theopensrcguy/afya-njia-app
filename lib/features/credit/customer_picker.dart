@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/i18n.dart';
 import '../../core/money.dart';
+import '../../core/phone_field.dart';
 import '../customers/customer_consent.dart';
 
 /// "Deni la nani?": pick the customer who takes (part of) the sale on credit,
@@ -209,7 +210,7 @@ class _NewCustomerDialogState extends State<_NewCustomerDialog> {
               child: T('Kila deni lako litasubiri idhini ya mmiliki.', style: TextStyle(color: mutedText)),
             ),
           TextField(controller: _name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: tr('Jina'))),
-          TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: tr('Simu (si lazima)'), hintText: '07XX XXX XXX')),
+          PhoneField(controller: _phone, label: tr('Simu (si lazima)')),
           if (widget.canApprove)
             TextField(
               controller: _limit,

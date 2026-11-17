@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/i18n.dart';
+import '../../core/phone_field.dart';
 
 /// "Umesahau PIN?": phone number → 6-digit code by SMS → new PIN.
 ///
@@ -92,6 +93,12 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
       });
 
   Widget _field(TextEditingController c, String label, {bool secret = false, int max = 4, String? hint, TextInputType? type}) {
+    if (type == TextInputType.phone) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: PhoneField(controller: c, label: label, onChanged: (_) => setState(() => _error = null)),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextField(
