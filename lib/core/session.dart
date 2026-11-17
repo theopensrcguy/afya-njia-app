@@ -145,7 +145,8 @@ class Session extends ChangeNotifier {
     if (!isLoggedIn) return;
     try {
       final fresh = Staff.fromJson(await api.get('me') as Map<String, dynamic>);
-      final changed = fresh.permissions.join(',') != user?.permissions.join(',') || fresh.mustChangePin != user?.mustChangePin;
+      final changed = fresh.permissions.join(',') != user?.permissions.join(',') || fresh.mustChangePin != user?.mustChangePin
+          || fresh.readOnly != user?.readOnly || fresh.otherShops != user?.otherShops;
       user = fresh;
       await _storage.write(key: _userKey, value: jsonEncode(fresh.toJson()));
       // Switched language on the web (or another phone)? Follow it here.

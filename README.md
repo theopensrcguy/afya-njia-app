@@ -246,3 +246,7 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
 - `my_shops_screen.dart` lists every shop on this number; a shop where they work is marked "mfanyakazi". **Fungua** switches. A worker's phone may first need that shop's owner to approve it: the server's message says so, with the code.
 - "Ongeza duka langu jingine" (owners only) is now for a shop of theirs registered under another number. A shop Saola registers on their number appears by itself.
 - Adding a worker whose number already uses Afya Njia: the app shows the server's message (they sign in with their own PIN, not the one typed).
+
+## New shop requests and subscriptions (v0.28)
+- `Staff.subscription` / `Staff.readOnly` (from `GET me`). The home screen shows the payment banner: to owners near the end and in grace, to everyone once the shop is read-only. Saving anything while read-only gets the server's message (`402 subscription_expired`).
+- **Maduka yangu:** shows the subscription line of each shop (owners), **Omba duka jipya** (name, location, licence number, note), the owner's requests with their status (Ghairi while waiting), and "Ongeza duka langu jingine" for a shop registered under another number.

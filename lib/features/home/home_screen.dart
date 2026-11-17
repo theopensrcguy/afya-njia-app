@@ -139,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _header(),
                     const SizedBox(height: 18),
                     if (_error != null) _errorBox(),
+                    if (_billingBanner() case final b?) b,
                     if (_shift == null) _noShiftBanner(),
                     _shopView ? _ownerTodayCard() : _helperTodayCard(),
                     const SizedBox(height: 14),
@@ -154,6 +155,37 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
       ),
       bottomNavigationBar: _bottomBar(),
+    );
+  }
+
+  /// Paying: the owner is warned near the end; everyone sees it when the shop is read-only.
+  Widget? _billingBanner() {
+    final user = widget.session.user!;
+    final s = user.subscription;
+    if (s == null || s['warn'] != true || !(user.isOwner || user.readOnly)) return null;
+    final bad = user.readOnly;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bad ? const Color(0xFFFDE8E6) : const Color(0xFFFFF4DC),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(bad ? Icons.lock_outline : Icons.info_outline, color: bad ? dangerRed : warnAmber),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${s['message'] ?? ''}', style: TextStyle(color: bad ? dangerRed : const Color(0xFF7A5300), fontWeight: FontWeight.w600)),
+            if (user.isOwner)
+              TextButton(
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                onPressed: () => _open(MyShopsScreen(session: widget.session)),
+                child: const T('Angalia malipo'),
+              ),
+          ]),
+        ),
+      ]),
     );
   }
 
