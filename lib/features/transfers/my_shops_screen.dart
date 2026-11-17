@@ -6,8 +6,10 @@ import '../../core/i18n.dart';
 import '../../core/loader.dart';
 import '../../core/session.dart';
 
-/// "Maduka yangu" (owners): the shops they own. Tap one to open it on this
-/// phone without signing out; add another with its code and its owner PIN.
+/// "Maduka yangu": every shop this person is in, with one number and one PIN
+/// (owner in one, worker in another…). Tap one to open it on this phone
+/// without signing out. Owners can bring a shop of theirs that was registered
+/// under another number onto this one (its code and its owner's PIN).
 class MyShopsScreen extends StatefulWidget {
   const MyShopsScreen({super.key, required this.session});
 
@@ -70,7 +72,7 @@ class _MyShopsScreenState extends State<MyShopsScreen> {
       body: _shops == null
           ? Center(child: _error != null ? Text(_error!, style: const TextStyle(color: dangerRed)) : const AfyaLoader())
           : ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 24), children: [
-              const T('Una duka zaidi ya moja? Liongeze hapa, kisha badili duka bila kutoka.', style: TextStyle(color: mutedText)),
+              const T('Maduka yote yaliyosajiliwa kwa namba yako. Unaingia mara moja kwa PIN yako, kisha unabadili duka bila kutoka.', style: TextStyle(color: mutedText)),
               const SizedBox(height: 12),
               for (final s in _shops!)
                 Container(
@@ -79,14 +81,22 @@ class _MyShopsScreenState extends State<MyShopsScreen> {
                   child: ListTile(
                     leading: Icon(Icons.storefront_rounded, color: s['current'] == true ? brandGreen : mutedText),
                     title: Text('${s['name']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text([if (s['location'] != null) '${s['location']}', '${s['shop_code']}'].join(' · ')),
+                    subtitle: Text([
+                      if (s['location'] != null) '${s['location']}',
+                      if (s['role'] == 'helper') tr('mfanyakazi') else '${s['shop_code']}',
+                    ].join(' · ')),
                     trailing: s['current'] == true
                         ? T('uko hapa', style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w800))
                         : FilledButton(onPressed: _busy ? null : () => _switch(s), child: const T('Fungua')),
                   ),
                 ),
               if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed)),
-              OutlinedButton.icon(onPressed: _add, icon: const Icon(Icons.add_business_outlined), label: const T('Ongeza duka langu jingine')),
+              if (widget.session.user!.isOwner) ...[
+                OutlinedButton.icon(onPressed: _add, icon: const Icon(Icons.add_business_outlined), label: const T('Ongeza duka langu jingine')),
+                const SizedBox(height: 6),
+                const T('Duka jipya linalosajiliwa na Saola kwa namba yako linaongezwa hapa lenyewe. Hiki ni kwa duka lako lililosajiliwa kwa namba nyingine.',
+                    style: TextStyle(color: mutedText, fontSize: 12)),
+              ],
             ]),
     );
   }
@@ -135,7 +145,7 @@ class _AddShopDialogState extends State<_AddShopDialog> {
       title: const T('Ongeza duka langu jingine'),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const T('Kuthibitisha ni lako: namba ya duka hilo na PIN ya mmiliki wake (akaunti yako ya duka hilo). Kisha utabadili duka bila kutoka, na maduka yako yataweza kuhamishiana hisa moja kwa moja.',
+          const T('Duka lako lililosajiliwa kwa namba nyingine. Kuthibitisha ni lako: namba ya duka hilo na PIN ya mmiliki wake. Litahamia namba yako na PIN yako; namba ile nyingine itaachwa huru. Maduka yako yataweza kuhamishiana hisa moja kwa moja.',
               style: TextStyle(fontSize: 13, color: mutedText)),
           TextField(controller: _code, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: tr('Namba ya duka'))),
           TextField(

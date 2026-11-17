@@ -736,7 +736,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 subtitle: const T('Hamisha hisa kwenda duka jingine, au pokea'),
                 onTap: () => go(sheet, TransfersScreen(session: widget.session)),
               ),
-            if (widget.session.user!.isOwner)
+            // Owners (to add a shop of theirs), and anyone whose number is in more than one shop.
+            if (widget.session.user!.isOwner || widget.session.user!.otherShops > 0)
               ListTile(
                 leading: const Icon(Icons.storefront_rounded),
                 title: const T('Maduka yangu'),

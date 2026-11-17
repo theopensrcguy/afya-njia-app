@@ -60,8 +60,10 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
         helper: tr('Ataingia nayo kwenye simu mpya au kompyuta'));
     if (!mounted) return;
     try {
-      await widget.session.api.post('staff', {'name': name, 'pin': pin, if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim()});
-      _toast(tr(':name ameongezwa. PIN hii ni ya muda: akiingia mara ya kwanza atachagua yake mwenyewe.', {'name': name}));
+      final r = await widget.session.api.post('staff', {'name': name, 'pin': pin, if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim()});
+      // Already uses Afya Njia (another shop): signs in with their own PIN, not this one.
+      final joined = r is Map && r['joined'] == true;
+      _toast(joined ? '${r['message']}' : tr(':name ameongezwa. PIN hii ni ya muda: akiingia mara ya kwanza atachagua yake mwenyewe.', {'name': name}));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);

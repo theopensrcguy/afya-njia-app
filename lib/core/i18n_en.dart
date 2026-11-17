@@ -1159,4 +1159,9 @@ const en = <String, String>{
   'Mteja ni nani?': 'Who is the customer?',
   'amekubali': 'agreed',
   'Historia yao, na kuwakumbusha kurudia dawa': 'Their history, and refill reminders',
+  // v0.27: one person, many shops
+  'mfanyakazi': 'staff',
+  'Maduka yote yaliyosajiliwa kwa namba yako. Unaingia mara moja kwa PIN yako, kisha unabadili duka bila kutoka.': 'All the shops registered on your number. Sign in once with your PIN, then switch shops without signing out.',
+  'Duka jipya linalosajiliwa na Saola kwa namba yako linaongezwa hapa lenyewe. Hiki ni kwa duka lako lililosajiliwa kwa namba nyingine.': 'A new shop Saola registers on your number appears here by itself. This is for a shop of yours registered under another number.',
+  'Duka lako lililosajiliwa kwa namba nyingine. Kuthibitisha ni lako: namba ya duka hilo na PIN ya mmiliki wake. Litahamia namba yako na PIN yako; namba ile nyingine itaachwa huru. Maduka yako yataweza kuhamishiana hisa moja kwa moja.': 'A shop of yours registered under another number. To prove it\'s yours: that shop\'s code and its owner\'s PIN. It moves onto your number and PIN; the other number is freed. Your shops can then send each other stock directly.',
 };

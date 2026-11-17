@@ -240,3 +240,9 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
 - `features/customers/customers_screen.dart` (Zaidi → Wateja, `Perm.viewCustomers`): who to remind today (WhatsApp opens on their chat with the message; "Nimemtumia" marks it; SMS when the server has a provider), reminders coming up, reminded and not back, and the customers who agreed; tapping one shows what they bought and "Ondoa ridhaa".
 - `pickCustomer(..., forCredit: false)` shows phones instead of debts.
 - The reminder message is written by the server and never names the medicine.
+
+## One person, many shops (v0.27)
+- `Staff.otherShops` (from `other_shops`). Zaidi → **Maduka yangu** shows for owners and for anyone whose number is in more than one shop.
+- `my_shops_screen.dart` lists every shop on this number; a shop where they work is marked "mfanyakazi". **Fungua** switches. A worker's phone may first need that shop's owner to approve it: the server's message says so, with the code.
+- "Ongeza duka langu jingine" (owners only) is now for a shop of theirs registered under another number. A shop Saola registers on their number appears by itself.
+- Adding a worker whose number already uses Afya Njia: the app shows the server's message (they sign in with their own PIN, not the one typed).
