@@ -266,3 +266,32 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
   - `phoneProblem(full)` reports what's wrong; `parsePhone(raw)` splits a number into country and digits.
 - Used on: sign in (`pin_screen.dart`, white card), Umesahau PIN, the customer consent and new-customer forms, suppliers (phone and WhatsApp), staff profiles (own and emergency phone), and the Lipia dialog.
 - Shop location from the phone's GPS is not in the app yet (it needs the `geolocator` package and location permissions). For now owners set it on the web, and Saola sets it on its visit.
+
+## v0.32 (web only)
+The stock hub, Rafu, required-field marking, the empty-stock till and GPS region/place are web changes. The app is unchanged in v0.32.
+- The server now refuses selling a product marked `needs_price` (`price_required`), and the app shows the server's message.
+- The Rafu view, field highlighting and GPS in the app are still to come.
+
+## v0.33 (web only)
+Rafu (aisles), stock-taking and the Saola map are on the web. The app is unchanged, except:
+- `Perm.countStock` (`count_stock`) has been added to `core/permissions.dart`; the owner's permission screen lists it from the server.
+- The stock-take API (`/api/stock-counts…`) is ready for an app screen later.
+
+## Hesabu ya hisa on the phone (v0.34)
+- `features/stock/stock_count_screen.dart`. Open it from Hisa (the ✓ clipboard icon in the top bar) or from Zaidi → Hesabu ya hisa. You need `count_stock` or `adjust_stock`.
+- **No open count:** an explanation and **Anza hesabu ya hisa**.
+- **Counting:**
+  - a progress card;
+  - search, and the filters Zote / Bado / Zenye tofauti;
+  - products grouped by aisle (category), with "d / n" per aisle;
+  - each product has a small pack icon and a badge: dashed circle = not counted, ✓, −9, +2 (it pops when it changes).
+- **Skani (scan):** scan a barcode to open that product (`products/barcode/{code}`).
+- **Counting one product (bottom sheet):**
+  - type packs plus loose units, or count batch by batch;
+  - the system's number shows only after **Hifadhi** (save);
+  - the result is ✓ (it moves on by itself) or Pungufu / Ziada with the TSh value;
+  - **Hesabu tena** (count again) or **Inayofuata →** (next) walks to the next product not yet counted;
+  - the phone gives a short vibration on each save.
+- **Maliza na tuma** sends the count; **Historia** lists past counts.
+- **Review:** the totals, the differences with value, and for approvers a checkbox per product, plus **Idhinisha marekebisho** (approve) / **Kataa** (reject, with a reason).
+- English strings are added in `i18n_en.dart`. Checked with the Dart analyzer only.

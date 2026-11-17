@@ -10,6 +10,7 @@ abstract final class Perm {
   static const editPrices = 'edit_prices';
   static const createProducts = 'create_products';
   static const adjustStock = 'adjust_stock';
+  static const countStock = 'count_stock';
   static const voidAnySale = 'void_any_sale';
   static const bigDiscount = 'big_discount';
   static const viewShopSales = 'view_shop_sales';

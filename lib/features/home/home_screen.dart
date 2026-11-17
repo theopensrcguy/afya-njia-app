@@ -30,6 +30,7 @@ import '../shift/shift_screen.dart';
 import '../staff/staff_permissions_screen.dart';
 import '../staff/staff_profile.dart';
 import '../stock/stock_screen.dart';
+import '../stock/stock_count_screen.dart';
 import 'widgets/recent_sales_card.dart';
 import 'widgets/target_ring.dart';
 import 'widgets/trend_card.dart';
@@ -730,6 +731,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 leading: const Icon(Icons.storefront_outlined),
                 title: const T('Wasambazaji'),
                 onTap: () => go(sheet, SuppliersScreen(session: widget.session)),
+              ),
+            if (_can(Perm.countStock) || _can(Perm.adjustStock))
+              ListTile(
+                leading: const Icon(Icons.fact_check_outlined),
+                title: const T('Hesabu ya hisa'),
+                subtitle: const T('Linganisha rafu na mfumo'),
+                onTap: () => go(sheet, StockCountScreen(session: widget.session)),
               ),
             if (_can(Perm.viewStock))
               ListTile(

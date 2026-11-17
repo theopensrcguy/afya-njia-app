@@ -11,6 +11,7 @@ import '../../core/units.dart';
 import '../../models/product.dart';
 import '../purchases/receive_screen.dart';
 import 'deletions_screen.dart';
+import 'stock_count_screen.dart';
 import 'product_stock_screen.dart';
 import '../../core/i18n.dart';
 
@@ -122,6 +123,16 @@ class _StockScreenState extends State<StockScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const T('Hisa'), backgroundColor: pageBackground, actions: [
+        // Hesabu ya hisa: compare the shelf with the system (walk the shelves with the phone).
+        if (widget.session.user!.can(Perm.countStock) || widget.session.user!.can(Perm.adjustStock))
+          IconButton(
+            tooltip: tr('Hesabu ya hisa'),
+            icon: const Icon(Icons.fact_check_outlined),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockCountScreen(session: widget.session)));
+              if (mounted) _load();
+            },
+          ),
         // Requests to delete stock (approvers: waiting for them; others: their own).
         IconButton(
           tooltip: tr('Maombi ya kufuta hisa'),
