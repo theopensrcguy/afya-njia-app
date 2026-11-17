@@ -11,6 +11,7 @@ import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../auth/change_pin_screen.dart';
 import '../devices/devices_screen.dart';
+import '../billing/pay_dialog.dart';
 import '../credit/madeni_screen.dart';
 import '../customers/customers_screen.dart';
 import '../expenses/matumizi_screen.dart';
@@ -180,8 +181,14 @@ class _HomeScreenState extends State<HomeScreen> {
             if (user.isOwner)
               TextButton(
                 style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                onPressed: () => _open(MyShopsScreen(session: widget.session)),
-                child: const T('Angalia malipo'),
+                onPressed: user.canPayOnline
+                    ? () async {
+                        final paid = await payForShop(context, api: widget.session.api, placeId: user.id, shopName: tr('duka hili'));
+                        if (paid) await widget.session.refreshMe();
+                        if (mounted) setState(() {});
+                      }
+                    : () => _open(MyShopsScreen(session: widget.session)),
+                child: T(user.canPayOnline ? 'Lipia sasa' : 'Angalia malipo'),
               ),
           ]),
         ),

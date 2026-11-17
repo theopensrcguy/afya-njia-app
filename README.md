@@ -250,3 +250,10 @@ The customer pays part by M-Pesa and part in cash. On the Kamilisha screen, **Ga
 ## New shop requests and subscriptions (v0.28)
 - `Staff.subscription` / `Staff.readOnly` (from `GET me`). The home screen shows the payment banner: to owners near the end and in grace, to everyone once the shop is read-only. Saving anything while read-only gets the server's message (`402 subscription_expired`).
 - **Maduka yangu:** shows the subscription line of each shop (owners), **Omba duka jipya** (name, location, licence number, note), the owner's requests with their status (Ghairi while waiting), and "Ongeza duka langu jingine" for a shop registered under another number.
+
+## Mobile money payments: "Lipia kwa simu" (v0.30)
+- `features/billing/pay_dialog.dart` (`payForShop`):
+  - choose the period (chips with amounts), the network (pre-selected from the number) and the paying number;
+  - then "Angalia simu yako" while it checks the status every 3 s;
+  - then success (paid until …) or failure (with the reason, and "Jaribu tena").
+- `Staff.canPayOnline` (from `GET me`). The home banner's button is **Lipia sasa** when online payment is available. **Maduka yangu** has **Lipia** on each shop the owner can pay for.

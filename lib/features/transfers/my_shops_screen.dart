@@ -5,6 +5,7 @@ import '../../core/brand.dart';
 import '../../core/i18n.dart';
 import '../../core/loader.dart';
 import '../../core/session.dart';
+import '../billing/pay_dialog.dart';
 
 /// "Maduka yangu": every shop this person is in, with one number and one PIN
 /// (owner in one, worker in another…). Tap one to open it on this phone
@@ -71,6 +72,14 @@ class _MyShopsScreenState extends State<MyShopsScreen> {
     }
   }
 
+  Future<void> _pay(Map<String, dynamic> s) async {
+    final paid = await payForShop(context, api: _api, placeId: (s['user_id'] as num).toInt(), shopName: '${s['name']}');
+    if (paid) {
+      _load();
+      widget.session.refreshMe();
+    }
+  }
+
   Future<void> _cancel(Map<String, dynamic> r) async {
     try {
       await _api.delete('shop-requests/${r['id']}');
@@ -129,15 +138,22 @@ class _MyShopsScreenState extends State<MyShopsScreen> {
                       if (_billingLine(s) case final b?) b,
                     ].join('\n')),
                     isThreeLine: _billingLine(s) != null,
-                    trailing: s['current'] == true
-                        ? T('uko hapa', style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w800))
-                        : FilledButton(onPressed: _busy ? null : () => _switch(s), child: const T('Fungua')),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (s['can_pay_online'] == true)
+                        TextButton(onPressed: () => _pay(s), child: const T('Lipia')),
+                      s['current'] == true
+                          ? T('uko hapa', style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w800))
+                          : FilledButton(onPressed: _busy ? null : () => _switch(s), child: const T('Fungua')),
+                    ]),
                   ),
                 ),
               if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed)),
               if (widget.session.user!.isOwner) ...[
-                const T('Kila duka linalipiwa peke yake. Kulipia, wasiliana na Saola (Msaada); malipo yakipokelewa, tarehe inasogea yenyewe.',
-                    style: TextStyle(color: mutedText, fontSize: 12)),
+                T(
+                    (_shops ?? const []).any((s) => s['can_pay_online'] == true)
+                        ? 'Kila duka linalipiwa peke yake. Bonyeza "Lipia": simu yako itakuomba PIN ya pesa za simu, na tarehe inasogea yenyewe malipo yakithibitishwa.'
+                        : 'Kila duka linalipiwa peke yake. Kulipia, wasiliana na Saola (Msaada); malipo yakipokelewa, tarehe inasogea yenyewe.',
+                    style: const TextStyle(color: mutedText, fontSize: 12)),
                 const SizedBox(height: 14),
                 FilledButton.icon(onPressed: _askNew, icon: const Icon(Icons.add_business_outlined), label: const T('Omba duka jipya')),
                 const SizedBox(height: 8),
