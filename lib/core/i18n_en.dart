@@ -1333,4 +1333,6 @@ const en = <String, String>{
   'PIN ya tarakimu 4. Ikikamilika, unaingia moja kwa moja.': 'A 4-digit PIN. Once complete, you sign in automatically.',
   'Rudi kwenye namba ya simu': 'Back to the phone number',
   'Weka PIN yako kuendelea.': 'Enter your PIN to continue.',
+  'Siko kwenye orodha? Ingia kwa namba': 'Not on the list? Sign in with your number',
+  'Si wewe? Ingia kwa namba': 'Not you? Sign in with your number',
 };

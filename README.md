@@ -328,3 +328,9 @@ Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). O
 - **iPad / computer (900px wide or more):** the brand on a green panel on the left (three lines on what the app does), the form in a centred 380px column on the right. The computer keyboard types the PIN.
 - `LanguageSwitch(compact: true)` shows SW / EN instead of the full names.
 - Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment, so it couldn't be run here. Test on the iPhone and the iPad (phone step, PIN step, a wrong PIN, a shared phone with 4+ people, and the iPad side by side).
+
+### v0.41.1: "Siko kwenye orodha" always in view
+- On the shared counter phone, **"Siko kwenye orodha? Ingia kwa namba"** now sits in the green header, right under the people cards. Someone whose name isn't there looks exactly there. Before, it was at the bottom under the keypad, below the fold on an iPhone. On a personal phone, **"Si wewe? Ingia kwa namba"** sits under "Karibu tena, {name}". iPad: the same, under the names.
+- **Key height follows the screen:** 60 on tall screens, 54 on most iPhones, 48 on small ones. The PIN boxes follow too. So the shared screen (names, boxes, keypad, Ingia) fits without scrolling; scrolling stays only as a fallback.
+- The PIN hint line is shown only on the phone-number route, to save room on the shared screen.
+- Lint fixes in `customers_screen.dart`: `this.context` after the await; braces on a multi-line `if`.

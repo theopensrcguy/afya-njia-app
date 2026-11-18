@@ -171,6 +171,10 @@ class _PinScreenState extends State<PinScreen> {
   /// Pushes the main button to the bottom on a phone; a plain gap on the iPad.
   Widget _gap() => _wide ? const SizedBox(height: 8) : const Spacer();
 
+  /// Key height follows the screen, so the whole screen fits without scrolling
+  /// on today's iPhones (scrolling stays only as a fallback on very small ones).
+  double _keyH = 60;
+
   // The look (agreed on the design canvas, Nov 2026): a deep green top with the
   // logo and the question, a white sheet with the one thing to do.
   static const _deep = Color(0xFF0E3B31);
@@ -210,7 +214,9 @@ class _PinScreenState extends State<PinScreen> {
   /// keyboard open), and the sheet always reaches the bottom of the screen.
   Widget _phoneLayout() {
     return LayoutBuilder(
-      builder: (context, box) => SingleChildScrollView(
+      builder: (context, box) {
+        _keyH = box.maxHeight >= 900 ? 60 : (box.maxHeight >= 780 ? 54 : 48);
+        return SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: box.maxHeight),
@@ -218,19 +224,20 @@ class _PinScreenState extends State<PinScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SafeArea(
                 bottom: false,
-                child: Padding(padding: const EdgeInsets.fromLTRB(24, 16, 24, 26), child: _header()),
+                child: Padding(padding: const EdgeInsets.fromLTRB(24, 12, 24, 22), child: _header()),
               ),
               Expanded(
                 child: Container(
                   decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-                  padding: EdgeInsets.fromLTRB(24, 28, 24, 24 + MediaQuery.of(context).padding.bottom),
+                  padding: EdgeInsets.fromLTRB(24, 24, 24, 16 + MediaQuery.of(context).padding.bottom),
                   child: _sheet(),
                 ),
               ),
             ]),
           ),
         ),
-      ),
+      );
+      },
     );
   }
 
@@ -332,7 +339,7 @@ class _PinScreenState extends State<PinScreen> {
         const Spacer(),
         LanguageSwitch(onDark: true, compact: true, onChanged: lang.chooseSignedOut),
       ]),
-      const SizedBox(height: 26),
+      const SizedBox(height: 20),
       ..._headerTitle(),
     ]);
   }
@@ -361,13 +368,18 @@ class _PinScreenState extends State<PinScreen> {
         Text(tr('Karibu tena, :a', {'a': _selected!.name.split(' ').first}), style: title),
         const SizedBox(height: 6),
         T('Weka PIN yako kuendelea.', style: sub),
+        const SizedBox(height: 12),
+        _notListed(onDark: true, personal: true),
       ];
     }
-    // Shared counter phone: the people who use it, as cards.
+    // Shared counter phone: the people who use it, as cards, and right under them
+    // the way in for someone who isn't there (where they're already looking).
     return [
       T('Nani anaingia?', style: title),
-      const SizedBox(height: 16),
+      const SizedBox(height: 12),
       _peopleRow(),
+      const SizedBox(height: 12),
+      _notListed(onDark: true, personal: false),
     ];
   }
 
@@ -380,7 +392,11 @@ class _PinScreenState extends State<PinScreen> {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [T('Weka PIN yako', style: title), const SizedBox(height: 10), _phoneChip(onDark: false)]);
     }
     if (_info!.mode == 'personal' && _selected != null) {
-      return Text(tr('Karibu tena, :a', {'a': _selected!.name.split(' ').first}), style: title);
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('Karibu tena, :a', {'a': _selected!.name.split(' ').first}), style: title),
+        const SizedBox(height: 10),
+        _notListed(onDark: false, personal: true),
+      ]);
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       T('Nani anaingia?', style: title),
@@ -390,7 +406,33 @@ class _PinScreenState extends State<PinScreen> {
         decoration: BoxDecoration(color: _deep, borderRadius: BorderRadius.circular(18)),
         child: _peopleRow(),
       ),
+      const SizedBox(height: 10),
+      _notListed(onDark: false, personal: false),
     ]);
+  }
+
+  /// "Siko kwenye orodha? Ingia kwa namba": always in view, next to the names.
+  Widget _notListed({required bool onDark, required bool personal}) {
+    final fg = onDark ? const Color(0xFF8FD9B8) : brandGreen;
+    return Material(
+      color: onDark ? Colors.white.withValues(alpha: .08) : const Color(0xFFF2F6F4),
+      borderRadius: BorderRadius.circular(99),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(99),
+        onTap: _signingIn ? null : _usePhone,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 9, 14, 9),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.smartphone_rounded, size: 17, color: fg),
+            const SizedBox(width: 8),
+            Flexible(
+              child: T(personal ? 'Si wewe? Ingia kwa namba' : 'Siko kwenye orodha? Ingia kwa namba',
+                  style: TextStyle(color: onDark ? Colors.white : inkColor, fontWeight: FontWeight.w600, fontSize: 14)),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   void _editPhone() {
@@ -459,7 +501,7 @@ class _PinScreenState extends State<PinScreen> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           width: 82,
-          padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+          padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
           decoration: BoxDecoration(
             color: on ? _mint.withValues(alpha: .16) : Colors.white.withValues(alpha: .06),
             borderRadius: BorderRadius.circular(16),
@@ -563,7 +605,6 @@ class _PinScreenState extends State<PinScreen> {
 
   Widget _pinStep() {
     final shared = !_byPhone && _info!.mode == 'shared';
-    final personal = !_byPhone && _info!.mode == 'personal';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (_byPhone) ...[_steps(2), const SizedBox(height: 20)],
       if (shared && _selected != null) ...[
@@ -582,26 +623,14 @@ class _PinScreenState extends State<PinScreen> {
                 Expanded(child: Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w600, fontSize: 14))),
               ]),
             )
-          : T('PIN ya tarakimu 4. Ikikamilika, unaingia moja kwa moja.', textAlign: TextAlign.center, style: const TextStyle(color: mutedText, fontSize: 13.5)),
+          : (_byPhone
+              ? T('PIN ya tarakimu 4. Ikikamilika, unaingia moja kwa moja.', textAlign: TextAlign.center, style: const TextStyle(color: mutedText, fontSize: 13.5))
+              : const SizedBox.shrink()),
       const SizedBox(height: 10),
       _keypad(),
       const SizedBox(height: 12),
       _gap(),
       _primary(label: _signingIn ? 'Inaingia…' : 'Ingia', onPressed: _signingIn || _pin.length < _pinLength ? null : _submit, busy: _signingIn),
-      if (shared || personal) ...[
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: _usePhone,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-            foregroundColor: inkColor,
-            side: const BorderSide(color: _line, width: 1.5),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          icon: const Icon(Icons.smartphone_rounded, size: 18),
-          label: T(personal ? 'Si wewe? Ingia kwa namba' : 'Siko kwenye orodha: ingia kwa namba', style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-      ],
     ]);
   }
 
@@ -639,7 +668,7 @@ class _PinScreenState extends State<PinScreen> {
           Expanded(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 140),
-              height: 62,
+              height: _keyH + 2,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: i < _pin.length ? const Color(0xFFF2F8F5) : Colors.white,
@@ -661,7 +690,7 @@ class _PinScreenState extends State<PinScreen> {
 
   /// Flat keys (no bubbles): the numbers carry the screen, not the buttons.
   Widget _keypad() {
-    Widget cell(Widget child) => Expanded(child: SizedBox(height: 60, child: child));
+    Widget cell(Widget child) => Expanded(child: SizedBox(height: _keyH, child: child));
     Widget digit(String d) => cell(Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
