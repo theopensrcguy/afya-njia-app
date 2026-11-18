@@ -135,8 +135,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
       appBar: AppBar(backgroundColor: pageBackground, title: const T('Wateja', style: TextStyle(fontWeight: FontWeight.w800))),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
+          // this.context: the State's own context, which the `mounted` check covers
+          // (plain `context` here is build()'s parameter).
           if (await registerCustomer(context, api: _api) && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: T('Mteja amesajiliwa.')));
+            ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: T('Mteja amesajiliwa.')));
             _load();
           }
         },
@@ -262,12 +264,10 @@ class _HistorySheetState extends State<_HistorySheet> {
       await widget.api.patch('customers/${widget.customer['id']}/reminders', {'on': on});
       _load();
     } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
+      if (mounted) setState(() {
         _remind = !on;
         _error = e.message;
       });
-      }
     }
   }
 
