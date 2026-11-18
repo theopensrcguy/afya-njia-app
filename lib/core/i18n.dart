@@ -93,6 +93,11 @@ class T extends StatelessWidget {
 }
 
 /// "Kiswahili | English", for the sign-in screen (on green) and the More menu.
+///
+/// Drawn by hand, not with ChoiceChip: the theme's chip colours made the
+/// language not chosen white-on-white on the green sign-in screen (unreadable).
+/// Here both labels are always readable: the chosen one is filled, the other
+/// is outlined in the same colour as its text.
 class LanguageSwitch extends StatelessWidget {
   const LanguageSwitch({super.key, required this.onChanged, this.onDark = false});
 
@@ -101,28 +106,44 @@ class LanguageSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final e in Lang.supported.entries)
-          Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: ChoiceChip(
-              label: Text(e.value),
+    final fg = onDark ? Colors.white : brandGreen; // the outline and the text of the one not chosen
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: fg.withValues(alpha: .6)),
+        color: onDark ? Colors.white.withValues(alpha: .08) : Colors.transparent,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final e in Lang.supported.entries)
+            Semantics(
+              button: true,
               selected: lang.code == e.key,
-              showCheckmark: false,
-              visualDensity: VisualDensity.compact,
-              side: BorderSide(color: onDark ? Colors.white54 : Colors.black12),
-              backgroundColor: onDark ? Colors.transparent : null,
-              selectedColor: onDark ? Colors.white : brandGreen,
-              labelStyle: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: lang.code == e.key ? (onDark ? brandGreen : Colors.white) : (onDark ? Colors.white : inkColor),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: lang.code == e.key ? null : () => onChanged(e.key),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(99),
+                    color: lang.code == e.key ? (onDark ? Colors.white : brandGreen) : Colors.transparent,
+                  ),
+                  child: Text(
+                    e.value,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: lang.code == e.key ? (onDark ? brandGreen : Colors.white) : fg,
+                    ),
+                  ),
+                ),
               ),
-              onSelected: (_) => onChanged(e.key),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

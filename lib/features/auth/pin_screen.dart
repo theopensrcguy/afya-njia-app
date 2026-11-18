@@ -30,6 +30,10 @@ class _PinScreenState extends State<PinScreen> {
 
   SignInInfo? _info;
   bool _byPhone = false; // new device, or "Si wewe?"
+  // By phone, in two steps: the number (system keyboard + "Endelea"), then
+  // the PIN (our keypad). One step at a time, so the phone's keyboard never
+  // hides the keypad, and there is always a button to press.
+  bool _phoneDone = false;
   final _phone = TextEditingController();
   final _phoneFocus = FocusNode();
   Staff? _selected;
@@ -70,7 +74,7 @@ class _PinScreenState extends State<PinScreen> {
         _byPhone = info.mode == 'new' || (info.mode == 'shared' && info.staff.isEmpty);
         _selected = info.mode == 'personal' ? info.lastUser : (info.staff.isEmpty ? null : info.staff.first);
       });
-      if (_byPhone) _phoneFocus.requestFocus();
+      if (_byPhone && !_phoneDone) _phoneFocus.requestFocus();
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -78,11 +82,25 @@ class _PinScreenState extends State<PinScreen> {
     }
   }
 
+  /// Step 1 → 2: the number is complete. Close the phone's keyboard; the PIN pad shows.
+  void _confirmPhone() {
+    if (!_phoneReady) {
+      setState(() => _error = _phone.text.isEmpty ? tr('Andika namba yako ya simu kwanza.') : phoneProblem(_phone.text));
+      return;
+    }
+    _phoneFocus.unfocus();
+    setState(() {
+      _phoneDone = true;
+      _pin = '';
+      _error = null;
+    });
+  }
+
   bool get _phoneReady => _phone.text.isNotEmpty && phoneProblem(_phone.text) == null;
 
   void _tapDigit(String digit) {
     if (_signingIn || _pin.length >= _pinLength) return;
-    if (_byPhone && !_phoneReady) {
+    if (_byPhone && (!_phoneReady || !_phoneDone)) {
       setState(() => _error = tr('Andika namba yako ya simu kwanza.'));
       return;
     }
@@ -137,34 +155,26 @@ class _PinScreenState extends State<PinScreen> {
   void _usePhone() {
     setState(() {
       _byPhone = true;
+      _phoneDone = false;
       _pin = '';
       _error = null;
     });
     _phoneFocus.requestFocus();
   }
 
+  bool get _onPhoneStep => _byPhone && !_phoneDone;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: brandGreen,
       body: SafeArea(
-        child: Column(children: [
-          // Kiswahili / English before signing in. Becomes this person's choice
-          // when they sign in (see Session._syncLanguage).
-          Align(
-            alignment: Alignment.topRight,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: LanguageSwitch(onDark: true, onChanged: lang.chooseSignedOut),
-            ),
-          ),
-          Expanded(
-        // On a laptop the keyboard types the PIN too (digits, Backspace),
-        // except while the phone-number field is being typed in.
+        // On a laptop or an iPad with a keyboard, the keys type the PIN too
+        // (digits, Backspace, Enter), except while the phone number is typed.
         child: Focus(
           autofocus: true,
           onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent || _pairingCode != null || _phoneFocus.hasFocus) return KeyEventResult.ignored;
+            if (event is! KeyDownEvent || _pairingCode != null || _onPhoneStep || _phoneFocus.hasFocus) return KeyEventResult.ignored;
             final ch = event.character;
             if (ch != null && RegExp(r'^[0-9]$').hasMatch(ch)) {
               _tapDigit(ch);
@@ -176,25 +186,43 @@ class _PinScreenState extends State<PinScreen> {
             }
             return KeyEventResult.ignored;
           },
-          // Phone-sized in the middle of a wide screen.
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420, maxHeight: 820),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                    : _info == null
-                        ? _buildLoadError()
-                        : _pairingCode != null
-                            ? _buildWaitingForApproval()
-                            : _buildPinPad(),
+          // Scrolls instead of squeezing: on a small phone, or with the keyboard
+          // open, nothing is ever pushed out of reach.
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: Column(children: [
+                  // Kiswahili / English before signing in. Becomes this person's
+                  // choice when they sign in (see Session._syncLanguage).
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 14, 0),
+                      child: LanguageSwitch(onDark: true, onChanged: lang.chooseSignedOut),
+                    ),
+                  ),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 400),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                        child: _loading
+                            ? const Padding(padding: EdgeInsets.only(top: 120), child: Center(child: CircularProgressIndicator(color: Colors.white)))
+                            : _info == null
+                                ? _buildLoadError()
+                                : _pairingCode != null
+                                    ? _buildWaitingForApproval()
+                                    : _buildPinPad(),
+                      ),
+                    ),
+                  ),
+                ]),
               ),
             ),
           ),
         ),
-          ),
-        ]),
       ),
     );
   }
@@ -282,103 +310,180 @@ class _PinScreenState extends State<PinScreen> {
   Widget _buildPinPad() {
     return Column(
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         const T('AFYA NJIA', style: TextStyle(color: Colors.white70, letterSpacing: 2, fontSize: 13)),
         const SizedBox(height: 8),
         ..._who(),
-        const SizedBox(height: 32),
-
-        // The four dots
-        Semantics(
-          label: tr('Tarakimu :pin kati ya :pin_length', {'pin': _pin.length, 'pin_length': _pinLength}),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < _pinLength; i++)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 9),
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: i < _pin.length ? Colors.white : Colors.transparent,
-                    border: Border.all(color: Colors.white70, width: 2),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 40,
-          child: Center(
-            child: _signingIn
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(_error ?? '', style: const TextStyle(color: Color(0xFFFFD7D2), fontWeight: FontWeight.w600)),
-          ),
-        ),
-
-        // Keypad
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 3,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.6,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              for (final d in ['1', '2', '3', '4', '5', '6', '7', '8', '9']) _key(d),
-              const SizedBox.shrink(),
-              _key('0'),
-              IconButton(
-                tooltip: tr('Futa'),
-                onPressed: _backspace,
-                icon: const Icon(Icons.backspace_outlined, color: Colors.white),
+        if (_onPhoneStep)
+          _message()
+        else ...[
+          const SizedBox(height: 22),
+          _dots(),
+          _message(),
+          _keypad(),
+          const SizedBox(height: 16),
+          // A visible way in, too: the 4th digit signs in by itself, but a
+          // button is what people look for (and what retries after an error).
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: brandGreen,
+                disabledBackgroundColor: Colors.white.withValues(alpha: .25),
+                disabledForegroundColor: Colors.white70,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-            ],
+              onPressed: _signingIn || _pin.length < _pinLength ? null : _submit,
+              child: _signingIn
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))
+                  : const T('Ingia', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
           ),
-        ),
-        Text(
-          tr('Mauzo yote yatahifadhiwa kwa jina la aliyeingia.'),
-          style: TextStyle(color: Colors.white70, fontSize: 12),
-        ),
+        ],
+        const SizedBox(height: 22),
+        T('Mauzo yote yatahifadhiwa kwa jina la aliyeingia.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],
     );
+  }
+
+  Widget _dots() {
+    return Semantics(
+      label: tr('Tarakimu :pin kati ya :pin_length', {'pin': _pin.length, 'pin_length': _pinLength}),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (var i = 0; i < _pinLength; i++)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i < _pin.length ? Colors.white : Colors.transparent,
+                border: Border.all(color: Colors.white70, width: 2),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _message() {
+    return SizedBox(
+      height: 44,
+      child: Center(
+        child: Text(_error ?? '', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFFFD7D2), fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  /// Fixed-size keys (not stretched to fill the screen): the same on a phone and an iPad.
+  Widget _keypad() {
+    Widget row(List<Widget> keys) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: keys),
+        );
+    return Column(children: [
+      row([_key('1'), _key('2'), _key('3')]),
+      row([_key('4'), _key('5'), _key('6')]),
+      row([_key('7'), _key('8'), _key('9')]),
+      row([
+        const SizedBox(width: 88, height: 60),
+        _key('0'),
+        SizedBox(
+          width: 88,
+          height: 60,
+          child: IconButton(
+            tooltip: tr('Futa'),
+            onPressed: _backspace,
+            icon: const Icon(Icons.backspace_outlined, color: Colors.white),
+          ),
+        ),
+      ]),
+    ]);
   }
 
   /// The top part: depends on the device.
   List<Widget> _who() {
     final info = _info!;
     if (_byPhone) {
+      final (c, local) = parsePhone(_phone.text);
       return [
-        const T('Ingia', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+        const T('Ingia', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        const T('Namba yako ya simu na PIN', style: TextStyle(color: Colors.white70)),
+        T(_onPhoneStep ? 'Andika namba yako ya simu' : 'Sasa PIN yako ya tarakimu 4', style: const TextStyle(color: Colors.white70)),
         const SizedBox(height: 18),
-        // White card on the green: country code + the number's digits only (PhoneField).
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-          child: PhoneField(
-            controller: _phone,
-            focusNode: _phoneFocus,
-            textInputAction: TextInputAction.done,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: inkColor),
-            onChanged: (_) => setState(() => _error = null),
-            // Enter: on to the PIN (the keypad, or the keyboard's digits).
-            onSubmitted: (_) => _phoneFocus.unfocus(),
+        if (_onPhoneStep) ...[
+          // White card on the green: country code + the number's digits only (PhoneField).
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+            child: PhoneField(
+              controller: _phone,
+              focusNode: _phoneFocus,
+              textInputAction: TextInputAction.next,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: inkColor),
+              onChanged: (_) => setState(() => _error = null),
+              onSubmitted: (_) => _confirmPhone(),
+            ),
           ),
-        ),
-        _forgotButton(),
-        if (info.mode != 'new')
-          TextButton(
-            onPressed: () => setState(() {
-              _byPhone = false;
-              _pin = '';
-              _error = null;
-            }),
-            child: const T('Rudi', style: TextStyle(color: Colors.white)),
+          const SizedBox(height: 14),
+          // The iPhone's number keyboard has no "Done" key: this button is the way on.
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: brandGreen,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: _confirmPhone,
+              child: const T('Endelea', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
           ),
+        ] else
+          // Step 2: the number, small, with a way back to change it.
+          Material(
+            color: Colors.white.withValues(alpha: .14),
+            borderRadius: BorderRadius.circular(99),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(99),
+              onTap: () {
+                setState(() {
+                  _phoneDone = false;
+                  _pin = '';
+                  _error = null;
+                });
+                _phoneFocus.requestFocus();
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('${c.flag}  +${c.code} ${local.replaceAllMapped(RegExp(r'(\d{3})(?=\d)'), (m) => '${m[1]} ')}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.edit_outlined, color: Colors.white70, size: 18),
+                ]),
+              ),
+            ),
+          ),
+        Wrap(alignment: WrapAlignment.center, children: [
+          _forgotButton(),
+          if (info.mode != 'new')
+            TextButton(
+              onPressed: () => setState(() {
+                _byPhone = false;
+                _phoneDone = false;
+                _pin = '';
+                _error = null;
+              }),
+              child: const T('Rudi', style: TextStyle(color: Colors.white)),
+            ),
+        ]),
       ];
     }
     if (info.mode == 'personal' && _selected != null) {
@@ -387,8 +492,10 @@ class _PinScreenState extends State<PinScreen> {
         const SizedBox(height: 12),
         Text(tr('Karibu tena, :a', {'a': _selected!.name.split(' ').first}),
             style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-        TextButton(onPressed: _usePhone, child: const T('Si wewe?', style: TextStyle(color: Colors.white70))),
-        _forgotButton(),
+        Wrap(alignment: WrapAlignment.center, children: [
+          TextButton(onPressed: _usePhone, child: const T('Si wewe?', style: TextStyle(color: Colors.white70))),
+          _forgotButton(),
+        ]),
       ];
     }
     // The shared counter phone: who uses it, most recent first.
@@ -424,8 +531,10 @@ class _PinScreenState extends State<PinScreen> {
             ),
         ],
       ),
-      TextButton(onPressed: _usePhone, child: const T('Siko kwenye orodha', style: TextStyle(color: Colors.white70))),
-      _forgotButton(),
+      Wrap(alignment: WrapAlignment.center, children: [
+        TextButton(onPressed: _usePhone, child: const T('Siko kwenye orodha', style: TextStyle(color: Colors.white70))),
+        _forgotButton(),
+      ]),
     ];
   }
 
@@ -441,6 +550,7 @@ class _PinScreenState extends State<PinScreen> {
           setState(() {
             _byPhone = true;
             _phone.text = phone;
+            _phoneDone = phone.isNotEmpty && phoneProblem(phone) == null;
             _pin = '';
             _error = null;
           });
@@ -469,14 +579,18 @@ class _PinScreenState extends State<PinScreen> {
   }
 
   Widget _key(String digit) {
-    return Material(
-      color: Colors.white.withAlpha(30),
-      shape: const StadiumBorder(),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: () => _tapDigit(digit),
-        child: Center(
-          child: Text(digit, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600)),
+    return SizedBox(
+      width: 88,
+      height: 60,
+      child: Material(
+        color: Colors.white.withAlpha(30),
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () => _tapDigit(digit),
+          child: Center(
+            child: Text(digit, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600)),
+          ),
         ),
       ),
     );

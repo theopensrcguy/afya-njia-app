@@ -300,3 +300,19 @@ Rafu (aisles), stock-taking and the Saola map are on the web. The app is unchang
 - The Wateja screen has a **Sajili mteja** button: name, `PhoneField`, an optional note, and a consent tick (required).
 - When the number is already known (server answers 409 `customer_exists`), it offers to record consent on that customer.
 - Checked with the Dart analyzer only.
+
+## v0.37: sign-in fixed, Zaidi in groups, customers' reminders optional
+- **Sign-in by phone number is now two steps:**
+  1. the number, with an **Endelea** button. The iPhone number keyboard has no Done key; before this, the keyboard covered the PIN pad and there was no way forward, which looked like a freeze.
+  2. the PIN: the number shows as a chip (tap it to change), then the keypad, plus a visible **Ingia** button (the 4th digit still signs in by itself).
+  - The keys are a fixed size, and the page scrolls instead of squeezing on small screens or with the keyboard open.
+  - The hint is an example number (712 345 678), not XXXXXXXXX.
+- **LanguageSwitch** is drawn by hand: the language not chosen is outlined and readable on the green sign-in screen (it was white on white) and in the menu.
+- **Zaidi** is a full page instead of a long sheet:
+  - who is signed in, with Toka (sign out);
+  - a search box;
+  - four groups of tiles: Kila siku / Hisa na mizigo / Duka na watu / Mimi;
+  - the language at the end;
+  - 3 to 5 tiles per row depending on the screen width.
+- **Customers:** reminders are a separate, optional tick when registering (Sajili mteja) and when agreeing at the till.
+- Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment, so it couldn't be run here. Test on the iPhone and iPad.

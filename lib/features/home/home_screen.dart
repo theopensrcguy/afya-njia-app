@@ -680,172 +680,236 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Everything that is not used every hour lives here.
+  /// Everything that is not used every hour: one page, in groups (like the
+  /// web's sidebar), with a search box. A long flat list was hard to scan.
   void _showMore() {
-    void go(BuildContext sheet, Widget screen) {
-      Navigator.of(sheet).pop();
-      _open(screen);
-    }
+    final u = widget.session.user!;
+    final wide = MediaQuery.of(context).size.width >= 900;
+    final items = <_MoreItem>[
+      // Kila siku
+      _MoreItem('day', Icons.point_of_sale_outlined, tr('Zamu na fedha'), tr('Fungua zamu, hesabu fedha ya droo'),
+          () => _open(ShiftScreen(session: widget.session))),
+      if (_can(Perm.sellOnCredit) || _can(Perm.manageCredit))
+        _MoreItem('day', Icons.account_balance_wallet_outlined, tr('Madeni'), tr('Wanaodaiwa, malipo, kuidhinisha'),
+            () => _open(MadeniScreen(session: widget.session))),
+      if (_can(Perm.recordExpenses))
+        _MoreItem('day', Icons.receipt_long_outlined, tr('Matumizi'), tr('Kodi, umeme, mishahara…'), () => _open(MatumiziScreen(session: widget.session))),
+      if (_can(Perm.viewCustomers))
+        _MoreItem('day', Icons.people_alt_outlined, tr('Wateja'), tr('Historia yao, na vikumbusho (si lazima)'),
+            () => _open(CustomersScreen(session: widget.session))),
+      // Hisa
+      if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
+        _MoreItem('stock', Icons.local_shipping_outlined, _can(Perm.confirmDeliveries) ? tr('Mizigo') : tr('Mizigo yangu'),
+            _can(Perm.confirmDeliveries) ? tr('Ya kuthibitisha, na iliyopita') : null, () => _open(PurchasesScreen(session: widget.session))),
+      if (_can(Perm.prepareOrders))
+        _MoreItem('stock', Icons.shopping_cart_checkout_rounded, tr('Agiza'), tr('Zitakazoisha kabla mzigo ujao'), () => _open(ReorderScreen(session: widget.session))),
+      if (_can(Perm.countStock) || _can(Perm.adjustStock))
+        _MoreItem('stock', Icons.fact_check_outlined, tr('Hesabu ya hisa'), tr('Linganisha rafu na mfumo'),
+            () => _open(StockCountScreen(session: widget.session))),
+      if (_can(Perm.viewStock))
+        _MoreItem('stock', Icons.hourglass_bottom_rounded, tr('Muda wa kuisha'), null, () => _open(ExpiryScreen(session: widget.session))),
+      if (_can(Perm.receive) || _can(Perm.prepareOrders))
+        _MoreItem('stock', Icons.storefront_outlined, tr('Wasambazaji'), null, () => _open(SuppliersScreen(session: widget.session))),
+      if (_can(Perm.viewStock) && (_can(Perm.transferStock) || _can(Perm.approveTransfers)))
+        _MoreItem('stock', Icons.swap_horiz_rounded, tr('Uhamisho'), tr('Hamisha hisa kwenda duka jingine, au pokea'),
+            () => _open(TransfersScreen(session: widget.session))),
+      // Made for a laptop: many lines with a keyboard.
+      if (_can(Perm.receive))
+        _MoreItem('stock', Icons.table_chart_outlined, tr('Ingiza kwa wingi'), wide ? tr('Hisa ya mwanzo, mizigo mikubwa') : tr('Bora kwenye kompyuta'),
+            () => _open(BulkEntryScreen(session: widget.session))),
+      if (_can(Perm.viewShopSales))
+        _MoreItem('stock', Icons.bar_chart_rounded, tr('Ripoti'), tr('Inakuja hivi karibuni'),
+            () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('Ripoti zinakuja hivi karibuni.')))),
+      // Duka na watu
+      if (u.isOwner || u.otherShops > 0)
+        _MoreItem('shop', Icons.storefront_rounded, tr('Maduka yangu'), tr('Badili duka bila kutoka'), () => _open(MyShopsScreen(session: widget.session))),
+      if (u.isOwner)
+        _MoreItem('shop', Icons.admin_panel_settings_outlined, tr('Wafanyakazi'), tr('Toa au ondoa ruhusa, kwa muda au kudumu'),
+            () => _open(StaffPermissionsScreen(session: widget.session))),
+      if (_can(Perm.manageDevices))
+        _MoreItem('shop', Icons.phonelink_lock, tr('Vifaa'), tr('Simu na kompyuta zinazoruhusiwa'), () => _open(DevicesScreen(session: widget.session))),
+      if (!u.isOwner)
+        _MoreItem('shop', Icons.badge_outlined, tr('Taarifa zangu'), tr('Duka limehifadhi nini kukuhusu, na nani ameangalia'),
+            () => _open(MyProfileScreen(session: widget.session))),
+      // Mimi
+      _MoreItem('me', Icons.pin_outlined, tr('Badilisha PIN'), null, () => _open(ChangePinScreen(session: widget.session))),
+      _MoreItem('me', Icons.support_agent_rounded, tr('Msaada'), tr('Uliza Saola, ona majibu'), () => _open(SupportScreen(session: widget.session))),
+    ];
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _MoreScreen(session: widget.session, items: items),
+    ));
+  }
+}
 
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: cardColor,
-      showDragHandle: true,
-      // By default a sheet stops at ~56% of the screen; the menu grew past
-      // that ("overflowed"). Let it take what it needs, and scroll on small phones.
-      isScrollControlled: true,
-      builder: (sheet) => SafeArea(
-        child: SingleChildScrollView(
-         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.point_of_sale_outlined),
-              title: const T('Zamu na hesabu ya fedha'),
-              onTap: () => go(sheet, ShiftScreen(session: widget.session)),
-            ),
-            if (_can(Perm.receive) || _can(Perm.confirmDeliveries))
-              ListTile(
-                leading: const Icon(Icons.local_shipping_outlined),
-                title: Text(_can(Perm.confirmDeliveries) ? tr('Mizigo ya kuthibitisha') : tr('Mizigo yangu')),
-                onTap: () => go(sheet, PurchasesScreen(session: widget.session)),
+/// One entry of the Zaidi page.
+class _MoreItem {
+  const _MoreItem(this.section, this.icon, this.label, this.subtitle, this.onTap);
+
+  final String section; // day | stock | shop | me
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final VoidCallback onTap;
+}
+
+/// Zaidi: the rest of the app in four groups, as tiles, with a search box.
+/// Tapping a tile closes this page and opens the screen from home, so Back
+/// returns to home (not to this menu).
+class _MoreScreen extends StatefulWidget {
+  const _MoreScreen({required this.session, required this.items});
+
+  final Session session;
+  final List<_MoreItem> items;
+
+  @override
+  State<_MoreScreen> createState() => _MoreScreenState();
+}
+
+class _MoreScreenState extends State<_MoreScreen> {
+  String _q = '';
+
+  static const _sections = [
+    ('day', 'Kila siku', Icons.today_rounded, Color(0xFF1B7F64)),
+    ('stock', 'Hisa na mizigo', Icons.inventory_2_outlined, Color(0xFF2563EB)),
+    ('shop', 'Duka na watu', Icons.groups_outlined, Color(0xFF7C3AED)),
+    ('me', 'Mimi', Icons.person_outline_rounded, Color(0xFF5B6F69)),
+  ];
+
+  void _go(_MoreItem item) {
+    Navigator.of(context).pop();
+    item.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.session.user!;
+    final q = _q.trim().toLowerCase();
+    final shown = widget.items.where((i) => q.isEmpty || i.label.toLowerCase().contains(q) || (i.subtitle ?? '').toLowerCase().contains(q)).toList();
+    final width = MediaQuery.of(context).size.width;
+    final cols = width >= 1000 ? 5 : (width >= 700 ? 4 : 3);
+    final initials = u.name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join();
+
+    return Scaffold(
+      backgroundColor: pageBackground,
+      appBar: AppBar(backgroundColor: pageBackground, title: const T('Zaidi', style: TextStyle(fontWeight: FontWeight.w800))),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+            children: [
+              // Who is signed in.
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20)),
+                child: Row(children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: primarySoft,
+                    child: Text(initials, style: const TextStyle(color: primaryStrong, fontWeight: FontWeight.w800)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(u.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                      Text(u.isOwner ? tr('Mmiliki') : tr('Mfanyakazi'), style: const TextStyle(color: mutedText, fontSize: 13)),
+                    ]),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      widget.session.logout();
+                    },
+                    icon: const Icon(Icons.logout_rounded, color: dangerRed, size: 20),
+                    label: const T('Toka', style: TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
+                  ),
+                ]),
               ),
-            // Made for a laptop (web): many lines with a keyboard. On a phone it
-            // still works, but Pokea mzigo is the phone's way.
-            if (_can(Perm.receive))
-              ListTile(
-                leading: const Icon(Icons.table_chart_outlined),
-                title: const T('Ingiza kwa wingi'),
-                subtitle: Text(MediaQuery.of(sheet).size.width >= 900 ? tr('Hisa ya mwanzo, mizigo mikubwa') : tr('Bora kwenye kompyuta')),
-                onTap: () => go(sheet, BulkEntryScreen(session: widget.session)),
+              const SizedBox(height: 14),
+              TextField(
+                onChanged: (v) => setState(() => _q = v),
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: tr('Tafuta: mf. madeni, PIN, wateja…'),
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  filled: true,
+                  fillColor: cardColor,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                ),
               ),
-            if (_can(Perm.prepareOrders))
-              ListTile(
-                leading: const Icon(Icons.shopping_cart_checkout_rounded),
-                title: const T('Agiza mzigo'),
-                subtitle: const T('Zitakazoisha kabla mzigo ujao'),
-                onTap: () => go(sheet, ReorderScreen(session: widget.session)),
+              for (final (key, title, icon, colour) in _sections)
+                if (shown.any((i) => i.section == key)) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 22, 4, 10),
+                    child: Row(children: [
+                      Icon(icon, size: 18, color: colour),
+                      const SizedBox(width: 8),
+                      Text(tr(title).toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1, color: mutedText)),
+                    ]),
+                  ),
+                  GridView.count(
+                    crossAxisCount: cols,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 0.95,
+                    children: [for (final item in shown.where((i) => i.section == key)) _tile(item, colour)],
+                  ),
+                ],
+              if (shown.isEmpty)
+                Padding(padding: const EdgeInsets.all(32), child: Center(child: T('Hakuna kinacholingana.', style: const TextStyle(color: mutedText)))),
+              // Language: a plain row, always at the end.
+              if (q.isEmpty) ...[
+                const SizedBox(height: 22),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(16)),
+                  child: Row(children: [
+                    const Icon(Icons.translate_rounded, color: mutedText),
+                    const SizedBox(width: 12),
+                    const Expanded(child: T('Lugha', style: TextStyle(fontWeight: FontWeight.w600))),
+                    LanguageSwitch(onChanged: (code) {
+                      Navigator.of(context).pop();
+                      widget.session.setLanguage(code);
+                    }),
+                  ]),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(_MoreItem item, Color colour) {
+    return Tooltip(
+      message: item.subtitle ?? item.label,
+      child: Material(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _go(item),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(color: colour.withValues(alpha: .12), borderRadius: BorderRadius.circular(14)),
+                child: Icon(item.icon, color: colour),
               ),
-            if (_can(Perm.receive) || _can(Perm.prepareOrders))
-              ListTile(
-                leading: const Icon(Icons.storefront_outlined),
-                title: const T('Wasambazaji'),
-                onTap: () => go(sheet, SuppliersScreen(session: widget.session)),
-              ),
-            if (_can(Perm.countStock) || _can(Perm.adjustStock))
-              ListTile(
-                leading: const Icon(Icons.fact_check_outlined),
-                title: const T('Hesabu ya hisa'),
-                subtitle: const T('Linganisha rafu na mfumo'),
-                onTap: () => go(sheet, StockCountScreen(session: widget.session)),
-              ),
-            if (_can(Perm.viewStock))
-              ListTile(
-                leading: const Icon(Icons.hourglass_bottom_rounded),
-                title: const T('Muda wa kuisha'),
-                onTap: () => go(sheet, ExpiryScreen(session: widget.session)),
-              ),
-            if (_can(Perm.viewShopSales))
-              ListTile(
-                leading: const Icon(Icons.bar_chart_rounded),
-                title: const T('Ripoti'),
-                subtitle: const T('Inakuja hivi karibuni'),
-                onTap: () {
-                  Navigator.of(sheet).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('Ripoti zinakuja hivi karibuni.')));
-                },
-              ),
-            if (_can(Perm.sellOnCredit) || _can(Perm.manageCredit))
-              ListTile(
-                leading: const Icon(Icons.account_balance_wallet_outlined),
-                title: const T('Madeni'),
-                subtitle: const T('Wanaodaiwa, malipo, kuidhinisha'),
-                onTap: () => go(sheet, MadeniScreen(session: widget.session)),
-              ),
-            if (_can(Perm.recordExpenses))
-              ListTile(
-                leading: const Icon(Icons.receipt_long_outlined),
-                title: const T('Matumizi'),
-                subtitle: const T('Kodi, umeme, mishahara…'),
-                onTap: () => go(sheet, MatumiziScreen(session: widget.session)),
-              ),
-            if (_can(Perm.viewCustomers))
-              ListTile(
-                leading: const Icon(Icons.notifications_active_outlined),
-                title: const T('Wateja'),
-                subtitle: const T('Historia yao, na kuwakumbusha kurudia dawa'),
-                onTap: () => go(sheet, CustomersScreen(session: widget.session)),
-              ),
-            if (_can(Perm.viewStock) && (_can(Perm.transferStock) || _can(Perm.approveTransfers)))
-              ListTile(
-                leading: const Icon(Icons.swap_horiz_rounded),
-                title: const T('Uhamisho wa hisa'),
-                subtitle: const T('Hamisha hisa kwenda duka jingine, au pokea'),
-                onTap: () => go(sheet, TransfersScreen(session: widget.session)),
-              ),
-            // Owners (to add a shop of theirs), and anyone whose number is in more than one shop.
-            if (widget.session.user!.isOwner || widget.session.user!.otherShops > 0)
-              ListTile(
-                leading: const Icon(Icons.storefront_rounded),
-                title: const T('Maduka yangu'),
-                subtitle: const T('Badili duka bila kutoka'),
-                onTap: () => go(sheet, MyShopsScreen(session: widget.session)),
-              ),
-            if (_can(Perm.manageDevices))
-              ListTile(
-                leading: const Icon(Icons.phonelink_lock),
-                title: const T('Vifaa vinavyoruhusiwa'),
-                onTap: () => go(sheet, DevicesScreen(session: widget.session)),
-              ),
-            // Never delegable: only the owner decides who may do what.
-            if (widget.session.user!.isOwner)
-              ListTile(
-                leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: const T('Wafanyakazi na ruhusa'),
-                subtitle: const T('Toa au ondoa ruhusa, kwa muda au kudumu'),
-                onTap: () => go(sheet, StaffPermissionsScreen(session: widget.session)),
-              ),
-            if (!widget.session.user!.isOwner)
-              ListTile(
-                leading: const Icon(Icons.badge_outlined),
-                title: const T('Taarifa zangu'),
-                subtitle: const T('Duka limehifadhi nini kukuhusu, na nani ameangalia'),
-                onTap: () => go(sheet, MyProfileScreen(session: widget.session)),
-              ),
-            ListTile(
-              leading: const Icon(Icons.pin_outlined),
-              title: const T('Badilisha PIN yangu'),
-              onTap: () => go(sheet, ChangePinScreen(session: widget.session)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.support_agent_rounded),
-              title: const T('Msaada'),
-              subtitle: const T('Uliza Saola, ona majibu'),
-              onTap: () => go(sheet, SupportScreen(session: widget.session)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.translate_rounded),
-              title: const T('Lugha'),
-              trailing: LanguageSwitch(
-                onChanged: (code) {
-                  Navigator.of(sheet).pop();
-                  widget.session.setLanguage(code);
-                },
-              ),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: dangerRed),
-              title: const T('Toka', style: TextStyle(color: dangerRed)),
-              onTap: () {
-                Navigator.of(sheet).pop();
-                widget.session.logout();
-              },
-            ),
-          ],
-         ),
+              const SizedBox(height: 10),
+              Text(item.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, height: 1.2)),
+            ]),
+          ),
         ),
       ),
     );
   }
 }
+

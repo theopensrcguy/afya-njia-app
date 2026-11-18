@@ -5,8 +5,12 @@ import '../../core/brand.dart';
 import '../../core/i18n.dart';
 import '../../core/phone_field.dart';
 
-/// Did this customer agree that the shop keeps what they buy and reminds them?
+/// Did this customer agree that the shop keeps what they buy?
 bool customerAgreed(Map<String, dynamic>? c) => c != null && c['consent'] == true;
+
+/// …and, a second optional yes, to be reminded before their medicine runs out?
+/// (An older server sends no `reminders_on`: then agreeing meant both.)
+bool customerWantsReminders(Map<String, dynamic>? c) => customerAgreed(c) && c!['reminders_on'] != false;
 
 /// "2026-12-11" → "11/12/2026".
 String dayText(String? iso) {
@@ -42,6 +46,7 @@ class _ConsentDialog extends StatefulWidget {
 
 class _ConsentDialogState extends State<_ConsentDialog> {
   final _phone = TextEditingController();
+  bool _remind = false; // reminders are optional: off unless the customer says yes
   bool _saving = false;
   String? _error;
 
@@ -58,9 +63,17 @@ class _ConsentDialogState extends State<_ConsentDialog> {
       _saving = true;
       _error = null;
     });
+    if (_remind && _needsPhone && _phone.text.trim().isEmpty) {
+      setState(() {
+        _saving = false;
+        _error = tr('Weka namba ya simu: vikumbusho vinatumwa huko.');
+      });
+      return;
+    }
     try {
       final c = await widget.api.post('customers/${widget.customer['id']}/consent', {
         'consent': true,
+        'reminders': _remind,
         if (_needsPhone && _phone.text.trim().isNotEmpty) 'phone': _phone.text.trim(),
       }) as Map<String, dynamic>;
       if (mounted) Navigator.of(context).pop(c);
@@ -77,12 +90,20 @@ class _ConsentDialogState extends State<_ConsentDialog> {
       title: const T('Muulize mteja'),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(tr('Je, :name anakubali duka lihifadhi manunuzi yake, na kumkumbusha kwa simu dawa zake zinapokaribia kuisha?', {'name': widget.customer['name']})),
+          Text(tr('Je, :name anakubali duka lihifadhi manunuzi yake (historia yake)?', {'name': widget.customer['name']})),
           const SizedBox(height: 8),
-          const T('Anaweza kusitisha wakati wowote. Kumbukumbu zake zinaonwa na wenye ruhusa tu, na ujumbe wa kikumbusho hautaji jina la dawa.',
-              style: TextStyle(color: mutedText, fontSize: 13)),
+          const T('Anaweza kusitisha wakati wowote. Kumbukumbu zake zinaonwa na wenye ruhusa tu.', style: TextStyle(color: mutedText, fontSize: 13)),
+          const SizedBox(height: 8),
+          // The second, optional question.
+          SwitchListTile(
+            value: _remind,
+            onChanged: (v) => setState(() => _remind = v),
+            contentPadding: EdgeInsets.zero,
+            title: const T('Pia akumbushwe dawa zikikaribia kuisha', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: const T('Si lazima. SMS/WhatsApp; ujumbe hautaji jina la dawa.', style: TextStyle(fontSize: 12)),
+          ),
           if (_needsPhone)
-            PhoneField(controller: _phone, label: tr('Simu ya mteja (ya kukumbushwa)')),
+            PhoneField(controller: _phone, label: _remind ? tr('Simu ya mteja (ya kukumbushwa)') : tr('Simu ya mteja (si lazima)')),
           if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: dangerRed))),
         ]),
       ),

@@ -136,7 +136,9 @@ class _PhoneFieldState extends State<PhoneField> {
 
   @override
   Widget build(BuildContext context) {
-    final hint = widget.hint ?? _group('X' * _country.digits);
+    // An example number, not "XXX XXX XXX": shows the format and that the leading 0 isn't needed.
+    final example = '${_country.first[_country.first.length - 1]}12345678901'.substring(0, _country.digits);
+    final hint = widget.hint ?? _group(example);
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
         padding: const EdgeInsets.only(top: 4),

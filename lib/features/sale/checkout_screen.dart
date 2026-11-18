@@ -134,7 +134,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _showReceipt(Map<String, dynamic> sale) {
     // A customer who agreed (and has a phone) may be reminded before the medicine runs out.
-    final who = sale['customer_id'] != null && customerAgreed(_cart.customer) && '${_cart.customer!['phone'] ?? ''}'.isNotEmpty ? _cart.customer : null;
+    final who = sale['customer_id'] != null && customerWantsReminders(_cart.customer) && '${_cart.customer!['phone'] ?? ''}'.isNotEmpty ? _cart.customer : null;
     final seen = <int>{};
     final refill = [for (final l in _cart.lines) if (seen.add(l.product.id)) (productId: l.product.id, name: l.product.name)];
     String? remindOn;

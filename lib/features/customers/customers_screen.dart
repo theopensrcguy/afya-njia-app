@@ -114,7 +114,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
       showDragHandle: true,
       builder: (_) => _HistorySheet(api: _api, customer: c),
     );
-    if (changed == true) _load();
+    // Consent or reminders may have changed in the sheet.
+    if (changed == true || mounted) _load();
   }
 
   List<Map<String, dynamic>> get _shown {
@@ -252,6 +253,21 @@ class _HistorySheet extends StatefulWidget {
 class _HistorySheetState extends State<_HistorySheet> {
   Map<String, dynamic>? _h;
   String? _error;
+  late bool _remind = customerWantsReminders(widget.customer);
+
+  /// Reminders are a second, optional yes: on or off any time.
+  Future<void> _setRemind(bool on) async {
+    setState(() => _remind = on);
+    try {
+      await widget.api.patch('customers/${widget.customer['id']}/reminders', {'on': on});
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) setState(() {
+        _remind = !on;
+        _error = e.message;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -301,6 +317,12 @@ class _HistorySheetState extends State<_HistorySheet> {
             ),
             TextButton(onPressed: _removeConsent, style: TextButton.styleFrom(foregroundColor: dangerRed), child: const T('Ondoa ridhaa')),
           ]),
+        ),
+        SwitchListTile(
+          value: _remind,
+          onChanged: '${widget.customer['phone'] ?? ''}'.isEmpty ? null : _setRemind,
+          title: const T('Vikumbusho vya kurudia dawa', style: TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(_remind ? tr('Anakumbushwa dawa zikikaribia kuisha') : tr('Hakumbushwi'), style: const TextStyle(fontSize: 12)),
         ),
         if (_error != null) Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: const TextStyle(color: dangerRed))),
         Expanded(

@@ -29,6 +29,7 @@ class _RegisterDialogState extends State<_RegisterDialog> {
   final _phone = TextEditingController();
   final _note = TextEditingController();
   bool _agreed = false;
+  bool _remind = false; // a second, optional yes
   bool _busy = false;
   String? _error;
 
@@ -42,7 +43,7 @@ class _RegisterDialogState extends State<_RegisterDialog> {
 
   Future<void> _save() async {
     final name = _name.text.trim();
-    final problem = _phone.text.isEmpty ? tr('Weka namba ya simu: vikumbusho vinatumwa huko.') : phoneProblem(_phone.text);
+    final problem = _phone.text.isEmpty ? (_remind ? tr('Weka namba ya simu: vikumbusho vinatumwa huko.') : null) : phoneProblem(_phone.text);
     if (name.isEmpty) return setState(() => _error = tr('Weka jina la mteja.'));
     if (problem != null) return setState(() => _error = problem);
     if (!_agreed) return setState(() => _error = tr('Weka tiki: mteja amekubali.'));
@@ -51,7 +52,7 @@ class _RegisterDialogState extends State<_RegisterDialog> {
       _error = null;
     });
     try {
-      await widget.api.post('customers', {'name': name, 'phone': _phone.text, 'note': _note.text.trim().isEmpty ? null : _note.text.trim(), 'consent': true});
+      await widget.api.post('customers', {'name': name, 'phone': _phone.text, 'note': _note.text.trim().isEmpty ? null : _note.text.trim(), 'consent': true, 'reminders': _remind});
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       final existing = e.data['customer'];
@@ -61,7 +62,7 @@ class _RegisterDialogState extends State<_RegisterDialog> {
             title: tr('Mteja yupo tayari'), message: '${e.message} ${tr('Weka ridhaa yake kwenye rekodi hiyo?')}', confirm: tr('Ndiyo, weka ridhaa'));
         if (yes == true) {
           try {
-            await widget.api.post('customers/${asInt(existing['id'])}/consent', {'consent': true});
+            await widget.api.post('customers/${asInt(existing['id'])}/consent', {'consent': true, 'reminders': _remind});
             if (mounted) Navigator.of(context).pop(true);
             return;
           } on ApiException catch (e2) {
@@ -82,12 +83,12 @@ class _RegisterDialogState extends State<_RegisterDialog> {
       title: const T('Sajili mteja'),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          T('Muulize mteja kwanza: "Tunaweza kuhifadhi dawa unazonunua hapa, na kukutumia ujumbe dawa zikikaribia kuisha?" Sajili tu akisema ndiyo.',
+          T('Muulize mteja kwanza: "Tunaweza kuhifadhi dawa unazonunua hapa?" Sajili tu akisema ndiyo. Vikumbusho ni swali la pili, si lazima.',
               style: const TextStyle(color: mutedText, fontSize: 13)),
           const SizedBox(height: 14),
           TextField(controller: _name, textCapitalization: TextCapitalization.words, decoration: InputDecoration(labelText: '${tr('Jina la mteja')} *')),
           const SizedBox(height: 12),
-          PhoneField(controller: _phone, label: '${tr('Namba ya simu')} *', helper: tr('Vikumbusho vinatumwa kwa namba hii (SMS au WhatsApp).')),
+          PhoneField(controller: _phone, label: tr('Namba ya simu'), helper: tr('Kumtambua mteja. Lazima akitaka vikumbusho.')),
           const SizedBox(height: 12),
           TextField(controller: _note, decoration: InputDecoration(labelText: tr('Maelezo (si lazima)'), hintText: tr('mf. hupenda kupigiwa simu jioni'))),
           const SizedBox(height: 14),
@@ -99,9 +100,16 @@ class _RegisterDialogState extends State<_RegisterDialog> {
               onChanged: (v) => setState(() => _agreed = v == true),
               controlAffinity: ListTileControlAffinity.leading,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              title: T('Mteja amekubali duka lihifadhi anachonunua na limkumbushe. Anaweza kusema ACHA wakati wowote.',
+              title: T('Mteja amekubali duka lihifadhi anachonunua (historia yake). Anaweza kusema ACHA wakati wowote.',
                   style: const TextStyle(fontSize: 13, color: primaryStrong)),
             ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            value: _remind,
+            onChanged: (v) => setState(() => _remind = v),
+            title: const T('Pia akumbushwe dawa zikikaribia kuisha', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: const T('Si lazima. SMS/WhatsApp; ujumbe hautaji jina la dawa.', style: TextStyle(fontSize: 12)),
           ),
           if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: const TextStyle(color: dangerRed))),
         ]),
