@@ -99,10 +99,12 @@ class T extends StatelessWidget {
 /// Here both labels are always readable: the chosen one is filled, the other
 /// is outlined in the same colour as its text.
 class LanguageSwitch extends StatelessWidget {
-  const LanguageSwitch({super.key, required this.onChanged, this.onDark = false});
+  const LanguageSwitch({super.key, required this.onChanged, this.onDark = false, this.compact = false});
 
   final ValueChanged<String> onChanged;
   final bool onDark;
+  /// "SW | EN" instead of the full names: for the sign-in screen's top bar.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -111,8 +113,8 @@ class LanguageSwitch extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: fg.withValues(alpha: .6)),
-        color: onDark ? Colors.white.withValues(alpha: .08) : Colors.transparent,
+        border: compact ? null : Border.all(color: fg.withValues(alpha: .6)),
+        color: onDark ? Colors.white.withValues(alpha: .08) : (compact ? const Color(0xFFF2F6F4) : Colors.transparent),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -126,16 +128,16 @@ class LanguageSwitch extends StatelessWidget {
                 onTap: lang.code == e.key ? null : () => onChanged(e.key),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14, vertical: compact ? 6 : 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(99),
                     color: lang.code == e.key ? (onDark ? Colors.white : brandGreen) : Colors.transparent,
                   ),
                   child: Text(
-                    e.value,
+                    compact ? e.key.toUpperCase() : e.value,
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 14,
+                      fontSize: compact ? 13 : 14,
                       color: lang.code == e.key ? (onDark ? brandGreen : Colors.white) : fg,
                     ),
                   ),

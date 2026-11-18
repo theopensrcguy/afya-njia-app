@@ -316,3 +316,15 @@ Rafu (aisles), stock-taking and the Saola map are on the web. The app is unchang
   - 3 to 5 tiles per row depending on the screen width.
 - **Customers:** reminders are a separate, optional tick when registering (Sajili mteja) and when agreeing at the till.
 - Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment, so it couldn't be run here. Test on the iPhone and iPad.
+
+## v0.41: sign-in redesigned (app only)
+Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). Only the look changed; the sign-in steps, device approval and Umesahau PIN work as before.
+- **Phone:** a deep green top (logo, compact SW/EN switch, the title) and a white sheet below with the one thing to do.
+  - **Step 1, Namba ya simu:** a "1 · Namba ya simu — 2 · PIN" step line, a large bordered number field, the example hint, then **Endelea** at the bottom, Umesahau PIN? and a footnote.
+  - **Step 2, PIN:** a back button, "Weka PIN yako" and the number as a chip (**Badili** goes back). Four PIN boxes (the next one outlined in green, red after a wrong PIN), the error in a red banner, flat keys (Umesahau PIN? bottom left, delete bottom right), and **Ingia** (grey until 4 digits, "Inaingia…" with a spinner while signing in).
+  - **Shared counter phone:** "Nani anaingia?" with a card per person (initials, name, role; scrolls sideways when there are many), "PIN ya {name}" in the sheet, and "Siko kwenye orodha: ingia kwa namba".
+  - **Personal phone:** "Karibu tena, {name}" and "Si wewe? Ingia kwa namba".
+  - Device approval (the 6-digit number) and the "couldn't load" message use the same sheet.
+- **iPad / computer (900px wide or more):** the brand on a green panel on the left (three lines on what the app does), the form in a centred 380px column on the right. The computer keyboard types the PIN.
+- `LanguageSwitch(compact: true)` shows SW / EN instead of the full names.
+- Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment, so it couldn't be run here. Test on the iPhone and the iPad (phone step, PIN step, a wrong PIN, a shared phone with 4+ people, and the iPad side by side).

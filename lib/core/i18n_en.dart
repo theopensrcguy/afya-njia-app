@@ -1319,4 +1319,18 @@ const en = <String, String>{
   'Ya kuthibitisha, na iliyopita': 'To confirm, and past ones',
   'Andika namba yako ya simu': 'Enter your phone number',
   'Sasa PIN yako ya tarakimu 4': 'Now your 4-digit PIN',
+  // Sign-in redesign (v0.41)
+  'Badili': 'Change',
+  'Bila 0 mwanzoni. Mfano: 712 345 678': 'Without the leading 0. Example: 712 345 678',
+  'Ingia kwa namba ya simu': 'Sign in with your phone number',
+  'Ingia kwa namba yako ya simu na PIN.': 'Sign in with your phone number and PIN.',
+  'Karibu': 'Welcome',
+  'Karibu tena': 'Welcome back',
+  'Kila mauzo yanahifadhiwa kwa jina la aliyeingia.': 'Every sale is saved under the name of whoever signed in.',
+  'Mauzo, hisa na madeni ya duka lako, mahali pamoja.': "Your shop's sales, stock and debts, in one place.",
+  'Msaidizi': 'Assistant',
+  'PIN ya :name': 'PIN for :name',
+  'PIN ya tarakimu 4. Ikikamilika, unaingia moja kwa moja.': 'A 4-digit PIN. Once complete, you sign in automatically.',
+  'Rudi kwenye namba ya simu': 'Back to the phone number',
+  'Weka PIN yako kuendelea.': 'Enter your PIN to continue.',
 };
