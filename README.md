@@ -334,3 +334,8 @@ Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). O
 - **Key height follows the screen:** 60 on tall screens, 54 on most iPhones, 48 on small ones. The PIN boxes follow too. So the shared screen (names, boxes, keypad, Ingia) fits without scrolling; scrolling stays only as a fallback.
 - The PIN hint line is shown only on the phone-number route, to save room on the shared screen.
 - Lint fixes in `customers_screen.dart`: `this.context` after the await; braces on a multi-line `if`.
+
+### v0.41.2: one clean number box, keys that look like keys
+- **Number box:** `PhoneField(bare: true)` draws no border of its own. The sign-in screen draws one box: a grey country segment, a divider, then the number. Before, `PhoneField`'s own outlined field sat inside the screen's border (a box in a box, with a grey wash).
+- **Keys:** each digit now has a faint fill (#F5F8F7) with small gaps between keys. Flat keys only show their background on hover, and phones have no hover, so the digits looked like text. "Umesahau PIN?" and delete stay unfilled.
+- The logo is the same size on every sign-in screen (it changed between steps). Key heights are now 58 / 52 / 46 by screen height.

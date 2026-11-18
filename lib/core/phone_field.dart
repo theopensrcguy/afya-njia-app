@@ -63,6 +63,7 @@ class PhoneField extends StatefulWidget {
     this.focusNode,
     this.style,
     this.fillColor,
+    this.bare = false,
     this.onChanged,
     this.onSubmitted,
     this.textInputAction,
@@ -77,6 +78,9 @@ class PhoneField extends StatefulWidget {
   final FocusNode? focusNode;
   final TextStyle? style;
   final Color? fillColor;
+  /// No border of its own: for a screen that draws the box around it (sign-in).
+  /// The country sits in a grey segment; problems are shown by the screen.
+  final bool bare;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final TextInputAction? textInputAction;
@@ -136,6 +140,7 @@ class _PhoneFieldState extends State<PhoneField> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.bare) return _buildBare();
     // An example number, not "XXX XXX XXX": shows the format and that the leading 0 isn't needed.
     final example = '${_country.first[_country.first.length - 1]}12345678901'.substring(0, _country.digits);
     final hint = widget.hint ?? _group(example);
@@ -186,6 +191,69 @@ class _PhoneFieldState extends State<PhoneField> {
         ),
       ),
     ]);
+  }
+
+  /// One clean box: [🇹🇿 +255 ▾ | 712 345 678]. The surrounding container draws the border.
+  Widget _buildBare() {
+    final example = '${_country.first[_country.first.length - 1]}12345678901'.substring(0, _country.digits);
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          padding: const EdgeInsets.only(left: 12, right: 4),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF5F8F7),
+            border: Border(right: BorderSide(color: Color(0xFFE3EAE7))),
+          ),
+          alignment: Alignment.center,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<PhoneCountry>(
+              value: _country,
+              style: widget.style?.copyWith(fontSize: 16),
+              items: [
+                for (final c in phoneCountries) DropdownMenuItem(value: c, child: Text('${c.flag} +${c.code}')),
+              ],
+              onChanged: (c) {
+                if (c == null) return;
+                setState(() {
+                  _country = c;
+                  final d = _local.text.replaceAll(' ', '');
+                  _local.text = _group(d.length > c.digits ? d.substring(0, c.digits) : d);
+                });
+                _changed();
+              },
+            ),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: TextField(
+              controller: _local,
+              focusNode: widget.focusNode,
+              autofocus: widget.autofocus,
+              keyboardType: TextInputType.phone,
+              textInputAction: widget.textInputAction,
+              style: widget.style,
+              autofillHints: const [AutofillHints.telephoneNumberNational],
+              inputFormatters: [_PhoneDigits(this)],
+              onChanged: (_) => _changed(),
+              onSubmitted: widget.onSubmitted == null ? null : (_) => widget.onSubmitted!(_full),
+              decoration: InputDecoration(
+                hintText: widget.hint ?? _group(example),
+                hintStyle: widget.style?.copyWith(color: const Color(0xFFA9B7B2), fontWeight: FontWeight.w500),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                filled: false,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 }
 

@@ -215,7 +215,7 @@ class _PinScreenState extends State<PinScreen> {
   Widget _phoneLayout() {
     return LayoutBuilder(
       builder: (context, box) {
-        _keyH = box.maxHeight >= 900 ? 60 : (box.maxHeight >= 780 ? 54 : 48);
+        _keyH = box.maxHeight >= 900 ? 58 : (box.maxHeight >= 780 ? 52 : 46);
         return SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: ConstrainedBox(
@@ -329,13 +329,12 @@ class _PinScreenState extends State<PinScreen> {
 
   Widget _header() {
     final back = _byPhone && _phoneDone && _pairingCode == null;
-    final shared = !_byPhone && _info?.mode == 'shared';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         if (back)
           _roundIcon(Icons.arrow_back_rounded, tr('Rudi kwenye namba ya simu'), _editPhone)
         else
-          _logo(size: shared ? 32 : 36, nameSize: shared ? 16 : 19),
+          _logo(size: 36, nameSize: 19),
         const Spacer(),
         LanguageSwitch(onDark: true, compact: true, onChanged: lang.chooseSignedOut),
       ]),
@@ -561,8 +560,9 @@ class _PinScreenState extends State<PinScreen> {
       T('Namba ya simu', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: inkColor)),
       const SizedBox(height: 8),
       Container(
-        padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: _error != null ? dangerRed : brandGreen, width: 2),
           boxShadow: [BoxShadow(color: (_error != null ? dangerRed : brandGreen).withValues(alpha: .10), spreadRadius: 4)],
@@ -570,6 +570,7 @@ class _PinScreenState extends State<PinScreen> {
         child: PhoneField(
           controller: _phone,
           focusNode: _phoneFocus,
+          bare: true,
           textInputAction: TextInputAction.next,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: inkColor),
           onChanged: (_) => setState(() => _error = null),
@@ -690,9 +691,9 @@ class _PinScreenState extends State<PinScreen> {
 
   /// Flat keys (no bubbles): the numbers carry the screen, not the buttons.
   Widget _keypad() {
-    Widget cell(Widget child) => Expanded(child: SizedBox(height: _keyH, child: child));
+    Widget cell(Widget child) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: SizedBox(height: _keyH, child: child)));
     Widget digit(String d) => cell(Material(
-          color: Colors.transparent,
+          color: const Color(0xFFF5F8F7),
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
@@ -701,7 +702,7 @@ class _PinScreenState extends State<PinScreen> {
             child: Center(child: Text(d, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w500, color: inkColor))),
           ),
         ));
-    Widget row(List<Widget> c) => Padding(padding: const EdgeInsets.only(bottom: 4), child: Row(children: c));
+    Widget row(List<Widget> c) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(children: c));
     return Column(children: [
       row([digit('1'), digit('2'), digit('3')]),
       row([digit('4'), digit('5'), digit('6')]),
