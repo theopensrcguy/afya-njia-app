@@ -264,10 +264,12 @@ class _HistorySheetState extends State<_HistorySheet> {
       await widget.api.patch('customers/${widget.customer['id']}/reminders', {'on': on});
       _load();
     } on ApiException catch (e) {
-      if (mounted) setState(() {
-        _remind = !on;
-        _error = e.message;
-      });
+      if (mounted) {
+        setState(() {
+          _remind = !on;
+          _error = e.message;
+        });
+      }
     }
   }
 
