@@ -295,3 +295,8 @@ Rafu (aisles), stock-taking and the Saola map are on the web. The app is unchang
 - **Maliza na tuma** sends the count; **Historia** lists past counts.
 - **Review:** the totals, the differences with value, and for approvers a checkbox per product, plus **Idhinisha marekebisho** (approve) / **Kataa** (reject, with a reason).
 - English strings are added in `i18n_en.dart`. Checked with the Dart analyzer only.
+
+## Sajili mteja (v0.36)
+- The Wateja screen has a **Sajili mteja** button: name, `PhoneField`, an optional note, and a consent tick (required).
+- When the number is already known (server answers 409 `customer_exists`), it offers to record consent on that customer.
+- Checked with the Dart analyzer only.

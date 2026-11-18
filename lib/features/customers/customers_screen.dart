@@ -10,10 +10,11 @@ import '../../core/loader.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
 import 'customer_consent.dart';
+import 'register_customer.dart';
 
 /// Wateja: who to remind today that their medicine is running out, reminders
 /// coming up, and the customers who agreed to be kept on record, with what
-/// they bought. A customer is added at the till, if they agree.
+/// they bought. A customer is added here (Sajili mteja) or at the till, if they agree.
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key, required this.session});
 
@@ -131,6 +132,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final today = '${_board['today'] ?? ''}';
     return Scaffold(
       appBar: AppBar(backgroundColor: pageBackground, title: const T('Wateja', style: TextStyle(fontWeight: FontWeight.w800))),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          if (await registerCustomer(context, api: _api) && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: T('Mteja amesajiliwa.')));
+            _load();
+          }
+        },
+        backgroundColor: brandGreen,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const T('Sajili mteja'),
+      ),
       body: _loading
           ? const Center(child: AfyaLoader())
           : _error != null

@@ -1274,4 +1274,18 @@ const en = <String, String>{
   'tofauti :x': ':x differences',
   'ziada': 'extra',
   'zimehesabiwa': 'counted',
+  // v0.36: Sajili mteja
+  'Sajili mteja': 'Register a customer',
+  'Muulize mteja kwanza: "Tunaweza kuhifadhi dawa unazonunua hapa, na kukutumia ujumbe dawa zikikaribia kuisha?" Sajili tu akisema ndiyo.': 'Ask the customer first: "May we keep the medicines you buy here, and send you a message when they are about to run out?" Register them only if they say yes.',
+  'Jina la mteja': 'Customer\'s name',
+  'Vikumbusho vinatumwa kwa namba hii (SMS au WhatsApp).': 'Reminders are sent to this number (SMS or WhatsApp).',
+  'mf. hupenda kupigiwa simu jioni': 'e.g. prefers a call in the evening',
+  'Mteja amekubali duka lihifadhi anachonunua na limkumbushe. Anaweza kusema ACHA wakati wowote.': 'The customer agreed that the shop keeps what they buy and reminds them. They can say STOP at any time.',
+  'Sajili': 'Register',
+  'Mteja yupo tayari': 'Customer already exists',
+  'Weka ridhaa yake kwenye rekodi hiyo?': 'Record their consent on that record?',
+  'Ndiyo, weka ridhaa': 'Yes, record consent',
+  'Weka namba ya simu: vikumbusho vinatumwa huko.': 'Enter a phone number: reminders are sent there.',
+  'Weka tiki: mteja amekubali.': 'Tick: the customer agreed.',
+  'Mteja amesajiliwa.': 'Customer registered.',
 };
