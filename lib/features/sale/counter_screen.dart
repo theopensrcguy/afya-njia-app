@@ -371,8 +371,7 @@ class _CounterScreenState extends State<CounterScreen> {
         final outOfStock = p.onHand == 0;
         final stockText = outOfStock
             ? tr('Hazipo (zimeisha)')
-            : tr('Hisa: :a:b', {'a': describeStock(p.onHand, p.units), 'b': p.lowStock ? tr(' · chini') : ''}) +
-                '${p.nextExpiry != null ? tr(' · inaisha :a', {'a': _monthYear(p.nextExpiry!)}) : ''}';
+            : '${tr('Hisa: :a:b', {'a': describeStock(p.onHand, p.units), 'b': p.lowStock ? tr(' · chini') : ''})}${p.nextExpiry != null ? tr(' · inaisha :a', {'a': _monthYear(p.nextExpiry!)}) : ''}';
 
         final inBasket = _cart.quantityOf(p.id);
         // The price shown is for the unit being sold (or the one a tap would add).

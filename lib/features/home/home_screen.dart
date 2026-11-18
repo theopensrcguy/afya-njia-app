@@ -141,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _header(),
                     const SizedBox(height: 18),
                     if (_error != null) _errorBox(),
-                    if (_billingBanner() case final b?) b,
+                    ?_billingBanner(),
                     if (_shift == null) _noShiftBanner(),
                     _shopView ? _ownerTodayCard() : _helperTodayCard(),
                     const SizedBox(height: 14),

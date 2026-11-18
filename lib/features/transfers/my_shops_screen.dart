@@ -135,7 +135,7 @@ class _MyShopsScreenState extends State<MyShopsScreen> {
                         if (s['location'] != null) '${s['location']}',
                         if (s['role'] == 'helper') tr('mfanyakazi') else '${s['shop_code']}',
                       ].join(' · '),
-                      if (_billingLine(s) case final b?) b,
+                      ?_billingLine(s),
                     ].join('\n')),
                     isThreeLine: _billingLine(s) != null,
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [

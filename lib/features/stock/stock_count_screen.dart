@@ -315,7 +315,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: pct),
             duration: const Duration(milliseconds: 500),
-            builder: (_, v, __) => LinearProgressIndicator(value: v, minHeight: 8, backgroundColor: Colors.white, color: infoBlue),
+            builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: 8, backgroundColor: Colors.white, color: infoBlue),
           ),
         ),
         const SizedBox(height: 8),
@@ -817,7 +817,7 @@ class _StockCountHistoryScreenState extends State<StockCountHistoryScreen> {
                   : ListView.separated(
                       padding: const EdgeInsets.all(20),
                       itemCount: _list!.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (_, i) {
                         final c = _list![i];
                         final at = DateTime.tryParse('${c['started_at']}')?.toLocal();
