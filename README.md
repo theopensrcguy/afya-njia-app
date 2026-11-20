@@ -339,3 +339,9 @@ Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). O
 - **Number box:** `PhoneField(bare: true)` draws no border of its own. The sign-in screen draws one box: a grey country segment, a divider, then the number. Before, `PhoneField`'s own outlined field sat inside the screen's border (a box in a box, with a grey wash).
 - **Keys:** each digit now has a faint fill (#F5F8F7) with small gaps between keys. Flat keys only show their background on hover, and phones have no hover, so the digits looked like text. "Umesahau PIN?" and delete stay unfilled.
 - The logo is the same size on every sign-in screen (it changed between steps). Key heights are now 58 / 52 / 46 by screen height.
+
+## The app talks to the live server by default (v0.41.3)
+- `lib/config.dart`: `API_BASE_URL` now defaults to **`https://afyanjia.saola.co.tz/api`**. A plain `flutter run`, and any build for the pilot phones or TestFlight, uses the real server; nobody needs to remember a `--dart-define`.
+- **To test against the Laravel on the Mac:** `flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api` (Simulator), or the Mac's Wi-Fi IP for a real iPhone.
+- **It must be the domain, not `185.174.252.254`:** nginx chooses the site by name, so the bare IP gets the default site and a 404. It must also be **https**, because iOS refuses plain http to internet servers.
+- Before the pilot, remove the development `NSAllowsArbitraryLoads` block from `ios/Runner/Info.plist` (step 3 at the top). The live server is https, so the app no longer needs it, and App Store review questions it.

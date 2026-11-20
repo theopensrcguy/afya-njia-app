@@ -1,16 +1,20 @@
-/// App settings that change between your Mac, an emulator and the real phone.
+/// Where the app finds the server. Read at BUILD time.
 ///
-/// They are read at BUILD time with --dart-define, so you never edit code to
-/// point the app somewhere else:
+/// The default is the live server, so a plain `flutter run` (and every build
+/// for the pilot phones / TestFlight) talks to the real shop data:
 ///
-///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:8000/api
+///   flutter run
 ///
-/// Default 127.0.0.1 works in the iOS Simulator, which shares your Mac's
-/// network. A real iPhone is a different device, so it needs your Mac's
-/// Wi-Fi IP address instead (see README).
+/// To test against the Laravel on your Mac instead, say so when building:
+///
+///   flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api      (iOS Simulator)
+///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:8000/api   (iPhone, your Mac's Wi-Fi IP)
+///
+/// It must be the domain (nginx picks the site by name; the bare IP gives 404)
+/// and https (iOS refuses plain http to internet servers).
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://127.0.0.1:8000/api',
+  defaultValue: 'https://afyanjia.saola.co.tz/api',
 );
 
 /// Which pharmacy this counter phone belongs to (from the seeder: 1).
