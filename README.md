@@ -352,3 +352,4 @@ Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). O
 - **Fix:** `_closeKeyboard()` unfocuses **and** sends `TextInput.hide` on Endelea and on every sign-in attempt. The home screen also hides any leftover keyboard when it opens.
 - Tapping anywhere outside the number box closes the keyboard (iOS's number pad has no Done key).
 - The footnote "Kila mauzo yanahifadhiwa…" is hidden while the keyboard is open; it used to peek out from behind it, cut in half.
+- **v0.41.6 lint tidy-up** (your Flutter is Dart 3.8+, so the newer rules apply): null-aware list elements (`?_billingBanner()`) in home and Maduka yangu, interpolation instead of `+` in the counter and product screens, `_` wildcards in the stock-take screen. `flutter analyze` is clean under the full rule set.

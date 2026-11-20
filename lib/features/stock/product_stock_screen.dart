@@ -264,7 +264,8 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
       ]),
       const SizedBox(height: 4),
       Text(describeStock(onHand, units), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-      Text('${tr('Jumla :a :on_hand', {'a': unitLabel(units.isEmpty ? '' : units.first.name, 2), 'on_hand': onHand})}${_can(Perm.viewCosts) ? tr(' · thamani :a', {'a': formatTsh(asInt(p['value_at_cost']))}) : ''}',
+      Text('${tr('Jumla :a :on_hand', {'a': unitLabel(units.isEmpty ? '' : units.first.name, 2), 'on_hand': onHand})}'
+          '${_can(Perm.viewCosts) ? tr(' · thamani :a', {'a': formatTsh(asInt(p['value_at_cost']))}) : ''}',
           style: const TextStyle(color: mutedText, fontSize: 13)),
       const SizedBox(height: 12),
       ClipRRect(
