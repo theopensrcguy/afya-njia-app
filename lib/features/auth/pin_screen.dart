@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../config.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
@@ -88,7 +89,7 @@ class _PinScreenState extends State<PinScreen> {
       setState(() => _error = _phone.text.isEmpty ? tr('Andika namba yako ya simu kwanza.') : phoneProblem(_phone.text));
       return;
     }
-    _phoneFocus.unfocus();
+    _closeKeyboard();
     setState(() {
       _phoneDone = true;
       _pin = '';
@@ -120,6 +121,7 @@ class _PinScreenState extends State<PinScreen> {
   Future<void> _submit([String? pin]) async {
     if (!_byPhone && _selected == null) return;
     final pinToSend = pin ?? _pin;
+    _closeKeyboard();
     setState(() => _signingIn = true);
     try {
       await widget.session.login(_byPhone ? null : _selected, pinToSend, phone: _byPhone ? _phone.text.trim() : null);
@@ -163,6 +165,15 @@ class _PinScreenState extends State<PinScreen> {
   }
 
   bool get _onPhoneStep => _byPhone && !_phoneDone;
+
+  /// Unfocus alone isn't always enough on iOS: when the focused number box is
+  /// removed in the same frame (step 1 → 2), the keyboard can stay up with
+  /// nothing attached and ride along onto the home screen. So also tell the
+  /// system to hide it.
+  void _closeKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
+  }
 
   /// True on the iPad/computer layout, where the form sits in a centred column
   /// with no height to stretch into.
@@ -216,7 +227,12 @@ class _PinScreenState extends State<PinScreen> {
     return LayoutBuilder(
       builder: (context, box) {
         _keyH = box.maxHeight >= 900 ? 58 : (box.maxHeight >= 780 ? 52 : 46);
-        return SingleChildScrollView(
+        return GestureDetector(
+          // Tap outside the number box: the keyboard goes away (iOS's number pad
+          // has no Done key). Buttons still get their taps first.
+          behavior: HitTestBehavior.translucent,
+          onTap: _closeKeyboard,
+          child: SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: box.maxHeight),
@@ -236,6 +252,7 @@ class _PinScreenState extends State<PinScreen> {
             ]),
           ),
         ),
+      ),
       );
       },
     );
@@ -599,8 +616,10 @@ class _PinScreenState extends State<PinScreen> {
             child: const T('Rudi', style: TextStyle(color: mutedText, fontWeight: FontWeight.w600)),
           ),
         ),
-      const SizedBox(height: 4),
-      T('Kila mauzo yanahifadhiwa kwa jina la aliyeingia.', textAlign: TextAlign.center, style: const TextStyle(color: mutedText, fontSize: 12)),
+      if (MediaQuery.viewInsetsOf(context).bottom == 0) ...[
+        const SizedBox(height: 4),
+        T('Kila mauzo yanahifadhiwa kwa jina la aliyeingia.', textAlign: TextAlign.center, style: const TextStyle(color: mutedText, fontSize: 12)),
+      ],
     ]);
   }
 
@@ -752,6 +771,9 @@ class _PinScreenState extends State<PinScreen> {
       const Icon(Icons.wifi_off_rounded, color: mutedText, size: 40),
       const SizedBox(height: 12),
       Text(_error ?? tr('Imeshindwa kufungua.'), textAlign: TextAlign.center, style: const TextStyle(color: inkColor, fontSize: 16)),
+      const SizedBox(height: 8),
+      // Which server this build talks to: the first thing to check when it can't connect.
+      SelectableText(apiBaseUrl, textAlign: TextAlign.center, style: const TextStyle(color: mutedText, fontSize: 12)),
       const SizedBox(height: 20),
       _primary(label: 'Jaribu tena', onPressed: _load),
     ]);

@@ -115,10 +115,18 @@ class ApiClient {
     try {
       return await request().timeout(timeout);
     } on TimeoutException {
+      debugPrint('Afya API: no answer within ${timeout.inSeconds}s from $apiBaseUrl');
       throw ApiException(tr('Seva haijajibu. Jaribu tena.'), code: 'timeout');
-    } on http.ClientException {
+    } on http.ClientException catch (e) {
+      // The real reason (DNS, refused, TLS...) goes to the `flutter run` terminal.
+      debugPrint('Afya API: could not reach $apiBaseUrl: ${e.message}');
       // No internet, server down, or (in a browser) the server refusing this
       // website (CORS). One message: the person can't fix the difference.
+      throw ApiException(tr('Hakuna mtandao au seva haipatikani. Angalia Wi-Fi au data.'), code: 'offline');
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      debugPrint('Afya API: could not reach $apiBaseUrl: $e');
       throw ApiException(tr('Hakuna mtandao au seva haipatikani. Angalia Wi-Fi au data.'), code: 'offline');
     }
   }

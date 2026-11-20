@@ -345,3 +345,10 @@ Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). O
 - **To test against the Laravel on the Mac:** `flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api` (Simulator), or the Mac's Wi-Fi IP for a real iPhone.
 - **It must be the domain, not `185.174.252.254`:** nginx chooses the site by name, so the bare IP gets the default site and a 404. It must also be **https**, because iOS refuses plain http to internet servers.
 - Before the pilot, remove the development `NSAllowsArbitraryLoads` block from `ios/Runner/Info.plist` (step 3 at the top). The live server is https, so the app no longer needs it, and App Store review questions it.
+- **When it can't connect** (v0.41.4): the sign-in screen's error shows the server address the build uses. The `flutter run` terminal prints the real reason: `Afya API: could not reach https://…: <DNS / refused / TLS …>`. Any low-level failure (a TLS handshake included) now shows the same "Hakuna mtandao au seva haipatikani" message instead of a raw error.
+
+### v0.41.5: the keyboard closes properly
+- **Bug:** after sign-in, the iPhone's number keyboard could stay open over the home screen, covering the bottom tabs. Focus left the number box at the same moment the box was removed for the PIN pad, and iOS kept the keyboard up with nothing attached.
+- **Fix:** `_closeKeyboard()` unfocuses **and** sends `TextInput.hide` on Endelea and on every sign-in attempt. The home screen also hides any leftover keyboard when it opens.
+- Tapping anywhere outside the number box closes the keyboard (iOS's number pad has no Done key).
+- The footnote "Kila mauzo yanahifadhiwa…" is hidden while the keyboard is open; it used to peek out from behind it, cut in half.

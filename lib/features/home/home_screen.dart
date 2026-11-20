@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/loader.dart';
@@ -75,6 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Never arrive with a keyboard left over from signing in.
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final saved = await _storage.read(key: _hideKey);
       if (mounted && saved != null) setState(() => _hidden = saved == '1');
@@ -141,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _header(),
                     const SizedBox(height: 18),
                     if (_error != null) _errorBox(),
-                    ?_billingBanner(),
+                    if (_billingBanner() case final b?) b,
                     if (_shift == null) _noShiftBanner(),
                     _shopView ? _ownerTodayCard() : _helperTodayCard(),
                     const SizedBox(height: 14),
