@@ -465,3 +465,25 @@ Built from canvas screens 5–9. Each screen reads one endpoint (see the backend
   - value at cost, the profit inside it and the money at risk (with `view_costs`).
 - **The owner's home has no "recent sales" list** (it wasn't on the canvas); it ends with top sellers and stock, and every sale is under **Mauzo**. Helpers keep their list.
 - **Bottom bar:** the open tab's capsule is wide enough for its name ("Home" was cut to "Ho…").
+
+### v0.45.2: stock-take fixed, Mauzo redesigned, Zaidi tidied, motion
+- **Hesabu ya hisa showed a blank page.** Two layout errors broke the list:
+  - each product's ✓ / −9 badge was a `Container` with `alignment`, which grows to all the width it's given, so as a ListTile `trailing` it took the whole row;
+  - the ListTiles sat on a coloured `Container` instead of a `Material`, which Flutter reports as "ink splashes may be invisible".
+  - The badge now sizes to its text, and the aisle cards and review rows are `Material`.
+- **Rafu product sheet overflowed** with long names (herbal remedies list every ingredient). The sheet now grows to 85% of the screen and scrolls; the name stops at 3 lines.
+- **"Muda" explained:** the unclear Hisa / Muda switch in the top bar moved into Rafu as **Rangi: Kiasi | Muda wa kuisha**, with a legend for the colours (enough / low / out, or > 3 months / ≤ 3 months / ≤ 30 days / expired).
+- **Mauzo, redesigned** (`sales_list_screen.dart`):
+  - any day: Leo, Jana and the week as chips, plus a calendar for older days (`GET sales?date=`);
+  - a dark summary: the total counting up, the number of sales and the average, and how it was paid;
+  - the day by hour, with the peak hour;
+  - search (medicine, receipt or seller) and payment chips with counts, including Yaliyofutwa;
+  - sales grouped by hour; a sale opens as a receipt, with Futa.
+- **Zaidi:** no more sign-out or language there (they're in the avatar sheet). There is a new title bar, three groups as cards with 4 small tiles a row, and a note pointing to the avatar for PIN, language and sign out. Msaada moved into "Duka na watu".
+- **Fedha:** tap the month to pick any month and year from a grid (months to come are greyed out). The arrows still step one month.
+- **Motion** (`smooth.dart`):
+  - `Appear` fades and lifts content in, one card after another;
+  - `CountUp` counts totals up (home, Mauzo, Fedha, Utabiri);
+  - `staggered()` applies Appear to a column.
+  - Used on home, Zaidi, Mauzo, Fedha, Matumizi and Utabiri; off with Reduce Motion.
+- `CachedJson` also takes list answers (as `{"items": [...]}`).

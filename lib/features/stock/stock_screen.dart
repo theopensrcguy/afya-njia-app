@@ -268,6 +268,7 @@ class _StockScreenState extends State<StockScreen> {
                               products: _all,
                               categories: _catNames,
                               mode: _rafuMode,
+                              onMode: (v) => _set('stock.rafuMode', v, (x) => _rafuMode = x),
                               search: _searchField(),
                               query: _q.text,
                               onRefresh: _load,
@@ -312,24 +313,6 @@ class _StockScreenState extends State<StockScreen> {
           const SizedBox(width: 10),
         ],
         const Expanded(child: T('Hisa', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: _ink, letterSpacing: -0.4))),
-        // Rafu colours by stock or by expiry; shown only on Rafu.
-        AnimatedSwitcher(
-          duration: Motion.of(context, Motion.fast),
-          child: _view != 'rafu'
-              ? const SizedBox.shrink()
-              : SizedBox(
-                  key: const ValueKey('mode'),
-                  width: 132,
-                  child: SlidingSegments<String>(
-                    values: const ['hisa', 'muda'],
-                    labels: [tr('Hisa'), tr('Muda')],
-                    selected: _rafuMode,
-                    height: 36,
-                    fontSize: 13,
-                    onChanged: (v) => _set('stock.rafuMode', v, (x) => _rafuMode = x),
-                  ),
-                ),
-        ),
         const SizedBox(width: 8),
         if (_can(Perm.countStock) || _can(Perm.adjustStock)) ...[
           _square(Icons.fact_check_outlined, tr('Hesabu ya hisa'), () => _push(StockCountScreen(session: widget.session))),

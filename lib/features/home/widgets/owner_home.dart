@@ -69,20 +69,20 @@ class _OwnerHomeState extends State<OwnerHome> {
         refreshTick: widget.refreshTick,
         skeleton: const Column(children: [CardSkeleton(height: 200), SizedBox(height: 12), CardSkeleton(height: 140)]),
         builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          _hero(d),
+          Appear(child: _hero(d)),
           const SizedBox(height: 16),
-          _actions(),
-          if (d['tip'] is Map) ...[const SizedBox(height: 16), _tip(d['tip'] as Map<String, dynamic>)],
+          Appear(index: 1, child: _actions()),
+          if (d['tip'] is Map) ...[const SizedBox(height: 16), Appear(index: 2, child: _tip(d['tip'] as Map<String, dynamic>))],
           const SizedBox(height: 14),
-          _kpis(d),
+          Appear(index: 3, child: _kpis(d)),
           const SizedBox(height: 14),
-          _week(d),
+          Appear(index: 4, child: _week(d)),
           const SizedBox(height: 14),
-          _busy(d),
-          if (((d['top'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), _top(d)],
+          Appear(index: 5, child: _busy(d)),
+          if (((d['top'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), Appear(index: 6, child: _top(d))],
         ]),
       ),
-      if (widget.showStock) ...[const SizedBox(height: 14), _stockRow()],
+      if (widget.showStock) ...[const SizedBox(height: 14), Appear(index: 7, child: _stockRow())],
     ]);
   }
 
@@ -166,8 +166,13 @@ class _OwnerHomeState extends State<OwnerHome> {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(widget.hidden ? tr('TSh ••••••') : formatTsh(asInt(s['total'])),
-                    style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5)),
+                child: widget.hidden
+                    ? T('TSh ••••••', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5))
+                    : CountUp(
+                        value: asInt(s['total']),
+                        format: formatTsh,
+                        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5),
+                      ),
               ),
               const SizedBox(height: 6),
               DeltaBadge(delta: s['delta'] as num?, than: _than, onDark: true),

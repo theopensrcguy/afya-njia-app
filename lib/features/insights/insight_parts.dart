@@ -129,9 +129,11 @@ class _CachedJsonState extends State<CachedJson> {
     _load();
   }
 
+  /// A list answer (e.g. `sales`) arrives as {"items": [...]}.
+  static Map<String, dynamic>? _norm(Object? c) => c is Map<String, dynamic> ? c : (c is List ? {'items': c} : null);
+
   void _peek() {
-    final c = ApiCache.peek(widget.api, widget.path, query: widget.query);
-    _data = c is Map<String, dynamic> ? c : null;
+    _data = _norm(ApiCache.peek(widget.api, widget.path, query: widget.query));
   }
 
   @override
@@ -140,8 +142,8 @@ class _CachedJsonState extends State<CachedJson> {
     final queryChanged = '${old.query}' != '${widget.query}' || old.path != widget.path;
     if (queryChanged) {
       // A new period: show what we had for it (if anything), else keep the old one dimmed below.
-      final c = ApiCache.peek(widget.api, widget.path, query: widget.query);
-      if (c is Map<String, dynamic>) _data = c;
+      final c = _norm(ApiCache.peek(widget.api, widget.path, query: widget.query));
+      if (c != null) _data = c;
     }
     if (queryChanged || old.refreshTick != widget.refreshTick) _load();
   }
@@ -149,7 +151,7 @@ class _CachedJsonState extends State<CachedJson> {
   Future<void> _load() async {
     final my = ++_req;
     try {
-      final d = await ApiCache.fetch(widget.api, widget.path, query: widget.query) as Map<String, dynamic>;
+      final d = _norm(await ApiCache.fetch(widget.api, widget.path, query: widget.query)) ?? const <String, dynamic>{};
       if (mounted && my == _req) setState(() => (_data = d, _error = null));
     } on ApiException catch (e) {
       if (mounted && my == _req) setState(() => _error = e.message);

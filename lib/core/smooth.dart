@@ -277,3 +277,182 @@ class ChoiceChipX extends StatelessWidget {
     );
   }
 }
+
+/// A filter that always fits: half the row, its name small and its value big,
+/// dark when it narrows the list. Opens [pickOne]. Replaces chip rows that ran
+/// off the screen's edge.
+class DropPill extends StatelessWidget {
+  const DropPill({super.key, required this.label, required this.value, required this.active, required this.onTap, this.dot});
+
+  final String label;
+  final String value;
+  final bool active;
+  final VoidCallback onTap;
+  final Color? dot;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? Colors.white : const Color(0xFF14211D);
+    return Semantics(
+      button: true,
+      label: '$label: $value',
+      excludeSemantics: true,
+      child: Pressable(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: Motion.of(context, Motion.fast),
+          height: 46,
+          padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF14211D) : Colors.white,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: active ? const Color(0xFF14211D) : const Color(0xFFDCE5E1), width: 1.5),
+          ),
+          child: Row(children: [
+            if (dot != null) ...[
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: fg.withValues(alpha: .65))),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: fg)),
+              ]),
+            ),
+            Icon(Icons.expand_more_rounded, size: 20, color: fg.withValues(alpha: .8)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// One choice in [pickOne]'s sheet.
+class PickOption<T> {
+  const PickOption(this.value, this.label, {this.count, this.dot, this.sub});
+  final T value;
+  final String label;
+  final int? count;
+  final Color? dot;
+  final String? sub;
+}
+
+/// A sheet of choices with counts; the chosen one ticked. Tall lists scroll.
+Future<T?> pickOne<T>(BuildContext context, {required String title, required List<PickOption<T>> options, required T selected}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (sheet) => SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .75),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF14211D))),
+          ),
+          Flexible(
+            child: ListView(shrinkWrap: true, padding: const EdgeInsets.only(bottom: 12), children: [
+              for (final o in options)
+                ListTile(
+                  minTileHeight: 52,
+                  leading: o.dot == null
+                      ? null
+                      : Container(width: 12, height: 12, decoration: BoxDecoration(color: o.dot, borderRadius: BorderRadius.circular(4))),
+                  title: Text(o.label, style: TextStyle(fontWeight: o.value == selected ? FontWeight.w700 : FontWeight.w500)),
+                  subtitle: o.sub == null ? null : Text(o.sub!),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (o.count != null) Text('${o.count}', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF5B6F69))),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 22,
+                      child: o.value == selected ? const Icon(Icons.check_rounded, color: Color(0xFF12644E)) : null,
+                    ),
+                  ]),
+                  onTap: () {
+                    tick();
+                    Navigator.of(sheet).pop(o.value);
+                  },
+                ),
+            ]),
+          ),
+        ]),
+      ),
+    ),
+  );
+}
+
+/// Content that arrives: fades in and rises 14 px, once, the first time it is
+/// built. [index] staggers a list (each next one 45 ms later, capped so long
+/// lists don't keep people waiting). Nothing moves with "Reduce Motion".
+class Appear extends StatefulWidget {
+  const Appear({super.key, required this.child, this.index = 0, this.offset = 14});
+
+  final Widget child;
+  final int index;
+  final double offset;
+
+  @override
+  State<Appear> createState() => _AppearState();
+}
+
+class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+  late final Animation<double> _t = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_c.status != AnimationStatus.dismissed) return;
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.value = 1;
+      return;
+    }
+    final delay = Duration(milliseconds: 45 * widget.index.clamp(0, 8));
+    Future.delayed(delay, () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _t,
+        child: widget.child,
+        builder: (_, child) => Opacity(
+          opacity: _t.value,
+          child: Transform.translate(offset: Offset(0, (1 - _t.value) * widget.offset), child: child),
+        ),
+      );
+}
+
+/// A number that counts to its value (from 0 the first time, then from the
+/// last value), so a changed total is seen changing, not just swapped.
+class CountUp extends StatelessWidget {
+  const CountUp({super.key, required this.value, required this.format, this.style});
+
+  final int value;
+  final String Function(int) format;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+        tween: Tween(end: value.toDouble()),
+        duration: Motion.of(context, const Duration(milliseconds: 700)),
+        curve: Curves.easeOutCubic,
+        builder: (_, v, _) => Text(format(v.round()), style: style),
+      );
+}
+
+/// [children] arriving one after another ([Appear]); spacers stay as they are.
+List<Widget> staggered(List<Widget> children) {
+  var i = 0;
+  return [for (final c in children) c is SizedBox ? c : Appear(index: i++, child: c)];
+}

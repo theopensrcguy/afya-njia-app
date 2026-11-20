@@ -908,15 +908,10 @@ class _HomeScreenState extends State<HomeScreen> {
             () => _open(StaffPermissionsScreen(session: widget.session))),
       if (_can(Perm.manageDevices))
         _MoreItem('shop', Icons.phonelink_lock, tr('Vifaa'), tr('Simu na kompyuta zinazoruhusiwa'), () => _open(DevicesScreen(session: widget.session))),
-      if (!u.isOwner)
-        _MoreItem('shop', Icons.badge_outlined, tr('Taarifa zangu'), tr('Duka limehifadhi nini kukuhusu, na nani ameangalia'),
-            () => _open(MyProfileScreen(session: widget.session))),
-      // Mimi
-      _MoreItem('me', Icons.pin_outlined, tr('Badilisha PIN'), null, () => _open(ChangePinScreen(session: widget.session))),
-      _MoreItem('me', Icons.support_agent_rounded, tr('Msaada'), tr('Uliza Saola, ona majibu'), () => _open(SupportScreen(session: widget.session))),
+      _MoreItem('shop', Icons.support_agent_rounded, tr('Msaada'), tr('Uliza Saola, ona majibu'), () => _open(SupportScreen(session: widget.session))),
     ];
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _MoreScreen(session: widget.session, items: items),
+      builder: (_) => _MoreScreen(items: items, onAccount: _account),
     ));
   }
 }
@@ -932,14 +927,16 @@ class _MoreItem {
   final VoidCallback onTap;
 }
 
-/// Zaidi: the rest of the app in four groups, as tiles, with a search box.
-/// Tapping a tile closes this page and opens the screen from home, so Back
-/// returns to home (not to this menu).
+/// Zaidi: the rest of the app, in three groups of small tiles inside cards
+/// (4 a row on a phone), with a search that narrows as you type. Personal
+/// things (PIN, language, sign out) are under the avatar on home, and a
+/// last card says so. Tapping a tile closes this page and opens the screen
+/// from home, so Back returns home.
 class _MoreScreen extends StatefulWidget {
-  const _MoreScreen({required this.session, required this.items});
+  const _MoreScreen({required this.items, required this.onAccount});
 
-  final Session session;
   final List<_MoreItem> items;
+  final VoidCallback onAccount;
 
   @override
   State<_MoreScreen> createState() => _MoreScreenState();
@@ -950,141 +947,161 @@ class _MoreScreenState extends State<_MoreScreen> {
 
   static const _sections = [
     ('day', 'Kila siku', Icons.today_rounded, Color(0xFF1B7F64)),
-    ('stock', 'Hisa na mizigo', Icons.inventory_2_outlined, Color(0xFF2563EB)),
-    ('shop', 'Duka na watu', Icons.groups_outlined, Color(0xFF7C3AED)),
-    ('me', 'Mimi', Icons.person_outline_rounded, Color(0xFF5B6F69)),
+    ('stock', 'Hisa na mizigo', Icons.inventory_2_outlined, Color(0xFF2F5FC4)),
+    ('shop', 'Duka na watu', Icons.groups_outlined, Color(0xFF6E5A9E)),
   ];
 
   void _go(_MoreItem item) {
+    tick();
     Navigator.of(context).pop();
     item.onTap();
   }
 
   @override
   Widget build(BuildContext context) {
-    final u = widget.session.user!;
     final q = _q.trim().toLowerCase();
     final shown = widget.items.where((i) => q.isEmpty || i.label.toLowerCase().contains(q) || (i.subtitle ?? '').toLowerCase().contains(q)).toList();
-    final width = MediaQuery.of(context).size.width;
-    final cols = width >= 1000 ? 5 : (width >= 700 ? 4 : 3);
-    final initials = u.name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join();
+    var n = 0;
 
     return Scaffold(
       backgroundColor: pageBackground,
-      appBar: AppBar(backgroundColor: pageBackground, title: const T('Zaidi', style: TextStyle(fontWeight: FontWeight.w800))),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-            children: [
-              // Who is signed in.
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20)),
-                child: Row(children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: primarySoft,
-                    child: Text(initials, style: const TextStyle(color: primaryStrong, fontWeight: FontWeight.w800)),
+      body: SafeArea(
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                Row(children: [
+                  Semantics(
+                    button: true,
+                    label: tr('Rudi'),
+                    excludeSemantics: true,
+                    child: Pressable(
+                      onTap: () => Navigator.of(context).maybePop(),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.chevron_left_rounded, color: kInk),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(u.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                      Text(u.isOwner ? tr('Mmiliki') : tr('Mfanyakazi'), style: const TextStyle(color: mutedText, fontSize: 13)),
-                    ]),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      widget.session.logout();
-                    },
-                    icon: const Icon(Icons.logout_rounded, color: dangerRed, size: 20),
-                    label: const T('Toka', style: TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
-                  ),
+                  const SizedBox(width: 12),
+                  const T('Zaidi', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: kInk, letterSpacing: -.4)),
                 ]),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                onChanged: (v) => setState(() => _q = v),
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: tr('Tafuta: mf. madeni, PIN, wateja…'),
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  filled: true,
-                  fillColor: cardColor,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                const SizedBox(height: 14),
+                TextField(
+                  onChanged: (v) => setState(() => _q = v),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: tr('Tafuta: mf. madeni, wateja, agiza…'),
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    filled: true,
+                    fillColor: cardColor,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              for (final (key, title, icon, colour) in _sections)
-                if (shown.any((i) => i.section == key)) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 22, 4, 10),
-                    child: Row(children: [
-                      Icon(icon, size: 18, color: colour),
-                      const SizedBox(width: 8),
-                      Text(tr(title).toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1, color: mutedText)),
-                    ]),
-                  ),
-                  GridView.count(
-                    crossAxisCount: cols,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 0.95,
-                    children: [for (final item in shown.where((i) => i.section == key)) _tile(item, colour)],
-                  ),
-                ],
-              if (shown.isEmpty)
-                Padding(padding: const EdgeInsets.all(32), child: Center(child: T('Hakuna kinacholingana.', style: const TextStyle(color: mutedText)))),
-              // Language: a plain row, always at the end.
-              if (q.isEmpty) ...[
-                const SizedBox(height: 22),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(16)),
-                  child: Row(children: [
-                    const Icon(Icons.translate_rounded, color: mutedText),
-                    const SizedBox(width: 12),
-                    const Expanded(child: T('Lugha', style: TextStyle(fontWeight: FontWeight.w600))),
-                    LanguageSwitch(onChanged: (code) {
-                      Navigator.of(context).pop();
-                      widget.session.setLanguage(code);
-                    }),
+                AnimatedSize(
+                  duration: Motion.of(context, Motion.base),
+                  curve: Motion.curve,
+                  alignment: Alignment.topCenter,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    for (final (key, title, icon, colour) in _sections)
+                      if (shown.any((i) => i.section == key))
+                        Appear(
+                          index: n++,
+                          child: _section(tr(title), icon, colour, shown.where((i) => i.section == key).toList()),
+                        ),
+                    if (shown.isEmpty)
+                      Padding(padding: const EdgeInsets.all(32), child: Center(child: T('Hakuna kinacholingana.', style: const TextStyle(color: mutedText)))),
                   ]),
                 ),
+                if (q.isEmpty) ...[
+                  const SizedBox(height: 14),
+                  Appear(
+                    index: n++,
+                    child: Material(
+                      color: const Color(0xFFE7F6EF),
+                      borderRadius: BorderRadius.circular(18),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          widget.onAccount();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(children: [
+                            const Icon(Icons.account_circle_outlined, color: Color(0xFF0E5A44)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: T('PIN, lugha na kutoka viko kwenye akaunti yako: gusa picha yako juu ya Nyumbani.',
+                                  style: const TextStyle(fontSize: 13, color: Color(0xFF0E5A44), height: 1.35)),
+                            ),
+                            const Icon(Icons.chevron_right_rounded, color: Color(0xFF0E5A44)),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  Widget _section(String title, IconData icon, Color colour, List<_MoreItem> items) {
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(22)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(children: [
+            Icon(icon, size: 17, color: colour),
+            const SizedBox(width: 8),
+            Text(title.toUpperCase(), style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: .8, color: mutedText)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(builder: (context, box) {
+          final cols = box.maxWidth >= 640 ? 6 : 4;
+          final w = box.maxWidth / cols;
+          return Wrap(children: [for (final item in items) SizedBox(width: w, child: _tile(item, colour))]);
+        }),
+      ]),
+    );
+  }
+
   Widget _tile(_MoreItem item, Color colour) {
     return Tooltip(
       message: item.subtitle ?? item.label,
-      child: Material(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+      child: Semantics(
+        button: true,
+        label: item.label,
+        excludeSemantics: true,
+        child: Pressable(
           onTap: () => _go(item),
           child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            padding: const EdgeInsets.fromLTRB(2, 6, 2, 10),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
               Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(color: colour.withValues(alpha: .12), borderRadius: BorderRadius.circular(14)),
-                child: Icon(item.icon, color: colour),
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(color: colour.withValues(alpha: .10), borderRadius: BorderRadius.circular(16)),
+                child: Icon(item.icon, color: colour, size: 23),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 7),
               Text(item.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, height: 1.2)),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, height: 1.2, color: kInk)),
             ]),
           ),
         ),
@@ -1092,4 +1109,3 @@ class _MoreScreenState extends State<_MoreScreen> {
     );
   }
 }
-

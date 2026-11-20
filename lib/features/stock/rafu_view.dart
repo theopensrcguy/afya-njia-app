@@ -23,6 +23,7 @@ class RafuView extends StatefulWidget {
     required this.products,
     required this.categories,
     required this.mode,
+    required this.onMode,
     required this.search,
     required this.query,
     required this.onRefresh,
@@ -34,6 +35,7 @@ class RafuView extends StatefulWidget {
   final List<Map<String, dynamic>> products;
   final Map<int, String> categories;
   final String mode; // hisa | muda
+  final ValueChanged<String> onMode;
   final Widget search;
   final String query;
   final Future<void> Function() onRefresh;
@@ -103,6 +105,7 @@ class _RafuViewState extends State<RafuView> {
                 ),
               ),
       ),
+      _colourBar(),
       Expanded(
         child: RefreshIndicator(
           onRefresh: widget.onRefresh,
@@ -125,6 +128,67 @@ class _RafuViewState extends State<RafuView> {
         ),
       ),
     ]);
+  }
+
+  /// What the pack colours mean, and the switch between the two meanings:
+  /// how much is on the shelf, or how soon it expires. Named in full, with
+  /// its legend, so nobody has to guess what "Muda" does.
+  Widget _colourBar() {
+    final expiry = widget.mode == 'muda';
+    final legend = expiry
+        ? [(const Color(0xFF1F8A66), tr('> miezi 3')), (const Color(0xFFE39B2E), tr('≤ miezi 3')), (const Color(0xFFC2412D), tr('≤ siku 30')), (const Color(0xFF6E5A9E), tr('imeisha muda'))]
+        : [(stateLooks['ok']!.color, tr('ya kutosha')), (stateLooks['low']!.color, tr('chache')), (stateLooks['out']!.color, tr('imeisha'))];
+    Widget opt(String v, IconData icon, String label) {
+      final on = widget.mode == v;
+      return Pressable(
+        onTap: () {
+          if (on) return;
+          tick();
+          widget.onMode(v);
+        },
+        child: AnimatedContainer(
+          duration: Motion.of(context, Motion.fast),
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(color: on ? _ink : Colors.white, borderRadius: BorderRadius.circular(99)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: on ? Colors.white : _ink),
+            const SizedBox(width: 5),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: on ? Colors.white : _ink)),
+          ]),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          T('Rangi:', style: const TextStyle(fontSize: 12, color: _muted)),
+          const SizedBox(width: 8),
+          opt('hisa', Icons.inventory_2_outlined, tr('Kiasi')),
+          const SizedBox(width: 6),
+          opt('muda', Icons.event_outlined, tr('Muda wa kuisha')),
+        ]),
+        const SizedBox(height: 6),
+        AnimatedSwitcher(
+          duration: Motion.of(context, Motion.fast),
+          child: Wrap(
+            key: ValueKey(widget.mode),
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              for (final (c, l) in legend)
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(width: 4),
+                  Text(l, style: const TextStyle(fontSize: 11, color: _muted)),
+                ]),
+            ],
+          ),
+        ),
+      ]),
+    );
   }
 
   Widget _rail(List<_Aisle> aisles) {
@@ -211,9 +275,10 @@ class _RafuViewState extends State<RafuView> {
           child: Pressable(
             onTap: onTap,
             child: Container(
-              height: 68,
+              constraints: const BoxConstraints(minHeight: 68),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(color: primary ? _primary : const Color(0xFFF2F6F4), borderRadius: BorderRadius.circular(16)),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
                 Icon(icon, color: primary ? Colors.white : _ink, size: 21),
                 const SizedBox(height: 4),
                 Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: primary ? Colors.white : _ink)),
@@ -221,9 +286,13 @@ class _RafuViewState extends State<RafuView> {
             ),
           ),
         );
+    // Long names (herbal remedies list every ingredient) and large text:
+    // the sheet may grow to most of the screen and scrolls past that.
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .85),
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (sheet) {
@@ -234,15 +303,15 @@ class _RafuViewState extends State<RafuView> {
 
         final look = stateLooks[stateOf(p)]!;
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 PackIcon(form: '${p['form'] ?? ''}', color: look.ink, size: 30, empty: p['is_out'] == true),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('${p['name']}', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: _ink)),
+                    Text('${p['name']}', maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, height: 1.25, fontWeight: FontWeight.w700, color: _ink)),
                     const SizedBox(height: 2),
                     Text('$cat · ${stockText(p)}', style: const TextStyle(fontSize: 13, color: _muted)),
                   ]),
@@ -254,19 +323,19 @@ class _RafuViewState extends State<RafuView> {
                 ),
               ]),
               const SizedBox(height: 14),
-              Row(children: [
+              IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 info(tr('Kiwango cha chini'), asInt(p['reorder_level']) > 0 ? describeStock(asInt(p['reorder_level']), units) : '—'),
                 const SizedBox(width: 8),
                 info(tr('Inaisha'), exp == null ? '—' : (days != null && days < 0 ? tr('imeisha muda') : '${exp.day}/${exp.month}/${exp.year}')),
                 const SizedBox(width: 8),
                 info(tr('Bei'), mainPrice(p)),
-              ]),
+              ])),
               const SizedBox(height: 12),
-              Row(children: [
+              IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 action(Icons.open_in_full_rounded, tr('Fungua'), () => go(() => widget.onOpen(p)), primary: widget.onReceive == null),
                 if (widget.onReceive != null) ...[const SizedBox(width: 8), action(Icons.local_shipping_outlined, tr('Pokea'), () => go(widget.onReceive!), primary: true)],
                 if (widget.onReorder != null) ...[const SizedBox(width: 8), action(Icons.shopping_cart_checkout_rounded, tr('Agiza'), () => go(widget.onReorder!))],
-              ]),
+              ])),
             ]),
           ),
         );

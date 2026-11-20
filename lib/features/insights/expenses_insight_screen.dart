@@ -77,7 +77,7 @@ class _ExpensesInsightScreenState extends State<ExpensesInsightScreen> {
             query: {'period': _period},
             refreshTick: _tick,
             skeleton: const Column(children: [CardSkeleton(height: 220), SizedBox(height: 14), CardSkeleton(height: 120)]),
-            builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: staggered([
               _hero(d),
               const SizedBox(height: 12),
               _twoTiles(d),
@@ -85,7 +85,7 @@ class _ExpensesInsightScreenState extends State<ExpensesInsightScreen> {
               const SizedBox(height: 14),
               _flow(d),
               if (((d['types'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), _types(d)],
-            ]),
+            ])),
           ),
         ],
       ),

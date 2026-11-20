@@ -35,6 +35,81 @@ class _FinanceScreenState extends State<FinanceScreen> {
     setState(() => (_month = DateTime(_month.year, _month.month + by), _cat = null));
   }
 
+  /// Year with arrows, then the 12 months as a grid; months still to come
+  /// are greyed out. One tap picks and closes.
+  Future<void> _pickMonth() async {
+    tick();
+    final now = DateTime.now();
+    final picked = await showModalBottomSheet<DateTime>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheet) {
+        var year = _month.year;
+        return StatefulBuilder(
+          builder: (context, set) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(children: [
+                  IconButton(onPressed: year > 2024 ? () => set(() => year--) : null, icon: const Icon(Icons.chevron_left_rounded)),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: Motion.of(context, Motion.fast),
+                      child: Text('$year', key: ValueKey(year), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kInk)),
+                    ),
+                  ),
+                  IconButton(onPressed: year < now.year ? () => set(() => year++) : null, icon: const Icon(Icons.chevron_right_rounded)),
+                ]),
+                const SizedBox(height: 8),
+                LayoutBuilder(builder: (context, box) {
+                  final w = (box.maxWidth - 3 * 8) / 4;
+                  return Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (var m = 1; m <= 12; m++)
+                      Builder(builder: (_) {
+                        final future = year > now.year || (year == now.year && m > now.month);
+                        final on = year == _month.year && m == _month.month;
+                        final isNow = year == now.year && m == now.month;
+                        return SizedBox(
+                          width: w,
+                          height: 46,
+                          child: Material(
+                            color: on ? kPrimary : (future ? const Color(0xFFF5F8F7) : const Color(0xFFEEF3F1)),
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: future ? null : () => Navigator.of(sheet).pop(DateTime(year, m)),
+                              child: Center(
+                                child: Text(
+                                  monthNames[m - 1].length > 3 ? monthNames[m - 1].substring(0, 3) : monthNames[m - 1],
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: on || isNow ? FontWeight.w800 : FontWeight.w600,
+                                    color: on ? Colors.white : (future ? const Color(0xFFB8C4C0) : (isNow ? kPrimary : kInk)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                  ]);
+                }),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.of(sheet).pop(DateTime(now.year, now.month)),
+                  child: const T('Mwezi huu', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+    if (picked != null && mounted) setState(() => (_month = picked, _cat = null));
+  }
+
   void _open(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
   @override
@@ -53,11 +128,31 @@ class _FinanceScreenState extends State<FinanceScreen> {
           // Month switcher: last month is one tap back.
           Row(children: [
             IconButton(onPressed: () => _shift(-1), tooltip: tr('Mwezi uliopita'), icon: const Icon(Icons.chevron_left_rounded)),
+            // Tap the month itself to jump to any month and year.
             Expanded(
-              child: AnimatedSwitcher(
-                duration: Motion.of(context, Motion.fast),
-                child: Text('${monthNames[_month.month - 1]} ${_month.year}',
-                    key: ValueKey(_key), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: kInk)),
+              child: Center(
+                child: Semantics(
+                  button: true,
+                  label: tr('Chagua mwezi'),
+                  child: Pressable(
+                    onTap: _pickMonth,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(99)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.calendar_month_outlined, size: 17, color: kPrimary),
+                        const SizedBox(width: 8),
+                        AnimatedSwitcher(
+                          duration: Motion.of(context, Motion.fast),
+                          child: Text('${monthNames[_month.month - 1]} ${_month.year}',
+                              key: ValueKey(_key), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kInk)),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.expand_more_rounded, size: 18, color: kMuted),
+                      ]),
+                    ),
+                  ),
+                ),
               ),
             ),
             IconButton(onPressed: _isNow ? null : () => _shift(1), tooltip: tr('Mwezi unaofuata'), icon: const Icon(Icons.chevron_right_rounded)),
@@ -68,7 +163,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             path: 'insights/finance',
             query: {'month': _key},
             skeleton: const Column(children: [CardSkeleton(height: 190), SizedBox(height: 14), CardSkeleton(height: 240)]),
-            builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: staggered([
               _hero(d, prevName),
               const SizedBox(height: 14),
               _chart(d, prevName),
@@ -76,7 +171,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
               if (((d['expenses_by_type'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), _expenses(d)],
               if (((d['by_category'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), _categories(d)],
               if (((d['moves'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), _movesCard(d)],
-            ]),
+            ])),
           ),
           const SizedBox(height: 14),
           Row(children: [
@@ -124,7 +219,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(formatTsh(main),
+          child: CountUp(
+              key: ValueKey(_key),
+              value: main,
+              format: formatTsh,
               style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -.5, color: main < 0 ? const Color(0xFFF9B4A6) : Colors.white)),
         ),
         const SizedBox(height: 6),

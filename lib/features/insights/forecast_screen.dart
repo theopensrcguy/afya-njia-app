@@ -38,14 +38,14 @@ class _ForecastScreenState extends State<ForecastScreen> {
             api: widget.session.api,
             path: 'insights/forecast',
             skeleton: const Column(children: [CardSkeleton(height: 260), SizedBox(height: 14), CardSkeleton(height: 120)]),
-            builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            builder: (context, d, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: staggered([
               _hero(d, month),
               const SizedBox(height: 12),
               _activity(d),
               if (((d['sellers'] as List?) ?? const []).isNotEmpty) ...[const SizedBox(height: 14), _sellers(d)],
               const SizedBox(height: 14),
               _lists(d),
-            ]),
+            ])),
           ),
         ],
       ),
@@ -86,7 +86,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(formatTsh(forecast), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -.5, color: kInk)),
+          child: CountUp(value: forecast, format: formatTsh, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -.5, color: kInk)),
         ),
         Text(tr(':a mpaka leo (siku :n kati ya :m)', {'a': tshShort(asInt(d['sales'])), 'n': d['days_gone'], 'm': d['days_in_month']}),
             style: const TextStyle(fontSize: 13, color: kMuted)),

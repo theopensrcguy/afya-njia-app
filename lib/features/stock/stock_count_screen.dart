@@ -283,8 +283,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
           Padding(padding: const EdgeInsets.all(24), child: Center(child: T('Hakuna bidhaa hapa.', style: const TextStyle(color: mutedText)))),
         for (final k in keys) ...[
           _aisleHeader(k == 0 ? tr('Bila aina') : (names[k] ?? tr('Aina nyingine')), groups[k]!),
-          Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
             child: Column(children: [
               for (var i = 0; i < groups[k]!.length; i++) ...[
                 if (i > 0) const Divider(height: 1, indent: 60),
@@ -766,9 +768,8 @@ class _StatusBadge extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 26),
         height: 26,
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        alignment: Alignment.center,
         decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(13)),
-        child: Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+        child: Center(widthFactor: 1, child: Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12))),
       ),
     );
   }
@@ -1004,10 +1005,9 @@ class _StockCountReviewScreenState extends State<StockCountReviewScreen> {
       const SizedBox(height: 8),
       if (diffs.isEmpty) T('Hakuna tofauti: kila kilichohesabiwa kinakubaliana na mfumo.', style: const TextStyle(color: mutedText)),
       for (final l in diffs)
-        Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-          child: _lineTile(l),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(color: Colors.white, borderRadius: BorderRadius.circular(14), clipBehavior: Clip.antiAlias, child: _lineTile(l)),
         ),
     ]);
   }
@@ -1029,7 +1029,7 @@ class _StockCountReviewScreenState extends State<StockCountReviewScreen> {
     final d = asInt(l['difference']);
     final skipped = l['skipped'] == true || _skip.contains(id);
     final sub = '${tr('Mfumo')}: ${l['expected_text']} · ${tr('Rafuni')}: ${l['counted_text']}';
-    final trailing = Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+    final trailing = Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
       Text('${l['difference_text']}', style: TextStyle(fontWeight: FontWeight.w800, color: d < 0 ? dangerRed : infoBlue)),
       if (l['value'] != null) Text(formatTsh(asInt(l['value'])), style: const TextStyle(fontSize: 12, color: mutedText)),
     ]);
