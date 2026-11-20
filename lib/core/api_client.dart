@@ -154,9 +154,12 @@ class ApiClient {
       throw ApiException(tr('Majaribio mengi. Subiri dakika moja.'), code: 'too_many_attempts', status: 429);
     }
 
-    final message = (data is Map && data['message'] is String)
-        ? data['message'] as String
-        : tr('Hitilafu ya seva (:status_code).', {'status_code': res.statusCode});
+    // Laravel's "The route … could not be found." means this app is newer
+    // than the server: say that, not a developer sentence.
+    final raw = (data is Map && data['message'] is String) ? data['message'] as String : null;
+    final message = res.statusCode == 404 && (raw == null || raw.startsWith('The route'))
+        ? tr('Sehemu hii bado haipo kwenye seva. Seva inahitaji kusasishwa: wasiliana na Saola.')
+        : raw ?? tr('Hitilafu ya seva (:status_code).', {'status_code': res.statusCode});
     final code = (data is Map && data['code'] is String) ? data['code'] as String : 'error';
     throw ApiException(
       message,

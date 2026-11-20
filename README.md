@@ -401,3 +401,67 @@ Drawn first on the "Afya Njia app stock screens" canvas, then built.
 - The review / confirm screen is unchanged.
 
 Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment. Test on the iPhone, and with Settings → Accessibility → Motion → Reduce Motion on as well.
+
+### v0.44.1: filters that fit, by aisle; no keyboard notches
+- **Hisa filters:** the chip row that ran off the screen's edge is now two half-width buttons that always fit: **Aina** (product category, new) and **Hali** (status).
+  - Each opens a sheet with counts (`pickOne` in `smooth.dart`). The counts follow each other: statuses within the chosen aisle, aisles within the chosen status.
+  - The rare statuses (expired, no price, new) appear only when there are some.
+  - "Ondoa vichujio" clears both. The aisle choice is remembered like the rest.
+- **Mizigo:** the period chips became **Kipindi ▾** next to **Msambazaji ▾**, with the status switch at full width below.
+- **Rafu:** the aisle strip still scrolls, but its right edge fades out instead of slicing a card.
+- **Sign-in:** the background is white, with green painted only behind the header. The iPhone keyboard's rounded corners used to show two dark-green notches.
+- `DropPill` / `PickOption` / `pickOne` in `lib/core/smooth.dart`, for any filter that must fit the width.
+
+## New home, Fedha, Matumizi, Utabiri, folding filters (v0.45)
+Built from canvas screens 5–9. Each screen reads one endpoint (see the backend README, v0.45). Each opens on its last answer (`ApiCache`) and refreshes quietly.
+
+- **Home (owner), `features/home/widgets/owner_home.dart`:**
+  - **Header:** smaller than before. Initials, a small greeting, the name at 17 px, then search and the bell. Under it, the shop as a pill (`Staff.shopName`); tap it to switch shops.
+  - **One Leo / Wiki / Mwezi switch** drives the whole page and is remembered.
+  - **Dark sales card:** the total, how it moved (`DeltaBadge`), a goal gauge (tap it to set the goal), and the payment split.
+  - **Quick actions:** four round buttons: Uza, Pokea, Agiza, Skani. Skani opens Hisa with the camera already on.
+  - **The day's tip** opens the screen it is about.
+  - **Below:** 2×2 KPIs with deltas; the week's bars (tap a day); the busy-hours grid with its peak; top sellers; Hali ya hisa in one line.
+  - **Helpers** keep their own simple home.
+- **Bottom bar:** a dark floating pill: Nyumbani · Mauzo · Hisa · Fedha · Zaidi. The current tab is a mint capsule with its name.
+- **Fedha, `features/insights/finance_screen.dart`:**
+  - Pick the month with arrows.
+  - Profit after expenses, this month's line against last month's (Mauzo / Faida), and the monthly goal with what's needed per day.
+  - Expenses by type (a ring; tap a type), sales by category, and the money in and out, filtered by kind.
+  - The Zaidi item "Ripoti" became **Fedha**. **Utabiri na watu** was added next to it.
+- **Matumizi, `features/insights/expenses_insight_screen.dart`:**
+  - Wiki / Mwezi / Miezi 6.
+  - A half ring by type; expenses as a share of sales; the average a day.
+  - Upcoming regular costs ("Kodi ya pango · siku 11 zimebaki").
+  - Six months of money in against out.
+  - Types fold open to their latest entries.
+  - The **Ongeza matumizi** button opens the existing Matumizi screen. Zaidi → Matumizi now opens this screen.
+- **Utabiri, `features/insights/forecast_screen.dart`:**
+  - Where the month lands at this pace, with time gone against goal reached.
+  - The running line with the forecast and the goal, and one sentence on what it takes.
+  - Activity: sales a day, items per sale, best day.
+  - Sellers (tap one to see their average and voids).
+  - Top sellers / slow stock.
+- **Hisa filters fold:**
+  - **Vichujio (n) ▾** opens a panel with:
+    - **Aina**: pick several at once;
+    - **Hali**;
+    - **Bei**: a price range on the row's price;
+    - **Panga**: sort.
+  - The panel ends with **Futa vyote** and **Onyesha bidhaa N**.
+  - Folded, each choice stays visible as a token with ×.
+  - **Skani** is now a labelled pill inside the search box.
+  - Choices are remembered (`stock.cats`, `stock.price`).
+- Shared parts: `features/insights/insight_parts.dart` (`CachedJson`, `DeltaBadge`, `SemiGauge`, `ShareRing`, `MonthLines`, colours). Every chart respects reduce-motion.
+
+### v0.45.1: first fixes from the phone
+- **"The route api/insights/home could not be found"** means the app is newer than the server: v0.45's server part wasn't deployed yet. A 404 like that now reads "Sehemu hii bado haipo kwenye seva…" instead of Laravel's developer sentence (`api_client.dart`).
+- **Rafu aisle cards overflowed by 1 px** with the phone's larger text. The strip's height now grows with the text size, and the cards are a little wider.
+- **Header as drawn on the canvas:** a mint avatar, the greeting and the name. For the owner, the shop pill sits beside a compact **Leo / Wiki / Mwezi** switch; the date line is gone.
+- **Tap the avatar (or the name)** to open **Akaunti yangu**: who you are and where, Maduka yangu, Badilisha PIN, Taarifa zangu, Vifaa, Msaada, Lugha and **Toka**.
+- **Hali ya hisa is informative now:**
+  - a ring with the % of products that are fine;
+  - one tappable line per problem (out, expired, low, expiring), each with its count and value, opening the list on that filter;
+  - value at cost, the profit inside it and the money at risk (with `view_costs`).
+- **The owner's home has no "recent sales" list** (it wasn't on the canvas); it ends with top sellers and stock, and every sale is under **Mauzo**. Helpers keep their list.
+- **Bottom bar:** the open tab's capsule is wide enough for its name ("Home" was cut to "Ho…").

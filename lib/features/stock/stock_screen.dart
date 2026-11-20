@@ -34,13 +34,16 @@ const _primary = Color(0xFF12644E);
 /// the view, filter and sort are remembered (UiMemory); switching views is a
 /// slide, not a new page, so nothing reloads.
 class StockScreen extends StatefulWidget {
-  const StockScreen({super.key, required this.session, this.initialFilter});
+  const StockScreen({super.key, required this.session, this.initialFilter, this.startWithScan = false});
 
   final Session session;
 
   /// zote | chache | hazipo | muda | zimeisha | haina | mpya. Given by home's
   /// "Fungua orodha: …"; otherwise the last one used.
   final String? initialFilter;
+
+  /// Home's "Skani": open the camera at once and go to the product scanned.
+  final bool startWithScan;
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -56,6 +59,10 @@ class _StockScreenState extends State<StockScreen> {
   String _sort = UiMemory.get('stock.sort', 'hali');
   String _view = UiMemory.get('stock.view', 'orodha');
   String _rafuMode = UiMemory.get('stock.rafuMode', 'hisa');
+  // Aina, many at once (empty = every aisle; 0 = no aisle). Bei: a range on the row's price (null = any).
+  Set<int> _cats = {...UiMemory.get<Set<int>>('stock.cats', const {})};
+  RangeValues? _price = UiMemory.get<RangeValues?>('stock.price', null);
+  bool _panel = false; // Vichujio unfolded
   final _q = TextEditingController();
 
   ApiClient get _api => widget.session.api;
@@ -71,7 +78,10 @@ class _StockScreenState extends State<StockScreen> {
     // The last answer at once; the fresh one replaces it when it comes.
     final cached = ApiCache.peek(_api, 'stock');
     if (cached is Map<String, dynamic>) _data = cached;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      if (widget.startWithScan) _scan();
+    });
     _q.addListener(() => setState(() {}));
   }
 
@@ -115,11 +125,47 @@ class _StockScreenState extends State<StockScreen> {
         _ => true,
       };
 
+  bool _inCats(Map<String, dynamic> p, Set<int> cats) => cats.isEmpty || cats.contains(asInt(p['category_id']));
+
+  bool _inPrice(Map<String, dynamic> p) {
+    final r = _price;
+    if (r == null) return true;
+    final v = priceOf(p);
+    return v >= r.start && v <= r.end;
+  }
+
+  /// Highest price on the list, rounded up, for the Bei slider.
+  double get _priceMax {
+    var m = 0;
+    for (final p in _all) {
+      final v = priceOf(p);
+      if (v > m) m = v;
+    }
+    if (m <= 0) return 0;
+    final step = m > 100000 ? 10000 : (m > 10000 ? 1000 : 100);
+    return ((m + step - 1) ~/ step * step).toDouble();
+  }
+
+  int get _activeFilters => (_filter != 'zote' ? 1 : 0) + _cats.length + (_price != null ? 1 : 0) + (_sort != 'hali' ? 1 : 0);
+
+  void _saveFilters() {
+    UiMemory.set('stock.filter', _filter);
+    UiMemory.set('stock.cats', {..._cats});
+    UiMemory.set('stock.price', _price);
+    UiMemory.set('stock.sort', _sort);
+  }
+
+  void _clearAll() {
+    tick();
+    setState(() => (_filter = 'zote', _cats = {}, _price = null, _sort = 'hali'));
+    _saveFilters();
+  }
+
   List<Map<String, dynamic>> get _rows {
     final q = _q.text.trim().toLowerCase();
     final cats = _catNames;
     final rows = _all.where((p) {
-      if (!_match(p, _filter)) return false;
+      if (!_match(p, _filter) || !_inCats(p, _cats) || !_inPrice(p)) return false;
       if (q.isEmpty) return true;
       return '${p['name']}'.toLowerCase().contains(q) || (cats[asInt(p['category_id'])] ?? '').toLowerCase().contains(q);
     }).toList();
@@ -133,6 +179,8 @@ class _StockScreenState extends State<StockScreen> {
         rows.sort((a, b) => (daysToExpiry(a) ?? 1 << 30).compareTo(daysToExpiry(b) ?? 1 << 30));
       case 'thamani':
         rows.sort((a, b) => asInt(b['value_at_cost']).compareTo(asInt(a['value_at_cost'])));
+      case 'bei':
+        rows.sort((a, b) => priceOf(a).compareTo(priceOf(b)));
       default: // hali: worst first, then by name
         rows.sort((a, b) {
           final s = stockStates.indexOf(stateOf(a)).compareTo(stockStates.indexOf(stateOf(b)));
@@ -322,8 +370,27 @@ class _StockScreenState extends State<StockScreen> {
               ? const SizedBox(width: 4)
               : IconButton(key: const ValueKey('x'), tooltip: tr('Futa'), icon: const Icon(Icons.close_rounded, size: 20, color: _muted), onPressed: _q.clear),
         ),
-        Container(width: 1, height: 22, color: const Color(0xFFE3EAE7)),
-        IconButton(tooltip: tr('Skani'), icon: const Icon(Icons.qr_code_scanner_rounded, color: _ink), onPressed: _scan),
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Semantics(
+            button: true,
+            label: tr('Skani'),
+            excludeSemantics: true,
+            child: Pressable(
+              onTap: _scan,
+              child: Container(
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(color: const Color(0xFFE7F6EF), borderRadius: BorderRadius.circular(10)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.qr_code_scanner_rounded, size: 18, color: _primary),
+                  const SizedBox(width: 6),
+                  T('Skani', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _primary)),
+                ]),
+              ),
+            ),
+          ),
+        ),
       ]),
     );
   }
@@ -355,7 +422,7 @@ class _StockScreenState extends State<StockScreen> {
     final rows = _rows;
     final all = _all;
     final summary = ((_data ?? const {})['summary'] as Map?) ?? const {};
-    final token = '$_filter|$_sort|${_q.text}';
+    final token = '$_filter|$_sort|$_cats|$_price|${_q.text}';
     return RefreshIndicator(
       onRefresh: _load,
       child: CustomScrollView(
@@ -367,34 +434,11 @@ class _StockScreenState extends State<StockScreen> {
           SliverPersistentHeader(
             pinned: true,
             delegate: _Pinned(
-              height: 116,
-              child: Container(
-                color: _bg,
-                padding: const EdgeInsets.fromLTRB(16, 8, 0, 10),
-                child: Column(children: [
-                  Padding(padding: const EdgeInsets.only(right: 16), child: _searchField()),
-                  const SizedBox(height: 10),
-                  SizedBox(height: 38, child: _chips(all)),
-                ]),
-              ),
+              height: 66,
+              child: Container(color: _bg, padding: const EdgeInsets.fromLTRB(16, 8, 16, 10), child: _searchField()),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 2, 8, 4),
-              child: Row(children: [
-                Expanded(
-                  child: Text(tr(':n kati ya :all', {'n': rows.length, 'all': all.length}), style: const TextStyle(fontSize: 13, color: _muted)),
-                ),
-                TextButton.icon(
-                  onPressed: _pickSort,
-                  icon: const Icon(Icons.swap_vert_rounded, size: 18),
-                  label: Text(tr('Panga: :a', {'a': tr(_sortLabels[_sort] ?? 'Hali')})),
-                  style: TextButton.styleFrom(foregroundColor: _primary, textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                ),
-              ]),
-            ),
-          ),
+          SliverToBoxAdapter(child: _filterBar(all, rows.length)),
           if (rows.isEmpty)
             SliverFillRemaining(hasScrollBody: false, child: _empty(all.isEmpty))
           else
@@ -409,39 +453,6 @@ class _StockScreenState extends State<StockScreen> {
         ],
       ),
     );
-  }
-
-  static const _sortLabels = {'hali': 'Hali', 'jina': 'Jina', 'hisa': 'Hisa', 'muda': 'Muda', 'thamani': 'Thamani'};
-
-  Future<void> _pickSort() async {
-    final options = [
-      ('hali', 'Hali', 'Zinazohitaji kitu kwanza'),
-      ('jina', 'Jina', 'A mpaka Z'),
-      ('hisa', 'Hisa', 'Kidogo kwanza'),
-      ('muda', 'Muda', 'Zinazoisha muda karibu kwanza'),
-      if (_costs) ('thamani', 'Thamani', 'Pesa nyingi kwanza'),
-    ];
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      builder: (sheet) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          for (final (k, label, sub) in options)
-            ListTile(
-              title: T(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: T(sub),
-              trailing: _sort == k ? const Icon(Icons.check_rounded, color: _primary) : null,
-              onTap: () => Navigator.of(sheet).pop(k),
-            ),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
-    if (picked != null) {
-      tick();
-      _set('stock.sort', picked, (x) => _sort = x);
-    }
   }
 
   Widget _summary(Map summary, List<Map<String, dynamic>> all) {
@@ -475,34 +486,237 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _chips(List<Map<String, dynamic>> all) {
-    int n(String f) => all.where((p) => _match(p, f)).length;
-    final defs = <(String, String, Color?)>[
-      ('zote', 'Zote', null),
-      ('chache', 'Za kuagiza', stateLooks['low']!.color),
-      ('hazipo', 'Zimeisha', stateLooks['out']!.color),
-      ('muda', 'Muda', stateLooks['expiring']!.color),
-      if (n('zimeisha') > 0 || _filter == 'zimeisha') ('zimeisha', 'Zimeisha muda', stateLooks['expired']!.color),
-      if (n('haina') > 0 || _filter == 'haina') ('haina', 'Haina bei', const Color(0xFF9A5B0F)),
-      if (n('mpya') > 0 || _filter == 'mpya') ('mpya', 'Mpya', const Color(0xFF2F5FC4)),
-    ];
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(right: 16),
-      itemCount: defs.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 8),
-      itemBuilder: (_, i) {
-        final (k, label, dot) = defs[i];
-        return ChoiceChipX(
-          label: tr(label),
-          dot: dot,
-          count: n(k),
-          selected: _filter == k,
-          onTap: () => _set('stock.filter', k, (x) => _filter = x),
-        );
-      },
+  static const _statusDefs = <(String, String, String?)>[
+    ('zote', 'Zote', null),
+    ('chache', 'Za kuagiza', 'low'),
+    ('hazipo', 'Zimeisha', 'out'),
+    ('muda', 'Muda', 'expiring'),
+    ('zimeisha', 'Zimeisha muda', 'expired'),
+    ('haina', 'Haina bei', null),
+    ('mpya', 'Mpya · inasubiri mzigo', null),
+  ];
+
+  static const _sorts = <(String, String)>[('hali', 'Hali'), ('jina', 'Jina'), ('hisa', 'Hisa kidogo'), ('muda', 'Muda'), ('bei', 'Bei'), ('thamani', 'Thamani')];
+
+  /// "Vichujio (n)" folds open into Aina (many), Hali, Bei and Panga; folded,
+  /// what is chosen stays visible as tokens you can remove one by one.
+  /// Counts follow each other: aisles within the status, statuses within the aisles.
+  Widget _filterBar(List<Map<String, dynamic>> all, int shown) {
+    final n = _activeFilters;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Semantics(
+            button: true,
+            expanded: _panel,
+            child: Pressable(
+              onTap: () {
+                tick();
+                FocusManager.instance.primaryFocus?.unfocus();
+                setState(() => _panel = !_panel);
+              },
+              child: AnimatedContainer(
+                duration: Motion.of(context, Motion.fast),
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: _panel || n > 0 ? _ink : Colors.white,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.tune_rounded, size: 17, color: _panel || n > 0 ? Colors.white : _ink),
+                  const SizedBox(width: 7),
+                  Text(n > 0 ? tr('Vichujio (:n)', {'n': n}) : tr('Vichujio'),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _panel || n > 0 ? Colors.white : _ink)),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _panel ? .5 : 0,
+                    duration: Motion.of(context, Motion.fast),
+                    child: Icon(Icons.expand_more_rounded, size: 18, color: _panel || n > 0 ? Colors.white : _ink),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Text(tr(':n kati ya :all', {'n': shown, 'all': all.length}), style: const TextStyle(fontSize: 13, color: _muted)),
+        ]),
+        AnimatedSize(
+          duration: Motion.of(context, Motion.base),
+          curve: Motion.curve,
+          alignment: Alignment.topCenter,
+          child: _panel ? _panelBody(all, shown) : _tokens(),
+        ),
+      ]),
     );
   }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 8),
+        child: T(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: .5, color: _muted)),
+      );
+
+  Widget _panelBody(List<Map<String, dynamic>> all, int shown) {
+    final cats = _catNames;
+    final inStatus = all.where((p) => _match(p, _filter) && _inPrice(p)).toList();
+    int catN(int c) => inStatus.where((p) => asInt(p['category_id']) == c).length;
+    final inCats = all.where((p) => _inCats(p, _cats) && _inPrice(p)).toList();
+    int stN(String f) => inCats.where((p) => _match(p, f)).length;
+    Color? dotFor(String? look) => look == null ? null : stateLooks[look]!.color;
+    final max = _priceMax;
+    final range = _price ?? RangeValues(0, max);
+
+    void toggleCat(int id) {
+      tick();
+      setState(() => _cats.contains(id) ? _cats.remove(id) : _cats.add(id));
+      _saveFilters();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (cats.isNotEmpty || catN(0) > 0) ...[
+          _label('AINA'),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            ChoiceChipX(
+              label: tr('Zote'),
+              selected: _cats.isEmpty,
+              count: inStatus.length,
+              onTap: () {
+                tick();
+                setState(() => _cats = {});
+                _saveFilters();
+              },
+            ),
+            for (final e in cats.entries)
+              if (catN(e.key) > 0 || _cats.contains(e.key))
+                ChoiceChipX(label: e.value, selected: _cats.contains(e.key), count: catN(e.key), onTap: () => toggleCat(e.key)),
+            if (catN(0) > 0 || _cats.contains(0))
+              ChoiceChipX(label: tr('Bila aina'), selected: _cats.contains(0), count: catN(0), onTap: () => toggleCat(0)),
+          ]),
+        ],
+        _label('HALI'),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final (k, label, look) in _statusDefs)
+            // The rare ones (expired, no price, new) only when there are some.
+            if (const ['zote', 'chache', 'hazipo', 'muda'].contains(k) || stN(k) > 0 || _filter == k)
+              ChoiceChipX(
+                label: tr(label),
+                selected: _filter == k,
+                count: stN(k),
+                dot: dotFor(look),
+                onTap: () {
+                  tick();
+                  setState(() => _filter = k);
+                  _saveFilters();
+                },
+              ),
+        ]),
+        if (max > 0) ...[
+          _label('BEI'),
+          Row(children: [
+            Text(formatTsh(range.start.round()), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _ink)),
+            const Spacer(),
+            Text(formatTsh(range.end.round()), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _ink)),
+          ]),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(activeTrackColor: _primary, thumbColor: _primary, inactiveTrackColor: const Color(0xFFE3EAE7), overlayShape: SliderComponentShape.noOverlay),
+            child: RangeSlider(
+              values: RangeValues(range.start.clamp(0, max), range.end.clamp(0, max)),
+              min: 0,
+              max: max,
+              divisions: 50,
+              onChanged: (v) => setState(() => _price = (v.start <= 0 && v.end >= max) ? null : v),
+              onChangeEnd: (_) => _saveFilters(),
+            ),
+          ),
+        ],
+        _label('PANGA'),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final (k, label) in _sorts)
+            if (k != 'thamani' || _costs)
+              ChoiceChipX(
+                label: tr(label),
+                selected: _sort == k,
+                onTap: () {
+                  tick();
+                  setState(() => _sort = k);
+                  _saveFilters();
+                },
+              ),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          TextButton(
+            onPressed: _activeFilters == 0 ? null : _clearAll,
+            style: TextButton.styleFrom(foregroundColor: _muted),
+            child: const T('Futa vyote', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _primary, minimumSize: const Size.fromHeight(46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+              onPressed: () {
+                tick();
+                setState(() => _panel = false);
+              },
+              child: Text(tr('Onyesha bidhaa :n', {'n': shown}), style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  /// Folded: one removable token per choice; nothing chosen, nothing shown.
+  Widget _tokens() {
+    final cats = _catNames;
+    final status = _statusDefs.firstWhere((d) => d.$1 == _filter, orElse: () => _statusDefs.first);
+    final sort = _sorts.firstWhere((d) => d.$1 == _sort, orElse: () => _sorts.first);
+    final tokens = <(String, VoidCallback)>[
+      for (final c in _cats) (c == 0 ? tr('Bila aina') : (cats[c] ?? '…'), () => _cats.remove(c)),
+      if (_filter != 'zote') (tr(status.$2), () => _filter = 'zote'),
+      if (_price != null) ('${shortTsh(_price!.start.round())} – ${shortTsh(_price!.end.round())}', () => _price = null),
+      if (_sort != 'hali') (tr('Panga: :a', {'a': tr(sort.$2)}), () => _sort = 'hali'),
+    ];
+    if (tokens.isEmpty) return const SizedBox(width: double.infinity);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final (label, remove) in tokens)
+          Semantics(
+            button: true,
+            label: tr('Ondoa :a', {'a': label}),
+            excludeSemantics: true,
+            child: Pressable(
+              onTap: () {
+                tick();
+                setState(remove);
+                _saveFilters();
+              },
+              child: Container(
+                height: 32,
+                padding: const EdgeInsets.only(left: 12, right: 6),
+                decoration: BoxDecoration(color: const Color(0xFFE7F6EF), borderRadius: BorderRadius.circular(99)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _primary)),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.close_rounded, size: 16, color: _primary),
+                ]),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  String shortTsh(int v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(v % 1000 == 0 ? 0 : 1)}K' : '$v';
 
   Widget _empty(bool nothingAtAll) {
     return Padding(
@@ -523,7 +737,7 @@ class _StockScreenState extends State<StockScreen> {
           OutlinedButton(
             onPressed: () {
               _q.clear();
-              _set('stock.filter', 'zote', (x) => _filter = x);
+              _clearAll();
             },
             child: const T('Onyesha zote'),
           ),

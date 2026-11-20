@@ -92,7 +92,8 @@ class _RafuViewState extends State<RafuView> {
       AnimatedSwitcher(
         duration: Motion.of(context, Motion.fast),
         child: q.isEmpty
-            ? SizedBox(key: const ValueKey('rail'), height: 72, child: _rail(aisles))
+            // Grows with the phone's text size, so large text never clips the cards.
+            ? SizedBox(key: const ValueKey('rail'), height: 42 + 32 * MediaQuery.textScalerOf(context).scale(14) / 14, child: _rail(aisles))
             : Padding(
                 key: const ValueKey('found'),
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
@@ -127,6 +128,19 @@ class _RafuViewState extends State<RafuView> {
   }
 
   Widget _rail(List<_Aisle> aisles) {
+    // The strip scrolls; its right edge fades out instead of slicing a card,
+    // which reads as "more this way".
+    return ShaderMask(
+      shaderCallback: (r) => const LinearGradient(
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, .88, 1],
+      ).createShader(r),
+      blendMode: BlendMode.dstIn,
+      child: _railList(aisles),
+    );
+  }
+
+  Widget _railList(List<_Aisle> aisles) {
     return ListView.separated(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -142,7 +156,7 @@ class _RafuViewState extends State<RafuView> {
             onTap: () => _jump(a.id),
             child: AnimatedContainer(
               duration: Motion.of(context, Motion.fast),
-              width: 128,
+              width: 148,
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               decoration: BoxDecoration(
                 color: on ? const Color(0xFFE7F6EF) : Colors.white,

@@ -15,7 +15,6 @@ import '../devices/devices_screen.dart';
 import '../billing/pay_dialog.dart';
 import '../credit/madeni_screen.dart';
 import '../customers/customers_screen.dart';
-import '../expenses/matumizi_screen.dart';
 import '../transfers/my_shops_screen.dart';
 import '../transfers/transfers_screen.dart';
 import '../expiry/expiry_screen.dart';
@@ -32,16 +31,21 @@ import '../staff/staff_permissions_screen.dart';
 import '../staff/staff_profile.dart';
 import '../stock/stock_screen.dart';
 import '../stock/stock_count_screen.dart';
+import '../../core/smooth.dart';
+import '../insights/expenses_insight_screen.dart';
+import '../insights/finance_screen.dart';
+import '../insights/forecast_screen.dart';
+import '../insights/insight_parts.dart' show kDeep, kInk, kMint;
+import 'widgets/owner_home.dart';
 import 'widgets/recent_sales_card.dart';
 import 'widgets/stock_insight_card.dart';
-import 'widgets/target_ring.dart';
-import 'widgets/trend_card.dart';
 import '../../core/i18n.dart';
 
-/// After login (v0.2, the "Mint Laini" design).
-///
-/// Owner: today's sales with the goal ring, four action tiles, the week/month
-/// chart and the latest sales. Helper: his own sales today, selling, the shift.
+/// After login. Owner (v0.45, canvas "Nyumbani mpya"): a compact header, one
+/// period switch, the dark sales card with the goal gauge, round quick
+/// actions, the day's tip, KPIs with how they moved, the week, busy hours,
+/// top sellers and the stock in one line (widgets/owner_home.dart).
+/// Helper: his own sales today, selling, the shift.
 ///
 /// Money is HIDDEN by default (TSh ••••••): the phone lies on the counter where
 /// customers can see it. The eye shows it, and the choice is remembered.
@@ -140,32 +144,33 @@ class _HomeScreenState extends State<HomeScreen> {
             : RefreshIndicator(
                 onRefresh: _load,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
                   children: [
                     _header(),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
                     if (_error != null) _errorBox(),
                     ?_billingBanner(),
                     if (_shift == null) _noShiftBanner(),
-                    _shopView ? _ownerTodayCard() : _helperTodayCard(),
-                    const SizedBox(height: 14),
-                    _tiles(),
-                    // Hali ya hisa: the stock at a glance, for whoever may see stock.
-                    if (_can(Perm.viewStock)) ...[
-                      const SizedBox(height: 18),
-                      StockInsightCard(
-                        session: widget.session,
-                        hidden: _hidden,
-                        refreshTick: _tick,
-                        onOpenStock: (f) => _open(StockScreen(session: widget.session, initialFilter: f)),
-                      ),
-                    ],
-                    if (_shopView) ...[
+                    if (_shopView)
+                      _ownerHome()
+                    else ...[
+                      _helperTodayCard(),
                       const SizedBox(height: 14),
-                      TrendCard(api: _api, hidden: _hidden, refreshTick: _tick),
+                      _tiles(),
+                      // Hali ya hisa: the stock at a glance, for whoever may see stock.
+                      if (_can(Perm.viewStock)) ...[
+                        const SizedBox(height: 18),
+                        StockInsightCard(
+                          session: widget.session,
+                          hidden: _hidden,
+                          refreshTick: _tick,
+                          onOpenStock: (f) => _open(StockScreen(session: widget.session, initialFilter: f)),
+                        ),
+                      ],
                     ],
-                    const SizedBox(height: 14),
-                    _recentSales(),
+                    // The owner's home ends with top sellers and stock (canvas);
+                    // every sale is one tap away under Mauzo.
+                    if (!_shopView) ...[const SizedBox(height: 14), _recentSales()],
                   ],
                 ),
               ),
@@ -211,23 +216,215 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String get _initials => widget.session.user!.name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join();
+
+  /// As on the canvas: the avatar (tap: your account), a small greeting, the
+  /// name at 17, search and the bell. The shop pill sits beside the period
+  /// switch for the owner, alone under the header for everyone else.
   Widget _header() {
     final user = widget.session.user!;
-    final shiftText = _shift == null ? tr('hakuna zamu iliyo wazi') : tr('zamu ya :a iko wazi', {'a': _shift!['user']});
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${greeting()}, ${user.name}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
-              Text('${swahiliDate(DateTime.now())} · $shiftText', style: const TextStyle(fontSize: 13, color: mutedText)),
-            ],
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Semantics(
+          button: true,
+          label: tr('Akaunti yangu'),
+          excludeSemantics: true,
+          child: Pressable(
+            onTap: _account,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(color: Color(0xFFCDEFE0), shape: BoxShape.circle),
+              child: Center(child: Text(_initials.isEmpty ? '·' : _initials, style: const TextStyle(color: Color(0xFF0E5A44), fontWeight: FontWeight.w800, fontSize: 15))),
+            ),
           ),
         ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _account,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(greeting(), style: const TextStyle(fontSize: 13, color: mutedText)),
+              Text(user.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: kInk)),
+            ]),
+          ),
+        ),
+        if (_can(Perm.viewStock)) ...[
+          _round(Icons.search_rounded, tr('Tafuta bidhaa'), () => _open(StockScreen(session: widget.session))),
+          const SizedBox(width: 8),
+        ],
         if (_shopView) _bell(),
+      ]),
+      if (!_shopView && _shopPill() != null) ...[const SizedBox(height: 12), Align(alignment: Alignment.centerLeft, child: _shopPill())],
+    ]);
+  }
+
+  /// The shop's name; tap to switch when there is another shop.
+  Widget? _shopPill() {
+    final user = widget.session.user!;
+    final shop = user.shopName;
+    if (shop == null || shop.isEmpty) return null;
+    final canSwitch = user.isOwner || user.otherShops > 0;
+    return Semantics(
+      button: canSwitch,
+      label: shop,
+      excludeSemantics: true,
+      child: Pressable(
+        onTap: canSwitch ? () => _open(MyShopsScreen(session: widget.session)) : () {},
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.storefront_outlined, size: 16, color: mutedText),
+            const SizedBox(width: 6),
+            Flexible(child: Text(shop, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kInk))),
+            if (canSwitch) ...[const SizedBox(width: 2), const Icon(Icons.expand_more_rounded, size: 16, color: mutedText)],
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Tapping the avatar: who is signed in, where, and the personal things
+  /// (shops, PIN, my details, language, help, sign out) in one sheet.
+  void _account() {
+    tick();
+    final u = widget.session.user!;
+    final s = widget.session;
+    void go(Widget screen) {
+      Navigator.of(context).pop();
+      _open(screen);
+    }
+
+    Widget item(IconData icon, String label, String? sub, VoidCallback onTap, {Color color = kInk}) => ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: color == kInk ? pageBackground : const Color(0xFFFBE9E5), borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          title: Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+          subtitle: sub == null ? null : Text(sub, style: const TextStyle(fontSize: 12, color: mutedText)),
+          trailing: color == kInk ? const Icon(Icons.chevron_right_rounded, color: mutedText) : null,
+          onTap: onTap,
+        );
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheet) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: const BoxDecoration(color: Color(0xFFCDEFE0), shape: BoxShape.circle),
+                  child: Center(child: Text(_initials, style: const TextStyle(color: Color(0xFF0E5A44), fontWeight: FontWeight.w800, fontSize: 20))),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(u.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kInk)),
+                    const SizedBox(height: 2),
+                    Text(
+                      [u.isOwner ? tr('Mmiliki') : tr('Mfanyakazi'), if ((u.shopName ?? '').isNotEmpty) u.shopName!].join(' · '),
+                      style: const TextStyle(fontSize: 13, color: mutedText),
+                    ),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              if (u.isOwner || u.otherShops > 0)
+                item(Icons.storefront_rounded, tr('Maduka yangu'), u.otherShops > 0 ? tr('Badili duka bila kutoka') : null, () => go(MyShopsScreen(session: s))),
+              item(Icons.pin_outlined, tr('Badilisha PIN'), null, () => go(ChangePinScreen(session: s))),
+              if (!u.isOwner)
+                item(Icons.badge_outlined, tr('Taarifa zangu'), tr('Duka limehifadhi nini kukuhusu, na nani ameangalia'), () => go(MyProfileScreen(session: s))),
+              if (_can(Perm.manageDevices))
+                item(Icons.phonelink_lock, tr('Vifaa'), tr('Simu na kompyuta zinazoruhusiwa'), () => go(DevicesScreen(session: s))),
+              item(Icons.support_agent_rounded, tr('Msaada'), tr('Uliza Saola, ona majibu'), () => go(SupportScreen(session: s))),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: pageBackground, borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.translate_rounded, size: 20, color: kInk),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(child: T('Lugha', style: TextStyle(fontWeight: FontWeight.w600, color: kInk))),
+                  LanguageSwitch(onChanged: (code) {
+                    Navigator.of(sheet).pop();
+                    s.setLanguage(code);
+                  }),
+                ]),
+              ),
+              const Divider(height: 20),
+              item(Icons.logout_rounded, tr('Toka'), tr('Utaingia tena kwa PIN yako'), () {
+                Navigator.of(sheet).pop();
+                s.logout();
+              }, color: dangerRed),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _round(IconData icon, String label, VoidCallback onTap) => Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: const BoxDecoration(color: cardColor, shape: BoxShape.circle),
+            child: Icon(icon, color: inkColor, size: 21),
+          ),
+        ),
+      );
+
+  /// The owner's body (widgets/owner_home.dart); this screen keeps the
+  /// navigation, so every tap opens from here and comes back refreshed.
+  Widget _ownerHome() {
+    final t = _today ?? const {};
+    final target = t['daily_target'] == null ? null : asInt(t['daily_target']);
+    final s = widget.session;
+    return OwnerHome(
+      session: s,
+      hidden: _hidden,
+      onToggleHidden: _toggleHidden,
+      refreshTick: _tick,
+      showStock: _can(Perm.viewStock),
+      lead: _shopPill(),
+      actions: [
+        if (_can(Perm.sell)) (icon: Icons.add_rounded, label: tr('Uza'), onTap: () => _open(CounterScreen(session: s)), primary: true),
+        if (_can(Perm.receive)) (icon: Icons.local_shipping_outlined, label: tr('Pokea'), onTap: () => _open(ReceiveScreen(session: s)), primary: false),
+        if (_can(Perm.prepareOrders)) (icon: Icons.shopping_cart_checkout_rounded, label: tr('Agiza'), onTap: () => _open(ReorderScreen(session: s)), primary: false),
+        if (_can(Perm.viewStock))
+          (icon: Icons.qr_code_scanner_rounded, label: tr('Skani'), onTap: () => _open(StockScreen(session: s, startWithScan: true)), primary: false),
       ],
+      onOpenStock: (f) => _open(StockScreen(session: s, initialFilter: f)),
+      onTip: (tip) => _open(switch ('${tip['kind']}') {
+        'reorder' when _can(Perm.prepareOrders) => ReorderScreen(session: s),
+        'reorder' => StockScreen(session: s, initialFilter: 'chache'),
+        'expired' => ExpiryScreen(session: s),
+        _ => StockScreen(session: s),
+      }),
+      // The daily goal is the owner's call (pharmacy settings are never delegated).
+      onSetTarget: s.user!.isOwner ? () => _setTarget(target) : null,
     );
   }
 
@@ -240,21 +437,17 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: _showAlerts,
         customBorder: const CircleBorder(),
         child: Container(
-          width: 44,
-          height: 44,
-          decoration: const BoxDecoration(
-            color: cardColor,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Color(0x1A1E503C), blurRadius: 14, offset: Offset(0, 4))],
-          ),
+          width: 42,
+          height: 42,
+          decoration: const BoxDecoration(color: cardColor, shape: BoxShape.circle),
           child: Stack(
             alignment: Alignment.center,
             children: [
               const Icon(Icons.notifications_none_rounded, color: inkColor),
               if (count > 0)
                 Positioned(
-                  top: 9,
-                  right: 10,
+                  top: 8,
+                  right: 9,
                   child: Container(
                     width: 10,
                     height: 10,
@@ -282,29 +475,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// No open shift = cash sales are not counted against a drawer. Say so.
+  /// No open shift = cash sales are not counted against a drawer. One slim line.
   Widget _noShiftBanner() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: const Color(0xFFFFF4DC),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           onTap: () => _open(ShiftScreen(session: widget.session)),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Icon(Icons.lock_clock_outlined, color: warnAmber),
-                SizedBox(width: 10),
-                Expanded(
-                  child: T('Fungua zamu ili fedha za droo zihesabiwe',
-                      style: TextStyle(color: warnAmber, fontWeight: FontWeight.w700)),
-                ),
-                Icon(Icons.chevron_right, color: warnAmber),
-              ],
-            ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+            child: Row(children: [
+              const Icon(Icons.lock_clock_outlined, color: warnAmber, size: 19),
+              const SizedBox(width: 10),
+              const Expanded(child: T('Zamu haijafunguliwa', style: TextStyle(color: Color(0xFF7A5300), fontWeight: FontWeight.w700, fontSize: 13.5))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: warnAmber, borderRadius: BorderRadius.circular(99)),
+                child: const T('Fungua', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12.5)),
+              ),
+            ]),
           ),
         ),
       ),
@@ -340,56 +532,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ------------------------------------------------------------ today cards
-
-  Widget _ownerTodayCard() {
-    final t = _today ?? const {};
-    final total = asInt(t['sales_total']);
-    final target = t['daily_target'] == null ? null : asInt(t['daily_target']);
-    final pct = target == null || target == 0 ? 0 : (total * 100 / target).round();
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 6, 8, 18),
-      decoration: softCard(),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Expanded(child: T('Mauzo ya leo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-              _eyeButton(tr('mauzo')),
-            ],
-          ),
-          Row(
-            children: [
-              TargetRing(
-                progress: _hidden || target == null || target == 0 ? 0 : total / target,
-                centerText: target == null ? tr('Weka') : (_hidden ? '••' : '$pct%'),
-                caption: target == null ? tr('lengo') : tr('ya lengo'),
-                // The daily goal is the owner's call (pharmacy settings are never delegated).
-                onTap: widget.session.user!.isOwner ? () => _setTarget(target) : null,
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(_money(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                      ),
-                      _paymentRows(moneyMap(t['by_payment'])),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   /// The helper sees only his own sales: no shop total, no goal.
   Widget _helperTodayCard() {
@@ -653,20 +795,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ------------------------------------------------------------ bottom bar
 
+  /// A dark floating pill; the current tab is a mint capsule with its name.
   Widget _bottomBar() {
     Widget item(IconData icon, String label, VoidCallback? onTap, {bool active = false}) {
-      final color = active ? brandGreen : mutedText;
       return Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(height: 2),
-              Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: active ? FontWeight.w800 : FontWeight.w500)),
-            ],
+        flex: active ? 8 : 4,
+        child: Semantics(
+          button: true,
+          selected: active,
+          label: label,
+          excludeSemantics: true,
+          child: Pressable(
+            onTap: onTap ?? () {},
+            child: Center(
+              child: AnimatedContainer(
+                duration: Motion.of(context, Motion.base),
+                curve: Motion.curve,
+                height: 44,
+                padding: EdgeInsets.symmetric(horizontal: active ? 10 : 2),
+                decoration: BoxDecoration(color: active ? kMint : Colors.transparent, borderRadius: BorderRadius.circular(99)),
+                child: active
+                    ? Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(icon, color: kDeep, size: 20),
+                        const SizedBox(width: 6),
+                        Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: kDeep))),
+                      ])
+                    : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(icon, color: const Color(0xCCFFFFFF), size: 21),
+                        const SizedBox(height: 2),
+                        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Color(0xB3FFFFFF))),
+                      ]),
+              ),
+            ),
           ),
         ),
       );
@@ -675,18 +835,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       child: Container(
         height: 64,
-        margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: const [BoxShadow(color: Color(0x291E503C), blurRadius: 30, offset: Offset(0, 10))],
+          color: kInk,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: const [BoxShadow(color: Color(0x33142A23), blurRadius: 24, offset: Offset(0, 10))],
         ),
         child: Row(
           children: [
             item(Icons.home_rounded, tr('Nyumbani'), null, active: true),
             item(Icons.receipt_long_outlined, _shopView ? tr('Mauzo') : tr('Mauzo yangu'), () => _open(SalesListScreen(session: widget.session))),
-            // Stock is used every day, next to sales; reports live under Zaidi.
+            // Stock is used every day, next to sales.
             if (_can(Perm.viewStock)) item(Icons.inventory_2_outlined, tr('Hisa'), () => _open(StockScreen(session: widget.session))),
+            if (_shopView) item(Icons.account_balance_wallet_outlined, tr('Fedha'), () => _open(FinanceScreen(session: widget.session))),
             item(Icons.more_horiz_rounded, tr('Zaidi'), _showMore),
           ],
         ),
@@ -707,7 +869,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _MoreItem('day', Icons.account_balance_wallet_outlined, tr('Madeni'), tr('Wanaodaiwa, malipo, kuidhinisha'),
             () => _open(MadeniScreen(session: widget.session))),
       if (_can(Perm.recordExpenses))
-        _MoreItem('day', Icons.receipt_long_outlined, tr('Matumizi'), tr('Kodi, umeme, mishahara…'), () => _open(MatumiziScreen(session: widget.session))),
+        _MoreItem('day', Icons.receipt_long_outlined, tr('Matumizi'), tr('Kodi, umeme, mishahara… na yanayokuja'),
+            () => _open(ExpensesInsightScreen(session: widget.session))),
       if (_can(Perm.viewCustomers))
         _MoreItem('day', Icons.people_alt_outlined, tr('Wateja'), tr('Historia yao, na vikumbusho (si lazima)'),
             () => _open(CustomersScreen(session: widget.session))),
@@ -732,8 +895,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _MoreItem('stock', Icons.table_chart_outlined, tr('Ingiza kwa wingi'), wide ? tr('Hisa ya mwanzo, mizigo mikubwa') : tr('Bora kwenye kompyuta'),
             () => _open(BulkEntryScreen(session: widget.session))),
       if (_can(Perm.viewShopSales))
-        _MoreItem('stock', Icons.bar_chart_rounded, tr('Ripoti'), tr('Inakuja hivi karibuni'),
-            () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: T('Ripoti zinakuja hivi karibuni.')))),
+        _MoreItem('stock', Icons.bar_chart_rounded, tr('Fedha'), tr('Faida, matumizi, pesa iliyoingia na kutoka'),
+            () => _open(FinanceScreen(session: widget.session))),
+      if (_can(Perm.viewShopSales))
+        _MoreItem('stock', Icons.insights_rounded, tr('Utabiri na watu'), tr('Mwezi utafika wapi, wauzaji, zilizolala'),
+            () => _open(ForecastScreen(session: widget.session))),
       // Duka na watu
       if (u.isOwner || u.otherShops > 0)
         _MoreItem('shop', Icons.storefront_rounded, tr('Maduka yangu'), tr('Badili duka bila kutoka'), () => _open(MyShopsScreen(session: widget.session))),

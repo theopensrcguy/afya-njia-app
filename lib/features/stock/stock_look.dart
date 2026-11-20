@@ -59,6 +59,15 @@ String mainPrice(Map<String, dynamic> p) {
   return '${formatTsh(u.price)} / ${unitLabel(u.name)}';
 }
 
+/// The price shown on the row (the second unit when there is one), as a number; 0 = none.
+int priceOf(Map<String, dynamic> p) {
+  if (p['needs_price'] == true) return 0;
+  final units = unitsOf(p);
+  if (units.isEmpty) return 0;
+  final u = units.length > 1 ? units[1] : units.first;
+  return u.price > 0 ? u.price : 0;
+}
+
 /// How full, against the reorder level: 3× the level reads as a full bar.
 double levelOf(Map<String, dynamic> p) {
   final n = asInt(p['on_hand']);

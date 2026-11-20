@@ -1,6 +1,6 @@
 /// A person who can sign in on the counter phone: the owner or a helper.
 class Staff {
-  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false, this.locale, this.otherShops = 0, this.subscription, this.canPayOnline = false});
+  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false, this.locale, this.otherShops = 0, this.subscription, this.canPayOnline = false, this.shopName});
 
   final int id;
   final String name;
@@ -27,6 +27,9 @@ class Staff {
   /// "Lipia kwa simu" can be offered to this person for this shop.
   final bool canPayOnline;
 
+  /// The shop this sign-in is for (the home header shows it).
+  final String? shopName;
+
   /// The shop's payment ended (after the grace days): can see, can't record.
   bool get readOnly => subscription?['read_only'] == true;
 
@@ -45,8 +48,9 @@ class Staff {
         otherShops: (json['other_shops'] as num?)?.toInt() ?? 0,
         subscription: (json['subscription'] as Map?)?.cast<String, dynamic>(),
         canPayOnline: json['can_pay_online'] == true,
+        shopName: json['shop_name'] as String?,
       );
 
   Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin, 'locale': locale, 'other_shops': otherShops, 'subscription': subscription, 'can_pay_online': canPayOnline};
+      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin, 'locale': locale, 'other_shops': otherShops, 'subscription': subscription, 'can_pay_online': canPayOnline, 'shop_name': shopName};
 }
