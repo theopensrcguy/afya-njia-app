@@ -127,6 +127,19 @@ class _RafuViewState extends State<RafuView> {
   }
 
   Widget _rail(List<_Aisle> aisles) {
+    // The strip scrolls; its right edge fades out instead of slicing a card,
+    // which reads as "more this way".
+    return ShaderMask(
+      shaderCallback: (r) => const LinearGradient(
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, .88, 1],
+      ).createShader(r),
+      blendMode: BlendMode.dstIn,
+      child: _railList(aisles),
+    );
+  }
+
+  Widget _railList(List<_Aisle> aisles) {
     return ListView.separated(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

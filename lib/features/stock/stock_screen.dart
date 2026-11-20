@@ -56,6 +56,7 @@ class _StockScreenState extends State<StockScreen> {
   String _sort = UiMemory.get('stock.sort', 'hali');
   String _view = UiMemory.get('stock.view', 'orodha');
   String _rafuMode = UiMemory.get('stock.rafuMode', 'hisa');
+  int _cat = UiMemory.get('stock.cat', -1); // -1 every aisle, 0 none, else a category id
   final _q = TextEditingController();
 
   ApiClient get _api => widget.session.api;
@@ -115,11 +116,13 @@ class _StockScreenState extends State<StockScreen> {
         _ => true,
       };
 
+  bool _inCat(Map<String, dynamic> p, int cat) => cat == -1 || asInt(p['category_id']) == cat;
+
   List<Map<String, dynamic>> get _rows {
     final q = _q.text.trim().toLowerCase();
     final cats = _catNames;
     final rows = _all.where((p) {
-      if (!_match(p, _filter)) return false;
+      if (!_match(p, _filter) || !_inCat(p, _cat)) return false;
       if (q.isEmpty) return true;
       return '${p['name']}'.toLowerCase().contains(q) || (cats[asInt(p['category_id'])] ?? '').toLowerCase().contains(q);
     }).toList();
@@ -367,14 +370,14 @@ class _StockScreenState extends State<StockScreen> {
           SliverPersistentHeader(
             pinned: true,
             delegate: _Pinned(
-              height: 116,
+              height: 122,
               child: Container(
                 color: _bg,
-                padding: const EdgeInsets.fromLTRB(16, 8, 0, 10),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
                 child: Column(children: [
-                  Padding(padding: const EdgeInsets.only(right: 16), child: _searchField()),
+                  _searchField(),
                   const SizedBox(height: 10),
-                  SizedBox(height: 38, child: _chips(all)),
+                  _filters(all),
                 ]),
               ),
             ),
@@ -383,9 +386,19 @@ class _StockScreenState extends State<StockScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 2, 8, 4),
               child: Row(children: [
-                Expanded(
-                  child: Text(tr(':n kati ya :all', {'n': rows.length, 'all': all.length}), style: const TextStyle(fontSize: 13, color: _muted)),
-                ),
+                Text(tr(':n kati ya :all', {'n': rows.length, 'all': all.length}), style: const TextStyle(fontSize: 13, color: _muted)),
+                if (_filter != 'zote' || _cat != -1)
+                  TextButton(
+                    onPressed: () {
+                      tick();
+                      setState(() => (_filter = 'zote', _cat = -1));
+                      UiMemory.set('stock.filter', 'zote');
+                      UiMemory.set('stock.cat', -1);
+                    },
+                    style: TextButton.styleFrom(foregroundColor: _muted, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: const T('Ondoa vichujio'),
+                  ),
+                const Spacer(),
                 TextButton.icon(
                   onPressed: _pickSort,
                   icon: const Icon(Icons.swap_vert_rounded, size: 18),
@@ -475,33 +488,76 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _chips(List<Map<String, dynamic>> all) {
-    int n(String f) => all.where((p) => _match(p, f)).length;
-    final defs = <(String, String, Color?)>[
-      ('zote', 'Zote', null),
-      ('chache', 'Za kuagiza', stateLooks['low']!.color),
-      ('hazipo', 'Zimeisha', stateLooks['out']!.color),
-      ('muda', 'Muda', stateLooks['expiring']!.color),
-      if (n('zimeisha') > 0 || _filter == 'zimeisha') ('zimeisha', 'Zimeisha muda', stateLooks['expired']!.color),
-      if (n('haina') > 0 || _filter == 'haina') ('haina', 'Haina bei', const Color(0xFF9A5B0F)),
-      if (n('mpya') > 0 || _filter == 'mpya') ('mpya', 'Mpya', const Color(0xFF2F5FC4)),
-    ];
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(right: 16),
-      itemCount: defs.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 8),
-      itemBuilder: (_, i) {
-        final (k, label, dot) = defs[i];
-        return ChoiceChipX(
-          label: tr(label),
-          dot: dot,
-          count: n(k),
-          selected: _filter == k,
-          onTap: () => _set('stock.filter', k, (x) => _filter = x),
-        );
-      },
-    );
+  static const _statusDefs = <(String, String, String?)>[
+    ('zote', 'Zote', null),
+    ('chache', 'Za kuagiza', 'low'),
+    ('hazipo', 'Zimeisha', 'out'),
+    ('muda', 'Muda', 'expiring'),
+    ('zimeisha', 'Zimeisha muda', 'expired'),
+    ('haina', 'Haina bei', null),
+    ('mpya', 'Mpya · inasubiri mzigo', null),
+  ];
+
+  /// Aina (product category) and Hali (status): two half-width buttons that
+  /// always fit the screen, each opening a sheet with counts. The counts of
+  /// one follow the other (statuses within the chosen aisle, and back).
+  Widget _filters(List<Map<String, dynamic>> all) {
+    final cats = _catNames;
+    Color? dotFor(String? look) => look == null ? null : stateLooks[look]!.color;
+    final status = _statusDefs.firstWhere((d) => d.$1 == _filter, orElse: () => _statusDefs.first);
+    return Row(children: [
+      Expanded(
+        child: DropPill(
+          label: tr('Aina'),
+          value: _cat == -1 ? tr('Zote') : (_cat == 0 ? tr('Bila aina') : (cats[_cat] ?? tr('Zote'))),
+          active: _cat != -1,
+          onTap: () async {
+            final inStatus = all.where((p) => _match(p, _filter)).toList();
+            int n(int c) => inStatus.where((p) => _inCat(p, c)).length;
+            final picked = await pickOne<int>(
+              context,
+              title: tr('Chagua aina'),
+              selected: _cat,
+              options: [
+                PickOption(-1, tr('Zote'), count: inStatus.length),
+                for (final e in cats.entries)
+                  if (n(e.key) > 0 || _cat == e.key) PickOption(e.key, e.value, count: n(e.key)),
+                if (n(0) > 0 || _cat == 0) PickOption(0, tr('Bila aina'), count: n(0)),
+              ],
+            );
+            if (picked != null && mounted) {
+              setState(() => _cat = picked);
+              UiMemory.set('stock.cat', picked);
+            }
+          },
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: DropPill(
+          label: tr('Hali'),
+          value: tr(status.$2),
+          dot: dotFor(status.$3),
+          active: _filter != 'zote',
+          onTap: () async {
+            final inCat = all.where((p) => _inCat(p, _cat)).toList();
+            int n(String f) => inCat.where((p) => _match(p, f)).length;
+            final picked = await pickOne<String>(
+              context,
+              title: tr('Chagua hali'),
+              selected: _filter,
+              options: [
+                for (final (k, label, look) in _statusDefs)
+                  // The rare ones (expired, no price, new) only when there are some.
+                  if (const ['zote', 'chache', 'hazipo', 'muda'].contains(k) || n(k) > 0 || _filter == k)
+                    PickOption(k, tr(label), count: n(k), dot: dotFor(look)),
+              ],
+            );
+            if (picked != null) _set('stock.filter', picked, (x) => _filter = x);
+          },
+        ),
+      ),
+    ]);
   }
 
   Widget _empty(bool nothingAtAll) {

@@ -277,3 +277,109 @@ class ChoiceChipX extends StatelessWidget {
     );
   }
 }
+
+/// A filter that always fits: half the row, its name small and its value big,
+/// dark when it narrows the list. Opens [pickOne]. Replaces chip rows that ran
+/// off the screen's edge.
+class DropPill extends StatelessWidget {
+  const DropPill({super.key, required this.label, required this.value, required this.active, required this.onTap, this.dot});
+
+  final String label;
+  final String value;
+  final bool active;
+  final VoidCallback onTap;
+  final Color? dot;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? Colors.white : const Color(0xFF14211D);
+    return Semantics(
+      button: true,
+      label: '$label: $value',
+      excludeSemantics: true,
+      child: Pressable(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: Motion.of(context, Motion.fast),
+          height: 46,
+          padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF14211D) : Colors.white,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: active ? const Color(0xFF14211D) : const Color(0xFFDCE5E1), width: 1.5),
+          ),
+          child: Row(children: [
+            if (dot != null) ...[
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: fg.withValues(alpha: .65))),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: fg)),
+              ]),
+            ),
+            Icon(Icons.expand_more_rounded, size: 20, color: fg.withValues(alpha: .8)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// One choice in [pickOne]'s sheet.
+class PickOption<T> {
+  const PickOption(this.value, this.label, {this.count, this.dot, this.sub});
+  final T value;
+  final String label;
+  final int? count;
+  final Color? dot;
+  final String? sub;
+}
+
+/// A sheet of choices with counts; the chosen one ticked. Tall lists scroll.
+Future<T?> pickOne<T>(BuildContext context, {required String title, required List<PickOption<T>> options, required T selected}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (sheet) => SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .75),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF14211D))),
+          ),
+          Flexible(
+            child: ListView(shrinkWrap: true, padding: const EdgeInsets.only(bottom: 12), children: [
+              for (final o in options)
+                ListTile(
+                  minTileHeight: 52,
+                  leading: o.dot == null
+                      ? null
+                      : Container(width: 12, height: 12, decoration: BoxDecoration(color: o.dot, borderRadius: BorderRadius.circular(4))),
+                  title: Text(o.label, style: TextStyle(fontWeight: o.value == selected ? FontWeight.w700 : FontWeight.w500)),
+                  subtitle: o.sub == null ? null : Text(o.sub!),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (o.count != null) Text('${o.count}', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF5B6F69))),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 22,
+                      child: o.value == selected ? const Icon(Icons.check_rounded, color: Color(0xFF12644E)) : null,
+                    ),
+                  ]),
+                  onTap: () {
+                    tick();
+                    Navigator.of(sheet).pop(o.value);
+                  },
+                ),
+            ]),
+          ),
+        ]),
+      ),
+    ),
+  );
+}

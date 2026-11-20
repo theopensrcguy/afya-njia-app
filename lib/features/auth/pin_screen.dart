@@ -198,7 +198,9 @@ class _PinScreenState extends State<PinScreen> {
   Widget build(BuildContext context) {
     final wide = _wide = MediaQuery.of(context).size.width >= 900;
     return Scaffold(
-      backgroundColor: wide ? Colors.white : _deep,
+      // White, not green: the iPhone keyboard has rounded top corners, and a
+      // green background showed through them as two dark notches.
+      backgroundColor: Colors.white,
       body: Focus(
         // On a laptop or an iPad with a keyboard, the keys type the PIN too
         // (digits, Backspace), except while the phone number is typed.
@@ -224,7 +226,18 @@ class _PinScreenState extends State<PinScreen> {
   /// Phone: green top, white sheet. Scrolls rather than squeezing (small phones,
   /// keyboard open), and the sheet always reaches the bottom of the screen.
   Widget _phoneLayout() {
-    return LayoutBuilder(
+    // Green behind the top half, white behind the bottom: the header sits on
+    // green, the keyboard's corners (and a bounce at the bottom) show white.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [_deep, _deep, Colors.white, Colors.white],
+          stops: [0, .5, .5, 1],
+        ),
+      ),
+      child: LayoutBuilder(
       builder: (context, box) {
         _keyH = box.maxHeight >= 900 ? 58 : (box.maxHeight >= 780 ? 52 : 46);
         return GestureDetector(
@@ -255,6 +268,7 @@ class _PinScreenState extends State<PinScreen> {
       ),
       );
       },
+    ),
     );
   }
 

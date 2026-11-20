@@ -401,3 +401,13 @@ Drawn first on the "Afya Njia app stock screens" canvas, then built.
 - The review / confirm screen is unchanged.
 
 Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment. Test on the iPhone, and with Settings → Accessibility → Motion → Reduce Motion on as well.
+
+### v0.44.1: filters that fit, by aisle; no keyboard notches
+- **Hisa filters:** the chip row that ran off the screen's edge is now two half-width buttons that always fit: **Aina** (product category, new) and **Hali** (status).
+  - Each opens a sheet with counts (`pickOne` in `smooth.dart`). The counts follow each other: statuses within the chosen aisle, aisles within the chosen status.
+  - The rare statuses (expired, no price, new) appear only when there are some.
+  - "Ondoa vichujio" clears both. The aisle choice is remembered like the rest.
+- **Mizigo:** the period chips became **Kipindi ▾** next to **Msambazaji ▾**, with the status switch at full width below.
+- **Rafu:** the aisle strip still scrolls, but its right edge fades out instead of slicing a card.
+- **Sign-in:** the background is white, with green painted only behind the header. The iPhone keyboard's rounded corners used to show two dark-green notches.
+- `DropPill` / `PickOption` / `pickOne` in `lib/core/smooth.dart`, for any filter that must fit the width.

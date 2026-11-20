@@ -1418,4 +1418,11 @@ const en = <String, String>{
   'Hakuna bidhaa kwenye kichujio hiki.': 'No products for this filter.',
   'Zinazosonga': 'Movers',
   'Angalia': 'Review',
+  'Ondoa vichujio': 'Clear filters',
+  'Chagua aina': 'Choose an aisle',
+  'Chagua hali': 'Choose a status',
+  'Kipindi': 'Period',
+  'Chagua kipindi': 'Choose a period',
+  'Chagua siku ya kuanzia na ya mwisho': 'Choose the first and last day',
+  'Chagua msambazaji': 'Choose a supplier',
 };
