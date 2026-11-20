@@ -33,6 +33,7 @@ import '../staff/staff_profile.dart';
 import '../stock/stock_screen.dart';
 import '../stock/stock_count_screen.dart';
 import 'widgets/recent_sales_card.dart';
+import 'widgets/stock_insight_card.dart';
 import 'widgets/target_ring.dart';
 import 'widgets/trend_card.dart';
 import '../../core/i18n.dart';
@@ -149,6 +150,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     _shopView ? _ownerTodayCard() : _helperTodayCard(),
                     const SizedBox(height: 14),
                     _tiles(),
+                    // Hali ya hisa: the stock at a glance, for whoever may see stock.
+                    if (_can(Perm.viewStock)) ...[
+                      const SizedBox(height: 18),
+                      StockInsightCard(
+                        session: widget.session,
+                        hidden: _hidden,
+                        refreshTick: _tick,
+                        onOpenStock: (f) => _open(StockScreen(session: widget.session, initialFilter: f)),
+                      ),
+                    ],
                     if (_shopView) ...[
                       const SizedBox(height: 14),
                       TrendCard(api: _api, hidden: _hidden, refreshTick: _tick),

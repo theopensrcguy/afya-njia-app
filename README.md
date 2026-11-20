@@ -353,3 +353,51 @@ Built from the approved design canvas "Afya Njia sign-in redesign" (4 boards). O
 - Tapping anywhere outside the number box closes the keyboard (iOS's number pad has no Done key).
 - The footnote "Kila mauzo yanahifadhiwa…" is hidden while the keyboard is open; it used to peek out from behind it, cut in half.
 - **v0.41.6 lint tidy-up** (your Flutter is Dart 3.8+, so the newer rules apply): null-aware list elements (`?_billingBanner()`) in home and Maduka yangu, interpolation instead of `+` in the counter and product screens, `_` wildcards in the stock-take screen. `flutter analyze` is clean under the full rule set.
+
+## Stock screens on the phone, built to feel smooth (v0.44)
+Drawn first on the "Afya Njia app stock screens" canvas, then built.
+
+**How it feels (`lib/core/smooth.dart`).** The things that make many apps feel slow or clumsy, handled once for every screen:
+- **Opens instantly:** `ApiCache` keeps the last answer per request, for this person and shop (the key includes the token), and shows it at once. The fresh answer replaces it quietly; the thin bar at the top shows it's checking. Sign-out clears it.
+- **Never blank:** a filter change keeps the old results on screen, dimmed, until the new ones arrive. Each request has a number and only the latest is used, so a slow old answer can't overwrite a newer one.
+- **Remembers you:** `UiMemory` keeps the view (Orodha / Rafu), the filter, the sort, Rafu's colour mode, the movers period and the Mizigo period while the app is open.
+- **Feels physical:** `Pressable` shrinks a little while pressed. `tick()` gives a light haptic on choices (chips, switches), not on every tap. `SlidingSegments` has a thumb that slides to the chosen option.
+- **Skeletons, not spinners,** on a first load: grey shapes of what's coming, breathing gently.
+- **Respects "Reduce Motion":** `Motion.of(context, …)` turns animation off when the phone's accessibility setting asks for less motion.
+- Search waits for a pause in typing (350 ms), the keyboard closes when you scroll, and pull-to-refresh works everywhere.
+
+**Hisa (`features/stock/stock_screen.dart`)**: one screen, two views of the same `GET stock` answer, sliding between them with no reload.
+- **Orodha (the list):**
+  - Summary tiles: value, to reorder, expiring. Tapping a tile filters the list.
+  - The search box and filter chips stay pinned while the list scrolls. Chips show counts: Zote, Za kuagiza, Zimeisha, Muda, plus Zimeisha muda / Haina bei / Mpya when there are any.
+  - Sorting from a sheet: Hali (worst first), Jina, Hisa, Muda, and Thamani with `view_costs`.
+  - The scan button opens a product by its barcode.
+  - Each row: the pack drawn in its form (dashed when out), the aisle pill, tags (Mpya · inasubiri mzigo, imeagizwa, Haina bei), "inaisha miezi 7", a level bar that fills in, stock as "33 kadi + 6", and the price per kadi. Rows that need something have a coloured left edge.
+  - Rows settle in with a short fade when the filter changes.
+  - "Pokea mzigo" shrinks to its icon while you scroll down, so it never hides a row.
+- **Rafu (`rafu_view.dart`, the shelves):**
+  - A strip of aisle cards (products, gaps, how full); tapping one jumps to that aisle.
+  - Search keeps only the matches: "Imepatikana 3 kwenye rafu 2".
+  - A Hisa / Muda switch recolours the packs by stock level or by expiry.
+  - Each aisle shows 2 rows of 3 bays, with "Onyesha zote" to open it. Packs drop onto wooden planks. Bays show TUPU when out, MPYA when never stocked.
+  - Tapping a bay opens a sheet with the reorder level, expiry, price and status, plus Fungua / Pokea / Agiza.
+- `stock_look.dart`: the five states (`expired, out, low, expiring, ok`) with one colour each, `PackIcon` (box, jar, bottle, vial, tube or carton, by form), and the expiry wording ("siku 21", "miezi 7", "mwaka 1.5").
+
+**Home (`home/widgets/stock_insight_card.dart`)**: **Hali ya hisa** for whoever may see stock, from `GET stock/insight`.
+- The ring draws itself in. Tap a piece, or its legend line, to focus it; the button then opens the list on exactly that filter.
+- Four money tiles, hidden with the home's eye like every amount there.
+- **Zinazosonga zaidi** (Leo / Wiki / Mwezi) with a "siku N" badge for how long the stock will last (red under 7 days, amber under 14).
+- The latest stock events.
+- Pull-to-refresh on home reloads it too.
+
+**Mizigo (`purchases/purchases_screen.dart`):**
+- Deliveries waiting for a decision come first (blue cards, the gap from the invoice).
+- Then the history from `GET purchases/history`:
+  - period chips (Leo, Wiki hii, Mwezi huu, Mwezi uliopita, Miezi 3, Zote, or Tarehe… with a date-range picker);
+  - a supplier sheet, a status switch, and invoice or product search;
+  - a dark total card;
+  - rows grouped by day, with rejected deliveries crossed out and their reason;
+  - more loads as you scroll, with "Hiyo ndiyo yote." at the end.
+- The review / confirm screen is unchanged.
+
+Checked with the Dart analyzer only: no Flutter SDK can be downloaded in this environment. Test on the iPhone, and with Settings → Accessibility → Motion → Reduce Motion on as well.

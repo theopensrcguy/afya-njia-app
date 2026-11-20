@@ -1,3 +1,4 @@
+import 'smooth.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -178,6 +179,7 @@ class Session extends ChangeNotifier {
 
   Future<void> _clear() async {
     api.token = null;
+    ApiCache.clear(); // nothing of this person's stays in memory for the next one
     user = null;
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _userKey);

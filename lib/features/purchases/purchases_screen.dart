@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
@@ -11,6 +12,7 @@ import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../core/i18n.dart';
+import '../../core/smooth.dart';
 
 const _statusLabels = {
   'pending': ('Inasubiri', warnAmber, Color(0xFFFBEFD6)),
@@ -18,8 +20,14 @@ const _statusLabels = {
   'rejected': ('Imekataliwa', dangerRed, Color(0xFFFDE7E4)),
 };
 
-/// Deliveries. Owner: the ones waiting for confirmation (stock not counted
-/// yet). Helper: his own, so he sees whether the owner accepted them.
+/// Mizigo (v0.44): deliveries waiting for a decision on top, then the
+/// history with filters (period, supplier, status, invoice or product), a
+/// total for what is shown, and more as you scroll.
+///
+/// Smooth on purpose: it opens on the last answer (ApiCache) and refreshes;
+/// changing a filter keeps the old list on screen, dimmed, until the new one
+/// arrives (no blank flash), and a slow old answer can never overwrite a newer
+/// one (each request has a number; only the latest is used).
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({super.key, required this.session});
 
@@ -30,97 +38,558 @@ class PurchasesScreen extends StatefulWidget {
 }
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
-  List<Map<String, dynamic>> _items = [];
-  bool _loading = true;
-  String? _error;
+  static const _bg = Color(0xFFF2F6F4);
+  static const _ink = Color(0xFF14211D);
+  static const _muted = Color(0xFF5B6F69);
+  static const _primary = Color(0xFF12644E);
 
-  /// Whoever may confirm sees the waiting ones; others see their own.
+  List<Map<String, dynamic>> _waiting = [];
+  bool _waitingLoaded = false;
+
+  // History
+  String _period = UiMemory.get('mizigo.period', 'mwezi');
+  DateTimeRange? _custom;
+  String _supplier = ''; // '' all, 'none', or an id
+  String _status = ''; // '' all, received, rejected
+  final _q = TextEditingController();
+  Timer? _debounce;
+
+  List<Map<String, dynamic>> _items = [];
+  Map<String, dynamic>? _totals;
+  List<Map<String, dynamic>> _suppliers = [];
+  int _page = 1;
+  bool _hasMore = false;
+  bool _loading = false; // a filter change or first load in flight
+  bool _loadingMore = false;
+  bool _loadedOnce = false;
+  String? _error;
+  int _req = 0;
+  final _scroll = ScrollController();
+
   bool get _canConfirm => widget.session.user!.can(Perm.confirmDeliveries);
+  ApiClient get _api => widget.session.api;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    final w = ApiCache.peek(_api, 'purchases', query: const {'status': 'pending'});
+    if (w is List) {
+      _waiting = w.cast<Map<String, dynamic>>();
+      _waitingLoaded = true;
+    }
+    final h = ApiCache.peek(_api, 'purchases/history', query: _query(1));
+    if (h is Map<String, dynamic>) _take(h, 1);
+    _scroll.addListener(() {
+      if (_scroll.position.extentAfter < 500) _more();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadWaiting();
+      _loadHistory();
+    });
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _q.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  // ----------------------------------------------------------- data
+
+  (DateTime?, DateTime?) get _range {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return switch (_period) {
+      'leo' => (today, today),
+      'wiki' => (today.subtract(Duration(days: today.weekday - 1)), today),
+      'mwezi' => (DateTime(now.year, now.month, 1), today),
+      'jana' => (DateTime(now.year, now.month - 1, 1), DateTime(now.year, now.month, 0)),
+      'miezi3' => (DateTime(now.year, now.month - 3, now.day), today),
+      'tarehe' => (_custom?.start, _custom?.end),
+      _ => (null, null),
+    };
+  }
+
+  String _ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Map<String, String> _query(int page) {
+    final (from, to) = _range;
+    return {
+      if (from != null) 'from': _ymd(from),
+      if (to != null) 'to': _ymd(to),
+      if (_supplier.isNotEmpty) 'supplier': _supplier,
+      if (_status.isNotEmpty) 'status': _status,
+      if (_q.text.trim().isNotEmpty) 'q': _q.text.trim(),
+      'page': '$page',
+    };
+  }
+
+  void _take(Map<String, dynamic> h, int page) {
+    final items = ((h['items'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    _items = page == 1 ? items : [..._items, ...items];
+    _page = page;
+    _hasMore = h['has_more'] == true;
+    _totals = (h['totals'] as Map?)?.cast<String, dynamic>();
+    _suppliers = ((h['suppliers'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    _loadedOnce = true;
+  }
+
+  Future<void> _loadWaiting() async {
     try {
-      final data = await widget.session.api.get('purchases', query: {if (_canConfirm) 'status': 'pending'}) as List;
-      if (mounted) setState(() => _items = data.cast<Map<String, dynamic>>());
-    } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      final data = await ApiCache.fetch(_api, 'purchases', query: const {'status': 'pending'}) as List;
+      if (mounted) setState(() => (_waiting = data.cast<Map<String, dynamic>>(), _waitingLoaded = true));
+    } on ApiException catch (_) {
+      if (mounted) setState(() => _waitingLoaded = true);
     }
+  }
+
+  Future<void> _loadHistory() async {
+    final my = ++_req;
+    setState(() => (_loading = true, _error = null));
+    try {
+      final h = await ApiCache.fetch(_api, 'purchases/history', query: _query(1)) as Map<String, dynamic>;
+      if (!mounted || my != _req) return; // a newer filter was chosen meanwhile
+      setState(() => _take(h, 1));
+    } on ApiException catch (e) {
+      if (mounted && my == _req) setState(() => _error = e.message);
+    } finally {
+      if (mounted && my == _req) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _more() async {
+    if (!_hasMore || _loading || _loadingMore) return;
+    final my = _req;
+    setState(() => _loadingMore = true);
+    try {
+      final h = await _api.get('purchases/history', query: _query(_page + 1)) as Map<String, dynamic>;
+      if (mounted && my == _req) setState(() => _take(h, _page + 1));
+    } on ApiException catch (_) {
+      // The list stays; scrolling again tries again.
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([_loadWaiting(), _loadHistory()]);
+  }
+
+  void _filterChanged() {
+    tick();
+    _loadHistory();
   }
 
   Future<void> _open(Map<String, dynamic> p) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => PurchaseReviewScreen(session: widget.session, purchase: p)),
     );
-    if (changed == true && mounted) _load();
+    if (changed == true && mounted) _refresh();
   }
+
+  // ----------------------------------------------------------- filters
+
+  Future<void> _pickPeriod(String k) async {
+    if (k == 'tarehe') {
+      final now = DateTime.now();
+      final r = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(now.year - 3),
+        lastDate: now,
+        initialDateRange: _custom,
+        helpText: tr('Chagua tarehe'),
+      );
+      if (r == null) return;
+      _custom = r;
+    }
+    setState(() => _period = k);
+    if (k != 'tarehe') UiMemory.set('mizigo.period', k);
+    _filterChanged();
+  }
+
+  Future<void> _pickSupplier() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .7),
+          child: ListView(shrinkWrap: true, children: [
+            for (final (id, name) in [('', tr('Wasambazaji wote')), ('none', tr('Bila msambazaji')), for (final s in _suppliers) ('${s['id']}', '${s['name']}')])
+              ListTile(
+                title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                trailing: _supplier == id ? const Icon(Icons.check_rounded, color: _primary) : null,
+                onTap: () => Navigator.of(sheet).pop(id),
+              ),
+          ]),
+        ),
+      ),
+    );
+    if (picked == null || picked == _supplier) return;
+    setState(() => _supplier = picked);
+    _filterChanged();
+  }
+
+  String get _supplierLabel => switch (_supplier) {
+        '' => tr('Wasambazaji wote'),
+        'none' => tr('Bila msambazaji'),
+        _ => '${_suppliers.firstWhere((s) => '${s['id']}' == _supplier, orElse: () => {'name': '…'})['name']}',
+      };
+
+  // ----------------------------------------------------------- layout
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_canConfirm ? tr('Mizigo ya kuthibitisha') : tr('Mizigo yangu')), backgroundColor: pageBackground),
-      body: _loading
-          ? const Center(child: AfyaLoader())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-                children: [
-                  if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed)),
-                  if (_items.isEmpty && _error == null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 48),
-                      child: Text(_canConfirm ? tr('Hakuna mzigo unaosubiri.') : tr('Bado hujarekodi mzigo.'),
-                          textAlign: TextAlign.center, style: const TextStyle(color: mutedText)),
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        surfaceTintColor: Colors.transparent,
+        title: Text(_canConfirm ? tr('Mizigo') : tr('Mizigo yangu'), style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: CustomScrollView(
+          controller: _scroll,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              sliver: SliverList.list(children: [
+                ..._waitingSection(),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(4, 10, 4, 10),
+                  child: T('Historia', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _ink)),
+                ),
+                _periodChips(),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: _supplierButton()),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SlidingSegments<String>(
+                      values: const ['', 'received', 'rejected'],
+                      labels: [tr('Zote'), tr('Zimepokelewa'), tr('Zimekataliwa')],
+                      selected: _status,
+                      height: 44,
+                      fontSize: 11.5,
+                      onChanged: (v) {
+                        setState(() => _status = v);
+                        _filterChanged();
+                      },
                     ),
-                  for (final p in _items) _card(p),
-                ],
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                _searchBox(),
+                const SizedBox(height: 12),
+                _totalsCard(),
+                const SizedBox(height: 4),
+              ]),
+            ),
+            // The list: dimmed while a new filter loads, never blank.
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+              sliver: SliverAnimatedOpacity(
+                opacity: _loading && _loadedOnce ? .45 : 1,
+                duration: Motion.of(context, Motion.fast),
+                sliver: _historyList(),
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _card(Map<String, dynamic> p) {
-    final (label, fg, bg) = _statusLabels[p['status']] ?? ('${p['status']}', mutedText, mintSoft);
-    final at = parseDate(p['received_at']);
+  List<Widget> _waitingSection() {
+    if (!_waitingLoaded) return [const Skeleton(height: 120, radius: 20)];
+    if (_waiting.isEmpty) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          child: Row(children: [
+            const Icon(Icons.check_circle_outline_rounded, color: _primary),
+            const SizedBox(width: 10),
+            Expanded(child: T(_canConfirm ? 'Hakuna mzigo unaosubiri uthibitisho.' : 'Hakuna mzigo wako unaosubiri.', style: const TextStyle(color: _ink))),
+          ]),
+        ),
+      ];
+    }
+    return [for (final p in _waiting) Padding(padding: const EdgeInsets.only(bottom: 10), child: _waitingCard(p))];
+  }
+
+  Widget _waitingCard(Map<String, dynamic> p) {
     final lines = (p['lines'] as List?) ?? const [];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () => _open(p),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(tr(':a · bidhaa :lines', {'a': (p['supplier'] as Map?)?['name'] ?? tr('Msambazaji hajulikani'), 'lines': lines.length}),
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text('${p['received_by'] ?? ''} · ${at == null ? '' : '${swahiliDate(at.toLocal())} ${formatTime(at)}'}',
-                      style: const TextStyle(fontSize: 12, color: mutedText)),
-                ]),
-              ),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(formatTsh(asInt(p['total_cost'])), style: const TextStyle(fontWeight: FontWeight.w800)),
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-                  child: Text(tr(label), style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800)),
+    final at = parseDate(p['received_at']);
+    final inv = p['invoice_total'];
+    final diff = inv == null ? 0 : asInt(p['total_cost']) - asInt(inv);
+    return Pressable(
+      onTap: () => _open(p),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF2F5FC4), width: 2)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(color: const Color(0xFFEAF0FD), borderRadius: BorderRadius.circular(99)),
+              child: T(_canConfirm ? 'Inasubiri uthibitisho' : 'Inasubiri', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF2F5FC4))),
+            ),
+            const SizedBox(width: 8),
+            if (at != null) Text(timeAgo(at.toLocal()), style: const TextStyle(fontSize: 12, color: _muted)),
+          ]),
+          const SizedBox(height: 10),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${(p['supplier'] as Map?)?['name'] ?? tr('Bila msambazaji')}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _ink)),
+                const SizedBox(height: 3),
+                Text(
+                  [if (p['invoice_number'] != null) tr('Ankara :a', {'a': p['invoice_number']}), tr('bidhaa :n', {'n': lines.length}), '${p['received_by'] ?? ''}']
+                      .where((x) => x.isNotEmpty)
+                      .join(' · '),
+                  style: const TextStyle(fontSize: 13, color: _muted),
                 ),
               ]),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(formatTsh(asInt(p['total_cost'])), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _ink)),
+              if (inv != null && diff != 0)
+                Text(tr('ankara: :a (:b)', {'a': formatTsh(asInt(inv)), 'b': '${diff > 0 ? '+' : '−'}${formatTsh(diff.abs()).replaceFirst('TSh ', '')}'}),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7A4A12))),
+            ]),
+          ]),
+          const SizedBox(height: 12),
+          Container(
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: _primary, borderRadius: BorderRadius.circular(13)),
+            child: T(_canConfirm ? 'Angalia na thibitisha' : 'Angalia', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _periodChips() {
+    final defs = [('leo', 'Leo'), ('wiki', 'Wiki hii'), ('mwezi', 'Mwezi huu'), ('jana', 'Mwezi uliopita'), ('miezi3', 'Miezi 3'), ('zote', 'Zote'), ('tarehe', 'Tarehe…')];
+    return SizedBox(
+      height: 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: defs.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final (k, l) = defs[i];
+          final label = k == 'tarehe' && _period == 'tarehe' && _custom != null
+              ? '${_custom!.start.day}/${_custom!.start.month} – ${_custom!.end.day}/${_custom!.end.month}'
+              : tr(l);
+          return ChoiceChipX(label: label, selected: _period == k, onTap: () => _pickPeriod(k));
+        },
+      ),
+    );
+  }
+
+  Widget _supplierButton() => Pressable(
+        onTap: _pickSupplier,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFFDCE5E1), width: 1.5)),
+          child: Row(children: [
+            const Icon(Icons.storefront_outlined, size: 18, color: _muted),
+            const SizedBox(width: 8),
+            Expanded(child: Text(_supplierLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _ink))),
+            const Icon(Icons.expand_more_rounded, size: 18, color: _muted),
+          ]),
+        ),
+      );
+
+  Widget _searchBox() => Container(
+        height: 44,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFFDCE5E1), width: 1.5)),
+        child: Row(children: [
+          const SizedBox(width: 12),
+          const Icon(Icons.search_rounded, size: 19, color: _muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _q,
+              textInputAction: TextInputAction.search,
+              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+              onChanged: (_) {
+                setState(() {});
+                // Wait for a pause in typing: one request, not one per letter.
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 350), _loadHistory);
+              },
+              decoration: InputDecoration(
+                hintText: tr('Namba ya ankara au bidhaa'),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 14, color: _ink),
+            ),
+          ),
+          if (_q.text.isNotEmpty)
+            IconButton(
+              tooltip: tr('Futa'),
+              icon: const Icon(Icons.close_rounded, size: 18, color: _muted),
+              onPressed: () {
+                _q.clear();
+                setState(() {});
+                _loadHistory();
+              },
+            ),
+        ]),
+      );
+
+  Widget _totalsCard() {
+    final (from, to) = _range;
+    String d(DateTime x) => '${x.day} ${tr(const ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'][x.month - 1])}';
+    final range = from == null ? tr('Zote') : (from == to ? d(from) : '${d(from)} – ${d(to!)}');
+    final cost = _totals?['cost'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(color: const Color(0xFF0E3B31), borderRadius: BorderRadius.circular(16)),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(range, style: const TextStyle(fontSize: 12, color: Color(0xFFB7D3C9))),
+            const SizedBox(height: 2),
+            AnimatedSwitcher(
+              duration: Motion.of(context, Motion.fast),
+              child: Text(_totals == null ? '…' : tr('Mizigo :n', {'n': _totals!['count']}),
+                  key: ValueKey('${_totals?['count']}'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+            ),
+          ]),
+        ),
+        if (cost != null)
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            const T('kwa bei ya kununua', style: TextStyle(fontSize: 12, color: Color(0xFFB7D3C9))),
+            const SizedBox(height: 2),
+            AnimatedSwitcher(
+              duration: Motion.of(context, Motion.fast),
+              child: Text(formatTsh(asInt(cost)), key: ValueKey('$cost'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+            ),
+          ]),
+      ]),
+    );
+  }
+
+  Widget _historyList() {
+    if (!_loadedOnce) {
+      if (_error != null) {
+        return SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 24),
+            child: Column(children: [
+              Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: _ink)),
+              TextButton(onPressed: _loadHistory, child: const T('Jaribu tena')),
             ]),
           ),
+        );
+      }
+      return SliverList.list(children: [
+        for (var i = 0; i < 4; i++) const Padding(padding: EdgeInsets.only(top: 10), child: Skeleton(height: 68, radius: 16)),
+      ]);
+    }
+    if (_items.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 28),
+          child: Column(children: [
+            const Icon(Icons.local_shipping_outlined, size: 36, color: Color(0xFFB8C4C0)),
+            const SizedBox(height: 8),
+            const T('Hakuna mzigo kwenye kichujio hiki.', style: TextStyle(color: _muted)),
+            if (_period != 'zote' || _supplier.isNotEmpty || _status.isNotEmpty || _q.text.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  _q.clear();
+                  setState(() => (_period = 'zote', _supplier = '', _status = ''));
+                  _filterChanged();
+                },
+                child: const T('Onyesha mizigo yote'),
+              ),
+          ]),
         ),
+      );
+    }
+    // Grouped by day, newest first.
+    final rows = <Widget>[];
+    String? day;
+    for (final p in _items) {
+      final at = parseDate(p['received_at'])?.toLocal();
+      final label = at == null ? '' : swahiliDate(at).toUpperCase();
+      if (label != day) {
+        day = label;
+        rows.add(Padding(
+          padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+          child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: .4, color: _muted)),
+        ));
+      }
+      rows.add(Padding(padding: const EdgeInsets.only(bottom: 8), child: _historyRow(p)));
+    }
+    if (_loadingMore) rows.add(const Padding(padding: EdgeInsets.only(top: 4), child: Skeleton(height: 68, radius: 16)));
+    if (!_hasMore && _items.length > 8) {
+      rows.add(const Padding(padding: EdgeInsets.only(top: 8), child: Center(child: T('Hiyo ndiyo yote.', style: TextStyle(fontSize: 12, color: _muted)))));
+    }
+    return SliverList.list(children: rows);
+  }
+
+  Widget _historyRow(Map<String, dynamic> p) {
+    final no = p['status'] == 'rejected';
+    final lines = (p['lines'] as List?) ?? const [];
+    return Pressable(
+      onTap: () => _open(p),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        child: Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: no ? const Color(0xFFFBE9E5) : const Color(0xFFE7F6EF), borderRadius: BorderRadius.circular(12)),
+            child: Icon(Icons.local_shipping_outlined, size: 19, color: no ? const Color(0xFFA8321F) : _primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${(p['supplier'] as Map?)?['name'] ?? (p['invoice_number'] == null ? tr('Bila msambazaji') : '${p['invoice_number']}')}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _ink)),
+              const SizedBox(height: 2),
+              Text(
+                [if (p['invoice_number'] != null) '${p['invoice_number']}', tr('bidhaa :n', {'n': lines.length}), '${p['received_by'] ?? ''}'].where((x) => x.isNotEmpty).join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: _muted),
+              ),
+              if (no && p['rejected_reason'] != null)
+                Text(tr('Imekataliwa: :a', {'a': p['rejected_reason']}),
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFA8321F))),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            formatTsh(asInt(p['total_cost'])),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: no ? const Color(0xFF8A9B95) : _ink,
+              decoration: no ? TextDecoration.lineThrough : null,
+            ),
+          ),
+        ]),
       ),
     );
   }
