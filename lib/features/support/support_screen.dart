@@ -545,6 +545,7 @@ class _NewSupportScreenState extends State<NewSupportScreen> {
   final _body = TextEditingController();
   String? _category;
   String _priority = 'normal';
+  String _autoSubject = ''; // what the category wrote in Kichwa (replaced while untouched)
   bool _sending = false;
   String? _error;
 
@@ -560,6 +561,11 @@ class _NewSupportScreenState extends State<NewSupportScreen> {
       setState(() => _error = tr('Chagua tatizo linahusu nini.'));
       return;
     }
+    if (_body.text.trim().isEmpty) {
+      setState(() => _error = tr('Eleza tatizo kwa maneno machache.'));
+      return;
+    }
+    if (_subject.text.trim().isEmpty) _subject.text = tr(supportCategories.firstWhere((c) => c.$1 == _category).$3);
     if (_subject.text.trim().isEmpty || _body.text.trim().isEmpty) {
       setState(() => _error = tr('Jaza kuhusu nini, na eleza tatizo.'));
       return;
@@ -626,13 +632,6 @@ class _NewSupportScreenState extends State<NewSupportScreen> {
         _label(tr('Ni la haraka kiasi gani?')),
         for (final p in supportPriorities) Padding(padding: const EdgeInsets.only(bottom: 8), child: _priorityCard(p)),
         const SizedBox(height: 10),
-        _label(tr('Kuhusu nini?')),
-        TextField(
-          controller: _subject,
-          maxLength: 150,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: _box(tr(cat?.$4 ?? 'mfano Siwezi kuingiza mzigo')),
-        ),
         _label(tr('Eleza tatizo')),
         TextField(
           controller: _body,
@@ -640,7 +639,30 @@ class _NewSupportScreenState extends State<NewSupportScreen> {
           maxLines: 10,
           maxLength: 4000,
           textCapitalization: TextCapitalization.sentences,
-          decoration: _box(tr('Ulikuwa unafanya nini, nini kilitokea, na ujumbe gani ulionekana.')),
+          decoration: _box(cat == null
+              ? tr('Ulikuwa unafanya nini, nini kilitokea, na ujumbe gani ulionekana.')
+              : '${tr(cat.$4)}. ${tr('Ulikuwa unafanya nini, nini kilitokea, na ujumbe gani ulionekana.')}'),
+        ),
+        // Kichwa: filled by the category, editable, out of the way.
+        AnimatedSize(
+          duration: Motion.of(context, Motion.base),
+          curve: Motion.curve,
+          child: _category == null
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: TextField(
+                    controller: _subject,
+                    maxLength: 150,
+                    textCapitalization: TextCapitalization.sentences,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    decoration: _box(tr('Kichwa cha ombi')).copyWith(
+                      labelText: tr('Kichwa (unaweza kubadilisha)'),
+                      prefixIcon: Icon(cat?.$2 ?? Icons.label_outline_rounded, size: 18, color: const Color(0xFF2F8A6C)),
+                      counterText: '',
+                    ),
+                  ),
+                ),
         ),
         const T('Usiandike PIN yako wala namba za siri. Saola hawatakuuliza PIN kamwe.', style: TextStyle(color: mutedText, fontSize: 12)),
       ])),
@@ -666,7 +688,16 @@ class _NewSupportScreenState extends State<NewSupportScreen> {
     return Pressable(
       onTap: () {
         tick();
-        setState(() => (_category = c.$1, _error = null));
+        setState(() {
+          _category = c.$1;
+          _error = null;
+          // The category becomes the subject; only the description is left to type.
+          final now = _subject.text.trim();
+          if (now.isEmpty || now == _autoSubject) {
+            _autoSubject = tr(c.$3);
+            _subject.text = _autoSubject;
+          }
+        });
       },
       child: AnimatedContainer(
         duration: Motion.of(context, Motion.fast),

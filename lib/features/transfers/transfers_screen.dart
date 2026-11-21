@@ -318,63 +318,91 @@ class _TransfersScreenState extends State<TransfersScreen> {
     );
   }
 
-  /// The shops this one is linked with, as chips; + Unganisha at the end.
+  /// The shops this one is linked with (v0.48.4): a header that always shows
+  /// "+ Unganisha duka", then the shops as chips, a round + first.
   Widget _shopsRow() {
     final linked = _list('links').where((l) => l['status'] == 'accepted').toList();
     final waitingOurs = _list('links').where((l) => l['status'] == 'pending' && l['asked_by_us'] == true).toList();
-    return SizedBox(
-      height: 58,
-      child: ListView(scrollDirection: Axis.horizontal, children: [
-        for (final (i, l) in linked.indexed)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Pressable(
-              onTap: () => _shopSheet(l),
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 210),
-                padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  _avatar('${(l['shop'] as Map)['name']}', i),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('${(l['shop'] as Map)['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                      if ((l['shop'] as Map)['location'] != null)
-                        Text('${(l['shop'] as Map)['location']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: mutedText)),
-                    ]),
-                  ),
-                ]),
-              ),
-            ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(
+          child: Text(
+            linked.isEmpty ? tr('Bado hujaunganisha duka') : tr('Maduka yaliyounganishwa · :n', {'n': linked.length}),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF14211D)),
           ),
-        for (final l in waitingOurs)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: warnSoft, borderRadius: BorderRadius.circular(16)),
-              child: Text(tr(':shop · inasubiri', {'shop': (l['shop'] as Map)['name']}), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: warnAmber, fontWeight: FontWeight.w700)),
-            ),
-          ),
+        ),
         if (_canApprove)
           Pressable(
             onTap: _linkShop,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFB7C6C0))),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.add_link_rounded, size: 18, color: brandGreen),
-                SizedBox(width: 6),
-                T('Unganisha', style: TextStyle(color: brandGreen, fontWeight: FontWeight.w800, fontSize: 13)),
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(color: brandGreen, borderRadius: BorderRadius.circular(99)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.add_link_rounded, size: 17, color: Colors.white),
+                const SizedBox(width: 6),
+                Text(tr('Unganisha duka'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
               ]),
             ),
           ),
       ]),
-    );
+      const SizedBox(height: 8),
+      SizedBox(
+        height: 58,
+        child: ListView(scrollDirection: Axis.horizontal, children: [
+          if (_canApprove)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Pressable(
+                onTap: _linkShop,
+                child: Container(
+                  width: 58,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE3F4EC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF8FD0B4), width: 1.2),
+                  ),
+                  child: const Icon(Icons.add_rounded, color: brandGreen, size: 26),
+                ),
+              ),
+            ),
+          for (final (i, l) in linked.indexed)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Pressable(
+                onTap: () => _shopSheet(l),
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 210),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    _avatar('${(l['shop'] as Map)['name']}', i),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('${(l['shop'] as Map)['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                        if ((l['shop'] as Map)['location'] != null)
+                          Text('${(l['shop'] as Map)['location']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: mutedText)),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          for (final l in waitingOurs)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: warnSoft, borderRadius: BorderRadius.circular(16)),
+                child: Text(tr(':shop · inasubiri', {'shop': (l['shop'] as Map)['name']}), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: warnAmber, fontWeight: FontWeight.w700)),
+              ),
+            ),
+        ]),
+      ),
+    ]);
   }
 
   Widget _tabs(int waiting) => Container(

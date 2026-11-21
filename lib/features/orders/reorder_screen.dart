@@ -70,7 +70,12 @@ class _ReorderScreenState extends State<ReorderScreen> {
   final Map<int, Map<String, dynamic>> _cart = {};
   final Map<int, Map<String, dynamic>> _trimmedOut = {}; // taken out by the budget, back when it's removed
   bool _picking = false; // hold a row: tick several, one action
-  bool _ownPick = false; // "Chagua mwenyewe": the start cards step aside
+  /// How this basket was started (v0.48.4): null (not yet), 'suggested' or 'own'.
+  /// The two start cards turn into a strip that says it, instead of just vanishing.
+  String? _startMode;
+
+  /// A suggestion emptied by hand is no longer "in the basket": the cards come back.
+  String? get _mode => _startMode == 'suggested' && _cart.isEmpty ? null : _startMode;
   final _filterFocus = FocusNode();
   final Set<int> _selected = {};
 
@@ -1048,6 +1053,8 @@ class _ReorderScreenState extends State<ReorderScreen> {
       for (final (k, l) in add) {
         _put(l, k);
       }
+      _startMode = 'suggested';
+      if (_view != 'needed') _view = 'needed';
     });
     _saveCart();
     ScaffoldMessenger.of(context)
@@ -1548,7 +1555,24 @@ class _ReorderScreenState extends State<ReorderScreen> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
               _summary(total, unpriced),
-              if (_cart.isEmpty && !_picking && !_ownPick && needed > 0) ...[const SizedBox(height: 10), _startCards(needed)],
+              if (!_picking && (_mode != null || (_cart.isEmpty && needed > 0)))
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: AnimatedSize(
+                    duration: Motion.of(context, Motion.base),
+                    curve: Motion.curve,
+                    alignment: Alignment.topCenter,
+                    child: AnimatedSwitcher(
+                      duration: Motion.of(context, Motion.base),
+                      switchInCurve: Motion.curve,
+                      transitionBuilder: (c, a) => FadeTransition(
+                        opacity: a,
+                        child: SlideTransition(position: Tween(begin: const Offset(0, .12), end: Offset.zero).animate(a), child: c),
+                      ),
+                      child: _mode == null ? KeyedSubtree(key: const ValueKey('cards'), child: _startCards(needed)) : _modeStrip(needed),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 12),
               _tabs(),
               if (_view == 'all')
@@ -1641,7 +1665,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
               // v0.48.3: picking your own means from everything: open Zote, search ready.
               tick();
               setState(() {
-                _ownPick = true;
+                _startMode = 'own';
                 _view = 'all';
                 _filter.clear();
               });
@@ -1662,6 +1686,79 @@ class _ReorderScreenState extends State<ReorderScreen> {
           ),
         ),
       ]);
+
+  /// After a start card: a strip that says which way the basket is being built,
+  /// with the way to switch (instead of the cards just disappearing).
+  Widget _modeStrip(int needed) {
+    final suggested = _mode == 'suggested';
+    return Container(
+      key: ValueKey('strip$_mode'),
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: suggested ? const Color(0xFFE3F4EC) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: suggested ? const Color(0xFFBFE3D2) : const Color(0xFFDCE5E1)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(color: suggested ? brandGreen : const Color(0xFFEFF4F2), borderRadius: BorderRadius.circular(11)),
+          child: Icon(suggested ? Icons.auto_awesome_rounded : Icons.touch_app_outlined, size: 18, color: suggested ? Colors.white : const Color(0xFF0E3B31)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(suggested ? tr('Pendekezo liko kikapuni') : tr('Unachagua mwenyewe'),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+            Text(suggested ? tr('Punguza, ongeza au toa usizotaka.') : tr('Tafuta, kisha gusa + Weka.'),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: mutedText)),
+          ]),
+        ),
+        TextButton(
+          onPressed: () {
+            tick();
+            if (suggested) {
+              // Start again: what the suggestion put in comes out (with Rudisha).
+              final before = {for (final e in _cart.entries) e.key: (e.value, _packs[e.key])};
+              setState(() {
+                for (final id in [..._cart.keys]) {
+                  _take(id);
+                }
+                _startMode = null;
+              });
+              _saveCart();
+              showUndoSnack(
+                ScaffoldMessenger.of(context),
+                SnackBar(
+                  content: Text(tr('Kikapu kimeondolewa')),
+                  action: SnackBarAction(
+                    label: tr('Rudisha'),
+                    onPressed: () {
+                      if (!mounted) return;
+                      setState(() {
+                        for (final MapEntry(key: id, value: (e, p)) in before.entries) {
+                          _cart[id] = e;
+                          if (p != null) _packs[id] = p;
+                        }
+                        _startMode = 'suggested';
+                      });
+                      _saveCart();
+                    },
+                  ),
+                ),
+              );
+            } else if (needed > 0) {
+              _takeSuggested();
+            } else {
+              setState(() => _startMode = null);
+            }
+          },
+          child: Text(suggested ? tr('Anza upya') : (needed > 0 ? tr('Tumia pendekezo') : tr('Funga'))),
+        ),
+      ]),
+    );
+  }
 
   /// The basket, like the till's: count, total, and the way into it.
   Widget _basketPill(int total, int unpriced) => SafeArea(
@@ -1695,41 +1792,35 @@ class _ReorderScreenState extends State<ReorderScreen> {
         ),
       );
 
+  Widget _roundAction(IconData icon, String label, Color fg, Color bg, VoidCallback? onTap) => Opacity(
+        opacity: onTap == null ? .45 : 1,
+        child: Pressable(
+          onTap: onTap,
+          child: SizedBox(
+            width: 70,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 40, height: 40, decoration: BoxDecoration(color: bg, shape: BoxShape.circle), child: Icon(icon, color: fg, size: 20)),
+              const SizedBox(height: 3),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+            ]),
+          ),
+        ),
+      );
+
   /// Selecting: one action for every ticked product.
   Widget _pickBar() {
     final n = _selected.length;
-    ButtonStyle shape(Color? side) => OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(50),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          side: side == null ? null : BorderSide(color: side),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        );
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFE3EDE8)))),
         child: Row(children: [
+          // Small round actions with their word under them: they never squeeze to "Re…".
+          _roundAction(Icons.remove_circle_outline_rounded, tr('Ondoa'), dangerRed, dangerSoft, n == 0 ? null : () => _pickedAction('remove')),
+          const SizedBox(width: 6),
+          _roundAction(Icons.local_shipping_outlined, tr('Msambazaji'), const Color(0xFF0E3B31), const Color(0xFFEFF4F2), n == 0 ? null : () => _pickedAction('supplier')),
+          const SizedBox(width: 10),
           Expanded(
-            child: OutlinedButton(
-              onPressed: n == 0 ? null : () => _pickedAction('remove'),
-              style: shape(const Color(0xFFF0C4BA)).copyWith(
-                backgroundColor: const WidgetStatePropertyAll(dangerSoft),
-                foregroundColor: const WidgetStatePropertyAll(dangerRed),
-              ),
-              child: Text(tr('Ondoa :n', {'n': n}), maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: n == 0 ? null : () => _pickedAction('supplier'),
-              style: shape(null),
-              child: const T('Msambazaji…', maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 5,
             child: FilledButton(
               onPressed: n == 0 ? null : () => _pickedAction('cart'),
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50), padding: const EdgeInsets.symmetric(horizontal: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),

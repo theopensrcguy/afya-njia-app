@@ -718,3 +718,26 @@ Built from canvas boards 10–14.
   - **Msaada:** Inasubiri / Wamejibiwa / Imefungwa, urgent first. Opening one goes to the ordinary chat, which shows the shop's name.
   - Counts only, as on the web: a shop's money, customers and stock never show.
 - Checked with the Dart analyzer only (no device build here).
+
+### v0.48.4: Agiza start cards, support subject, transfers link, Vifaa and Forgot PIN redesigned
+- **Agiza:**
+  - The two start cards no longer just vanish. After **Anza na pendekezo** they become a mint strip, "Pendekezo liko kikapuni", with **Anza upya** (empties the basket, with Rudisha).
+  - After **Chagua mwenyewe** the strip reads "Unachagua mwenyewe", with **Tumia pendekezo**. The swap fades and slides.
+  - While selecting, Ondoa and Msambazaji are round icons with their word underneath, so they no longer squeeze into "Re…" / "Su…".
+- **Omba msaada:** choosing a category fills the subject. You only type the description; the subject sits under it, small and editable.
+- **Uhamisho wa hisa:**
+  - "Maduka yaliyounganishwa · n" with a green **Unganisha duka** pill that's always visible, and a round **+** tile first in the shop row (before, the link button scrolled off screen).
+  - The empty-state line is now translated.
+- **Vifaa** (`devices/devices_screen.dart`):
+  - A dark card for this device, with a **Binafsi | Kaunta** switch and counts of approved and waiting devices.
+  - Waiting devices show their 6 digits as boxes, with Kataa / Ruhusu.
+  - Approved ones are cards with an icon (phone, counter, browser), who used them last and when, the Binafsi | Kaunta switch, and ⋮ → Ondoa kifaa.
+  - Removed devices fold away at the bottom.
+- **Umesahau PIN?** (`auth/forgot_pin_screen.dart`):
+  - Three steps with progress dots and a picture each (lock with ?, SMS, new PIN), sliding between them.
+  - The 6-digit code is six boxes (`core/code_boxes.dart`). Paste and the iPhone's "from Messages" suggestion both work, and it checks by itself when full.
+  - "Tuma tena" waits 45 seconds.
+  - The new PIN is 4 boxes, typed twice, with live "Sawa / Rahisi / Zinalingana" and saving by itself.
+  - A done screen leads back to sign-in with the number filled in.
+- **English check widened:** texts written as `T(a ? '…' : '…')` are now caught, which found and fixed 6 untranslated texts (including "Chagua zote").
+- Checked with the Dart analyzer only. No server changes.
