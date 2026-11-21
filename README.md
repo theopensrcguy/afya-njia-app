@@ -571,3 +571,6 @@ Built from canvas boards 10–14.
 - **Stock-take types** (`features/stock/count_plan_sheet.dart`): Kwa rafu (the aisle counted longest ago comes ticked), Zinazoleta pesa (A), Zinazoisha muda, Ukaguzi wa ghafla, Hesabu kamili. The count shows its type.
 - **`file_picker` 13:** `FilePicker.pickFile()` + `readAsBytes()`. 10.x clashes with flutter_secure_storage 11 over win32. The iOS minimum is 14.0.
 - **New packages:** `flutter pub add image_picker`. In `ios/Runner/Info.plist`, add `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription`.
+
+### v0.46.2: Uza row, layout A
+- On the owner's home, **Uza** now spans the full width (68 px, with the glow). **Pokea · Agiza · Skani** sit under it as three equal white tiles with even 10 px gaps, so they no longer hang beside Uza (`_actions` in `owner_home.dart`).

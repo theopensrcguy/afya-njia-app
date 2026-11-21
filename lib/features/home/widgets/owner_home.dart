@@ -225,36 +225,40 @@ class _OwnerHomeState extends State<OwnerHome> {
 
   // ------------------------------------------------------------ actions, tip
 
-  /// v0.46.1: selling is the point of the app, so Uza is no longer one circle
-  /// among four: a wide green button with a slow glow, the first thing the eye
-  /// lands on. The other actions stay as small circles beside it.
+  /// Layout A (v0.46.2): Uza across the full width, glowing; under it the
+  /// other actions as equal white tiles with even gaps, so they sit on their
+  /// own row instead of hanging beside Uza.
   Widget _actions() {
     final list = widget.actions.take(4).toList();
     final primary = list.where((a) => a.primary).firstOrNull;
     final rest = list.where((a) => a != primary).take(3).toList();
-    Widget circle(({IconData icon, String label, VoidCallback onTap, bool primary}) a) => Expanded(
-          child: Semantics(
-            button: true,
-            label: a.label,
-            excludeSemantics: true,
-            child: Pressable(
-              onTap: a.onTap,
-              child: Column(children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: Icon(a.icon, color: kInk, size: 21),
-                ),
+    Widget tile(({IconData icon, String label, VoidCallback onTap, bool primary}) a) => Semantics(
+          button: true,
+          label: a.label,
+          excludeSemantics: true,
+          child: Pressable(
+            onTap: a.onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(a.icon, color: kInk, size: 24),
                 const SizedBox(height: 6),
-                Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: kInk)),
+                Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: kInk)),
               ]),
             ),
           ),
         );
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (primary != null) ...[Expanded(flex: 5, child: UzaButton(label: primary.label, onTap: primary.onTap)), const SizedBox(width: 8)],
-      for (final a in rest) circle(a),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (primary != null) UzaButton(label: primary.label, onTap: primary.onTap, height: 68),
+      if (primary != null && rest.isNotEmpty) const SizedBox(height: 10),
+      if (rest.isNotEmpty)
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (var i = 0; i < rest.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(child: tile(rest[i])),
+          ],
+        ]),
     ]);
   }
 
