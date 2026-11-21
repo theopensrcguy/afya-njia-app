@@ -222,6 +222,76 @@ class _CounterScreenState extends State<CounterScreen> {
     }
   }
 
+  /// Wanaouliza (v0.48): a customer asked and we had none. One tap; a phone
+  /// number only if they want a call when it comes. Agiza shows it.
+  Future<void> _asked({Product? product, String? name}) async {
+    final what = product?.name ?? name ?? '';
+    if (what.trim().isEmpty) return;
+    FocusScope.of(context).unfocus();
+    final phone = TextEditingController();
+    final who = TextEditingController();
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      builder: (sheet) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.viewInsetsOf(sheet).bottom),
+        child: SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(tr('Mteja ameulizia :a', {'a': what}), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            const T('Itaonekana kwenye Agiza → Wanaouliza. Akitaka apigiwe ikifika, weka namba yake.', style: TextStyle(fontSize: 13, color: mutedText)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: phone,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(labelText: tr('Simu ya mteja (si lazima)'), prefixIcon: const Icon(Icons.call_outlined)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: who,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(labelText: tr('Jina (si lazima)'), prefixIcon: const Icon(Icons.person_outline)),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(sheet).pop(true),
+              icon: const Icon(Icons.campaign_outlined),
+              label: const T('Andika'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final r = await _api.post('product-requests', {
+        if (product != null) 'product_id': product.id else 'name': what.trim(),
+        if (phone.text.trim().isNotEmpty) 'customer_phone': phone.text.trim(),
+        if (who.text.trim().isNotEmpty) 'customer_name': who.text.trim(),
+      }) as Map<String, dynamic>;
+      if (!mounted) return;
+      HapticFeedback.selectionClick();
+      _showMessage(asIntOr(r['asked']) > 1
+          ? tr('Imeandikwa. Wateja :n wameulizia :a.', {'n': r['asked'], 'a': what})
+          : tr('Imeandikwa: :a. Itaonekana kwenye Agiza.', {'a': what}));
+    } on ApiException catch (e) {
+      if (mounted) _showMessage(e.message, isError: true);
+    }
+  }
+
+  static int asIntOr(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  /// "Haipo? Mteja ameulizia": under results that aren't what was asked for.
+  Widget _askedButton(String typed) => TextButton.icon(
+        onPressed: () => _asked(name: typed),
+        icon: const Icon(Icons.campaign_outlined, size: 18),
+        label: Text(tr('Mteja ameulizia ":a"', {'a': typed}), maxLines: 1, overflow: TextOverflow.ellipsis),
+      );
+
   void _changeUnit(Product p, ProductUnit unit) {
     if (!_cart.setUnit(p.id, unit)) {
       _showMessage(tr('Hakuna :a nzima ya :name (zilizopo :b).', {'a': unitLabel(unit.name), 'name': p.name, 'b': describeStock(p.onHand, p.units)}), isError: true);
@@ -398,8 +468,17 @@ class _CounterScreenState extends State<CounterScreen> {
       ];
     }
     if (_results.isEmpty && !_searching) {
-      return const [
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: T('Hakuna bidhaa iliyopatikana.'))),
+      final typed = _searchController.text.trim();
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const T('Hakuna bidhaa iliyopatikana.'),
+              if (typed.isNotEmpty) ...[const SizedBox(height: 6), _askedButton(typed)],
+            ]),
+          ),
+        ),
       ];
     }
 
@@ -414,7 +493,7 @@ class _CounterScreenState extends State<CounterScreen> {
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverList.separated(
-      itemCount: _results.length + offset,
+      itemCount: _results.length + offset + (suggesting ? 1 : 0),
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         if (suggesting && i == 0) {
@@ -429,10 +508,13 @@ class _CounterScreenState extends State<CounterScreen> {
             ),
           );
         }
+        if (suggesting && i == _results.length + offset) {
+          return Align(alignment: Alignment.centerLeft, child: _askedButton(_searchController.text.trim()));
+        }
         final p = _results[i - offset];
         final outOfStock = p.onHand == 0;
         final stockText = outOfStock
-            ? tr('Hazipo (zimeisha)')
+            ? tr('Zimeisha · gusa: mteja ameulizia')
             : '${tr('Hisa: :a:b', {'a': describeStock(p.onHand, p.units), 'b': p.lowStock ? tr(' · chini') : ''})}'
                 '${p.nextExpiry != null ? tr(' · inaisha :a', {'a': _monthYear(p.nextExpiry!)}) : ''}';
 
@@ -454,7 +536,8 @@ class _CounterScreenState extends State<CounterScreen> {
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: outOfStock ? null : () => _addToCart(p),
+            // Out: one tap writes down that a customer asked (Wanaouliza).
+            onTap: outOfStock ? () => _asked(product: p) : () => _addToCart(p),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
               child: Column(

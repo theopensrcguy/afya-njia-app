@@ -23,9 +23,13 @@ import '../../core/i18n.dart';
 /// counts only after the owner confirms it, because whoever records
 /// deliveries could otherwise add stock that never arrived.
 class ReceiveScreen extends StatefulWidget {
-  const ReceiveScreen({super.key, required this.session, this.supplierId});
+  const ReceiveScreen({super.key, required this.session, this.supplierId, this.initialLines = const []});
 
   final Session session;
+
+  /// From a buying trip (v0.48): what was bought, at the price paid. Each
+  /// still needs its batch and EXP from the box before saving.
+  final List<ReceiveLine> initialLines;
 
   /// Opened from a supplier's page: that supplier is already chosen.
   final int? supplierId;
@@ -39,7 +43,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   late int? _supplierId = widget.supplierId;
   final _invoice = TextEditingController();
   final _invoiceTotal = TextEditingController();
-  final List<ReceiveLine> _lines = [];
+  late final List<ReceiveLine> _lines = [...widget.initialLines];
   // Bytes, not a path: works on the phone and in a browser alike.
   Uint8List? _photoBytes;
   String _photoName = 'ankara.jpg';
@@ -189,6 +193,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   Future<void> _submit() async {
     if (_lines.isEmpty) {
       setState(() => _error = tr('Ongeza angalau bidhaa moja.'));
+      return;
+    }
+    final unfinished = _lines.where((l) => l.unfinished).length;
+    if (unfinished > 0) {
+      setState(() => _error = tr('Jaza batch na EXP kwa bidhaa :n (gusa kila moja).', {'n': unfinished}));
       return;
     }
     setState(() {
@@ -558,9 +567,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                     Wrap(spacing: 6, runSpacing: 4, children: [
                       if (l.newProduct != null)
                         tag(l.newProduct!.hasPrices ? tr('Bidhaa mpya') : tr('Bidhaa mpya · bila bei'), bg: const Color(0xFFEAF0FD), fg: const Color(0xFF2F5FC4)),
-                      tag(tr('Batch :batch', {'batch': l.batch})),
-                      tag('EXP ${l.expiryText}',
-                          bg: near ? const Color(0xFFFDF1E3) : const Color(0xFFE7F6EF), fg: near ? const Color(0xFF7A4A12) : const Color(0xFF0E5A44)),
+                      if (l.unfinished)
+                        tag(tr('Gusa: jaza batch na EXP'), bg: const Color(0xFFFDF1E3), fg: const Color(0xFF7A4A12))
+                      else ...[
+                        tag(tr('Batch :batch', {'batch': l.batch})),
+                        tag('EXP ${l.expiryText}',
+                            bg: near ? const Color(0xFFFDF1E3) : const Color(0xFFE7F6EF), fg: near ? const Color(0xFF7A4A12) : const Color(0xFF0E5A44)),
+                      ],
                       if (l.barcode != null) tag(tr('Barcode imefunzwa')),
                     ]),
                   ]),

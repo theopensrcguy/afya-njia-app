@@ -243,13 +243,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     onPressed: () => Navigator.of(context).maybePop(),
                   )
                 : null,
-            title: Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount})),
+            // v0.47.3: smaller title and a compact "+ Ongeza" pill, so "Kikapu · 1 bidhaa" is never cut.
+            titleSpacing: widget.asSheet ? 0 : null,
+            title: Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount}),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             actions: [
               if (widget.asSheet)
-                TextButton.icon(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const T('Ongeza bidhaa'),
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: FilledButton.tonalIcon(
+                    style: FilledButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 12)),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const T('Ongeza'),
+                  ),
                 ),
             ],
           ),

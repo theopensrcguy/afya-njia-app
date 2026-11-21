@@ -456,15 +456,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
           const SizedBox(height: 10),
           const T('Sajili mteja wako wa kwanza', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: _ink)),
           const SizedBox(height: 4),
-          const T('Kwa aliyekubali tu: hapa, au kwenye kikapu kwa "Weka mteja" kabla ya kukamilisha mauzo.',
+          const T('Kwa aliyekubali tu: kitufe cha Sajili hapo juu, au kwenye kikapu kwa "Weka mteja" kabla ya kukamilisha mauzo.',
               textAlign: TextAlign.center, style: TextStyle(color: mutedText, fontSize: 13)),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: _deep),
-            onPressed: _register,
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            label: const T('Sajili mteja'),
-          ),
         ]),
       );
 

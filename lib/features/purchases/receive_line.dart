@@ -54,6 +54,9 @@ class ReceiveLine {
   int expiryYear;
   int expiryMonth;
 
+  /// Brought from a buying trip (v0.48): the batch and EXP are still to be read off the box.
+  bool get unfinished => batch.trim().isEmpty || expiryYear == 0;
+
   int get quantity => packs * packSize;
   int get total => packs * packCost;
 

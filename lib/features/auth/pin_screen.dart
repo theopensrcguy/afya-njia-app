@@ -198,7 +198,14 @@ class _PinScreenState extends State<PinScreen> {
   Widget build(BuildContext context) {
     final wide = _wide = MediaQuery.of(context).size.width >= 900;
     return Scaffold(
-      backgroundColor: wide ? Colors.white : _deep,
+      // White, not green: the iPhone keyboard has rounded top corners, and a
+      // green background showed through them as two dark notches.
+      backgroundColor: Colors.white,
+      // v0.47.3: the screen no longer shrinks above the keyboard; the white
+      // sheet runs under it instead (its padding grows by the keyboard's
+      // height). A shrinking screen left the green header showing in the
+      // keyboard's rounded corners and a gap between the sheet and the keys.
+      resizeToAvoidBottomInset: false,
       body: Focus(
         // On a laptop or an iPad with a keyboard, the keys type the PIN too
         // (digits, Backspace), except while the phone number is typed.
@@ -224,7 +231,18 @@ class _PinScreenState extends State<PinScreen> {
   /// Phone: green top, white sheet. Scrolls rather than squeezing (small phones,
   /// keyboard open), and the sheet always reaches the bottom of the screen.
   Widget _phoneLayout() {
-    return LayoutBuilder(
+    // Green behind the top half, white behind the bottom: the header sits on
+    // green, the keyboard's corners (and a bounce at the bottom) show white.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [_deep, _deep, Colors.white, Colors.white],
+          stops: [0, .5, .5, 1],
+        ),
+      ),
+      child: LayoutBuilder(
       builder: (context, box) {
         _keyH = box.maxHeight >= 900 ? 58 : (box.maxHeight >= 780 ? 52 : 46);
         return GestureDetector(
@@ -240,12 +258,13 @@ class _PinScreenState extends State<PinScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SafeArea(
                 bottom: false,
-                child: Padding(padding: const EdgeInsets.fromLTRB(24, 12, 24, 22), child: _header()),
+                child: Padding(padding: const EdgeInsets.fromLTRB(24, 10, 24, 18), child: _header()),
               ),
               Expanded(
                 child: Container(
                   decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-                  padding: EdgeInsets.fromLTRB(24, 24, 24, 16 + MediaQuery.of(context).padding.bottom),
+                  padding: EdgeInsets.fromLTRB(24, 22, 24,
+                      16 + (MediaQuery.viewInsetsOf(context).bottom > 0 ? MediaQuery.viewInsetsOf(context).bottom : MediaQuery.paddingOf(context).bottom)),
                   child: _sheet(),
                 ),
               ),
@@ -255,6 +274,7 @@ class _PinScreenState extends State<PinScreen> {
       ),
       );
       },
+    ),
     );
   }
 
@@ -355,7 +375,7 @@ class _PinScreenState extends State<PinScreen> {
         const Spacer(),
         LanguageSwitch(onDark: true, compact: true, onChanged: lang.chooseSignedOut),
       ]),
-      const SizedBox(height: 20),
+      const SizedBox(height: 16),
       ..._headerTitle(),
     ]);
   }
@@ -371,12 +391,17 @@ class _PinScreenState extends State<PinScreen> {
       );
 
   List<Widget> _headerTitle() {
-    const title = TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700, height: 1.1, letterSpacing: -0.4);
-    const sub = TextStyle(color: _soft, fontSize: 15, height: 1.45);
+    // v0.47.3: 26/14 instead of 30/15, the title was out of proportion with the sheet.
+    const title = TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700, height: 1.15, letterSpacing: -0.3);
+    const sub = TextStyle(color: _soft, fontSize: 14, height: 1.4);
     if (_loading || _info == null) return [T('Karibu', style: title)];
     if (_pairingCode != null) return [T('Kifaa hiki ni kipya', style: title)];
     if (_byPhone && !_phoneDone) {
-      return [T('Karibu tena', style: title), const SizedBox(height: 6), T('Ingia kwa namba yako ya simu na PIN.', style: sub)];
+      return [
+        T('Karibu tena', style: title),
+        // With the keyboard up, the line under the title goes, so the field and Endelea stay in view.
+        if (MediaQuery.viewInsetsOf(context).bottom == 0) ...[const SizedBox(height: 6), T('Ingia kwa namba yako ya simu na PIN.', style: sub)],
+      ];
     }
     if (_byPhone) return [T('Weka PIN yako', style: title), const SizedBox(height: 10), _phoneChip(onDark: true)];
     if (_info!.mode == 'personal' && _selected != null) {

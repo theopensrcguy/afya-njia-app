@@ -103,8 +103,9 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       _count = l.packs;
       _batch.text = l.batch;
       _cost.text = groupDigits(l.packCost);
-      _year = l.expiryYear;
-      _month = l.expiryMonth;
+      // From a buying trip the box hasn't been read yet (0): ask for it.
+      _year = l.expiryYear == 0 ? null : l.expiryYear;
+      _month = l.expiryMonth == 0 ? null : l.expiryMonth;
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runSearch(''));
     }

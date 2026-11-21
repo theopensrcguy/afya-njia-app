@@ -225,16 +225,18 @@ class _RegisterDialogState extends State<_RegisterDialog> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
               child: Row(children: [
                 Expanded(
+                  flex: 2,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                     onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-                    child: const T('Ghairi'),
+                    child: const T('Ghairi', maxLines: 1, softWrap: false),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: FilledButton(
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: _deep,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),

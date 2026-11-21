@@ -271,6 +271,19 @@ Future<void> shareReceipt(BuildContext context, {required ApiClient api, require
   }
 }
 
+// ------------------------------------------------------------ staff (v0.48)
+
+/// The staff list on A4 (owner): print / PDF, or send the link. No NIDA or personal details.
+Future<void> shareStaffList(BuildContext context, {required ApiClient api, required String how}) async {
+  try {
+    final r = await api.get('staff/print-link') as Map<String, dynamic>;
+    if (!context.mounted) return;
+    await _deliver(context, how, '${r['url']}', tr('Orodha ya wafanyakazi:'), pop: false);
+  } on ApiException catch (e) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+  }
+}
+
 // ------------------------------------------------------------ shared parts
 
 /// open: the page (print / PDF) or the Excel download; wa: WhatsApp with the

@@ -259,6 +259,8 @@ class _ReportScreenState extends State<ReportScreen> {
             for (final x in vitals)
               Container(
                 width: w,
+                // Every tile the same height, footer line or not (v0.47.3: the pairs didn't line up).
+                height: MediaQuery.textScalerOf(context).scale(92),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: Colors.white.withValues(alpha: .07), borderRadius: BorderRadius.circular(16)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -279,7 +281,7 @@ class _ReportScreenState extends State<ReportScreen> {
                       style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: (x['diff'] as num) >= 0 ? const Color(0xFF8FE6BE) : const Color(0xFFF9B4A6)),
                     )
                   else if (x['key'] == 'cover')
-                    T('kwa mwendo huu', style: const TextStyle(fontSize: 11.5, color: Color(0xFFB7D3C9))),
+                    T('kwa mwendo huu', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: Color(0xFFB7D3C9))),
                 ]),
               ),
           ]);

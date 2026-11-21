@@ -598,3 +598,36 @@ Built from canvas boards 10–14.
 
 ### v0.47.2: a quieter share button
 - **Mauzo:** the share button is now white with a green icon, like the squares on Hisa's top bar. The dark one drew more attention than the date beside it.
+
+### v0.47.3: sign-in proportions and small layout fixes
+- **Sign-in:**
+  - The screen no longer shrinks above the keyboard (`resizeToAvoidBottomInset: false`). The white sheet now runs under the keyboard, and its padding grows by the keyboard's height. The green header no longer shows in the keyboard's rounded corners, and the gap between the sheet and the keys is gone.
+  - The title is 26 instead of 30 and the subtitle 14 instead of 15. With the keyboard up, the line under "Karibu tena" is hidden.
+- **Checkout sheet:** the title is smaller and the "Ongeza" button compact, so "Kikapu · 1 bidhaa" isn't cut off.
+- **Sajili mteja:** "Ghairi" no longer wraps into "Canc / el".
+- **Wateja:** the empty state no longer repeats the Register button; the one in the header is enough.
+- **Ripoti:** the four vitals tiles all have the same height (it scales with text size), so the pairs line up.
+
+### v0.48: a new Agiza, the buying trip, Wanaouliza, staff search
+- **Agiza** (`orders/reorder_screen.dart`), rebuilt:
+  - **Summary bar:** how many are chosen and what they cost, "Kwa wiki 2 ▾" (how far ahead), and **Bajeti**. A budget keeps, in this order, what's out, runs out, is asked for, then is low, and within each the most sold by value. The rest goes to 0, marked "bajeti".
+  - **Tabs:** Zinahitajika (out, low, running out and asked for, in one list), Wanaouliza (customer requests), Zote (search everything).
+  - **Supplier cards** fold (tap the header). Each line is one compact row: name, a reason badge, "wateja n", packaging and stock (tap to change the packaging), a − n + stepper with the line's cost, and a faint ×.
+  - **Removing:** × or swipe left. It goes at once, with **"Imeondolewa · Rudisha"** for 5 seconds. The server keeps it off the needed list for 7 days, unless it runs out or a delivery brings it.
+  - **⋮ on a card:** Tuma kwa …, Agiza zote kutoka kwa…, Chagua zote, Weka 0 kwa zote, **Ondoa zote**.
+  - **Bottom bar:** **Kununua** (makes a buying trip of everything chosen) and **Tuma · n**. With one supplier, Tuma sends straight away; with several, you pick which one each time.
+  - **Imefika** cards: a requested product came in. Call or WhatsApp each customer, then "Nimewajulisha".
+  - **Drafts** are now "saved lists": a 🔖 in the top bar (with the count), and the card has ⋮ for supplier and delete.
+- **Orodha ya kununua** (`orders/shopping_list_screen.dart`):
+  - Tick each item as you buy it, then tap the price to enter what you paid. It shows the last price, and +% or −%.
+  - ⋮ on an item: how many you bought, or **Haikupatikana** (it stays on the list for the next trip).
+  - Share the list on WhatsApp for a rep.
+  - **Weka kama mzigo · n** opens Pokea with the bought items filled in (packaging, count, price paid). Each line says "Gusa: jaza batch na EXP", and saving waits until all are filled. After saving, the list keeps only what's left.
+  - `ReceiveScreen(initialLines:)`, `ReceiveLine.unfinished`.
+- **Uza:**
+  - A product that's out says "Zimeisha · gusa: mteja ameulizia". Tapping it, or "Mteja ameulizia "…"" under results that don't match, records the request, with a phone and name only if the customer wants a call.
+- **Wafanyakazi na ruhusa:**
+  - Search by name, phone or permission (once there are more than 3 staff).
+  - Chips: Wote, Kazini, Wameacha, Ruhusa za muda.
+  - 🖨 opens the staff list on A4 (print / PDF, WhatsApp or link). It has no NIDA and no personal details. The code is `shareStaffList` in `share_export.dart`.
+- This package also contains the **v0.47.3** files, for anyone who hadn't installed it.

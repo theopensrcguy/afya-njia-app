@@ -7,6 +7,8 @@ import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/pin_fields.dart';
 import '../../core/session.dart';
+import '../../core/share_export.dart';
+import '../../core/smooth.dart';
 import 'staff_profile.dart';
 import '../../core/i18n.dart';
 
@@ -27,6 +29,57 @@ class StaffPermissionsScreen extends StatefulWidget {
 class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
   Map<String, dynamic>? _data;
   String? _error;
+
+  // v0.48: find someone by name, phone or what they may do; working / left / for a time.
+  final _q = TextEditingController();
+  String _chip = 'all';
+
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
+
+  bool _shown(Map<String, dynamic> s, Map<String, String> labels) {
+    final grants = (s['grants'] as List).cast<Map<String, dynamic>>();
+    final ok = switch (_chip) {
+      'on' => s['is_active'] != false,
+      'off' => s['is_active'] == false,
+      'timed' => grants.any((g) => g['expires_at'] != null),
+      _ => true,
+    };
+    if (!ok) return false;
+    final q = _q.text.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final digits = q.replaceAll(RegExp(r'\D'), '');
+    return '${s['name']}'.toLowerCase().contains(q) ||
+        (digits.length >= 3 && '${s['phone'] ?? ''}'.replaceAll(RegExp(r'\D'), '').contains(digits)) ||
+        grants.any((g) => (labels[g['permission']] ?? '${g['permission']}').toLowerCase().contains(q));
+  }
+
+  Future<void> _print() async {
+    final how = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: T('Orodha ya wafanyakazi', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: T('Jina, nafasi, simu, ruhusa na tangu lini. Bila NIDA wala taarifa binafsi.', style: TextStyle(fontSize: 12.5, color: mutedText)),
+          ),
+          ListTile(leading: const Icon(Icons.print_outlined), title: const T('Chapisha / Hifadhi PDF'), onTap: () => Navigator.of(sheet).pop('open')),
+          ListTile(leading: const Icon(Icons.chat_outlined), title: const T('Tuma kwa WhatsApp'), onTap: () => Navigator.of(sheet).pop('wa')),
+          ListTile(leading: const Icon(Icons.link_rounded), title: const T('Nakili kiungo'), onTap: () => Navigator.of(sheet).pop('copy')),
+        ]),
+      ),
+    );
+    if (how != null && mounted) await shareStaffList(context, api: widget.session.api, how: how);
+  }
 
   @override
   void initState() {
@@ -77,10 +130,17 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final staff = (((_data ?? const {})['staff'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final everyone = (((_data ?? const {})['staff'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final labels = _labels(_data);
+    final staff = everyone.where((s) => _shown(s, labels)).toList();
+    final timed = everyone.where((s) => (s['grants'] as List).cast<Map<String, dynamic>>().any((g) => g['expires_at'] != null)).length;
+    final left = everyone.where((s) => s['is_active'] == false).length;
     return Scaffold(
-      appBar: AppBar(title: const T('Wafanyakazi na ruhusa'), backgroundColor: pageBackground),
+      appBar: AppBar(
+        title: const T('Wafanyakazi na ruhusa'),
+        backgroundColor: pageBackground,
+        actions: [IconButton(tooltip: tr('Chapisha orodha'), onPressed: _data == null ? null : _print, icon: const Icon(Icons.print_outlined))],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addPerson,
         backgroundColor: brandGreen,
@@ -120,8 +180,50 @@ class _StaffPermissionsScreenState extends State<StaffPermissionsScreen> {
                         ),
                       ),
                     ),
-                  if (staff.isEmpty)
+                  if (everyone.length > 3) ...[
+                    TextField(
+                      controller: _q,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: tr('Tafuta jina, simu au ruhusa'),
+                        isDense: true,
+                        suffixIcon: _q.text.isEmpty
+                            ? null
+                            : IconButton(icon: const Icon(Icons.close), onPressed: () => setState(_q.clear)),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (everyone.isNotEmpty)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: [
+                        for (final (k, label, n) in [
+                          ('all', tr('Wote'), everyone.length),
+                          ('on', tr('Kazini'), everyone.length - left),
+                          if (left > 0) ('off', tr('Wameacha'), left),
+                          if (timed > 0) ('timed', tr('Ruhusa za muda'), timed),
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text('$label $n'),
+                              selected: _chip == k,
+                              showCheckmark: false,
+                              onSelected: (_) {
+                                tick();
+                                setState(() => _chip = k);
+                              },
+                            ),
+                          ),
+                      ]),
+                    ),
+                  const SizedBox(height: 10),
+                  if (everyone.isEmpty)
                     const Padding(padding: EdgeInsets.only(top: 32), child: T('Hakuna wafanyakazi bado.', textAlign: TextAlign.center)),
+                  if (everyone.isNotEmpty && staff.isEmpty)
+                    const Padding(padding: EdgeInsets.only(top: 24), child: T('Hakuna anayelingana na utafutaji huu.', textAlign: TextAlign.center, style: TextStyle(color: mutedText))),
                   for (final s in staff)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),

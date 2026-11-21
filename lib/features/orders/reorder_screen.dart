@@ -10,12 +10,15 @@ import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../core/smooth.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import '../purchases/new_product.dart';
 import '../purchases/new_product_screen.dart';
 import 'order_send_screen.dart';
 import 'orders_screen.dart';
+import 'shopping_list_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/i18n.dart';
 
 /// Agiza: what will run out before the next delivery, grouped by supplier.
@@ -43,10 +46,22 @@ class ReorderScreen extends StatefulWidget {
 
 class _ReorderScreenState extends State<ReorderScreen> {
   static const _covers = [(7, 'Wiki 1'), (14, 'Wiki 2'), (30, 'Mwezi 1')];
-  static const _views = [('suggested', 'Pendekezo'), ('alerts', 'Tahadhari'), ('all', 'Zote')];
+  // v0.48: what's needed (out, low, runs out, asked for: one list), what customers asked for, everything.
+  static const _views = [('needed', 'Zinahitajika'), ('requests', 'Wanaouliza'), ('all', 'Zote')];
 
   int _cover = 14;
-  String _view = 'suggested';
+  String _view = 'needed';
+
+  /// Taken off this list ("× / swipe"): hidden at once, "not this time" for 7 days on the server.
+  final Set<int> _hidden = {};
+
+  /// Bajeti: the most a trip or an order may cost. What sells most and is out stays; the rest drops to 0.
+  int? _budget;
+  final Set<int> _trimmed = {};
+
+  /// Supplier cards folded shut (by supplier id, 0 = none).
+  final Set<int> _folded = {};
+  int _lists = 0; // buying trips still open
   final _filter = TextEditingController(); // "Zote" can be long
   Map<String, dynamic>? _data;
   List<Map<String, dynamic>> _open = []; // orders sent, not yet delivered
@@ -108,10 +123,18 @@ class _ReorderScreenState extends State<ReorderScreen> {
       }
       final d = await _api.get('reorder', query: {'cover': '$_cover', 'view': _view}) as Map<String, dynamic>;
       final open = (await _api.get('purchase-orders') as List).cast<Map<String, dynamic>>();
+      var lists = _lists;
+      try {
+        lists = (((await _api.get('shopping-lists') as Map)['lists'] as List?) ?? const []).length;
+      } on ApiException {
+        // An older server: no buying trips yet.
+      }
       if (!mounted) return;
       setState(() {
         _data = d;
         _open = open;
+        _lists = lists;
+        _hidden.clear(); // the server now leaves out what was put aside
         if (fresh) {
           _packs.removeWhere((id, _) => !_isExtra(id));
           _packOf.removeWhere((id, _) => !_isExtra(id));
@@ -335,7 +358,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
   /// have everything, and each supplier still gets one order with only theirs.
   List<Map<String, dynamic>> get _groups {
     final q = _filter.text.trim().toLowerCase();
-    bool shown(Map<String, dynamic> l) => q.isEmpty || '${l['name']}'.toLowerCase().contains(q);
+    bool shown(Map<String, dynamic> l) => !_hidden.contains(asInt(l['product_id'])) && (q.isEmpty || '${l['name']}'.toLowerCase().contains(q));
     final meta = <int, Map<String, dynamic>>{};
     final entries = <(int, Map<String, dynamic>)>[];
     final ids = <int>{};
@@ -766,232 +789,706 @@ class _ReorderScreenState extends State<ReorderScreen> {
     }
   }
 
+  // ------------------------------------------------------------- remove / budget (v0.48)
+
+  bool _isManual(Map<String, dynamic> l) => '${l['reason']}' == 'manual';
+
+  /// "×" or a swipe: off the list now; the server keeps it off for 7 days
+  /// (unless it runs out completely). "Rudisha" brings it straight back.
+  Future<void> _remove(List<Map<String, dynamic>> lines, {String? label}) async {
+    if (lines.isEmpty) return;
+    final ids = [for (final l in lines) asInt(l['product_id'])];
+    final server = [for (final l in lines) if (!_isManual(l)) asInt(l['product_id'])];
+    // Added by hand: just taken out (nothing to remember on the server).
+    final manual = <int, List<Map<String, dynamic>>>{};
+    setState(() {
+      _hidden.addAll(ids);
+      for (final e in _extra.entries) {
+        final gone = e.value.where((l) => ids.contains(asInt(l['product_id']))).toList();
+        if (gone.isNotEmpty) manual[e.key] = gone;
+        e.value.removeWhere((l) => ids.contains(asInt(l['product_id'])));
+      }
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    if (server.isNotEmpty) {
+      try {
+        await _api.post('reorder/dismiss', {'product_ids': server});
+      } on ApiException catch (e) {
+        if (!mounted) return;
+        setState(() => _hidden.removeAll(server));
+        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+        return;
+      }
+    }
+    if (!mounted) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(label ?? (lines.length == 1 ? tr('Imeondolewa: :a', {'a': lines.first['name']}) : tr('Bidhaa :n zimeondolewa', {'n': lines.length}))),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: tr('Rudisha'),
+          onPressed: () async {
+            if (!mounted) return;
+            setState(() {
+              _hidden.removeAll(ids);
+              for (final e in manual.entries) {
+                (_extra[e.key] ??= []).addAll(e.value);
+              }
+            });
+            if (server.isNotEmpty) {
+              try {
+                await _api.post('reorder/undismiss', {'product_ids': server});
+              } on ApiException catch (e) {
+                if (mounted) messenger.showSnackBar(SnackBar(content: Text(e.message)));
+              }
+            }
+          },
+        ),
+      ));
+  }
+
+  /// What one line costs at the last price (scaled when the packaging changed), or null.
+  int? _lineCost(Map<String, dynamic> l) {
+    if (l['pack_cost'] == null) return null;
+    final size = asInt(l['pack_size']) < 1 ? 1 : asInt(l['pack_size']);
+    final (_, cur) = _pack(l);
+    return (asInt(l['pack_cost']) / size * cur).round() * _chosen(l);
+  }
+
+  List<Map<String, dynamic>> get _allLines => [for (final g in _groups) ...((g['lines'] as List).cast<Map<String, dynamic>>())];
+
+  /// Most urgent first: out, runs out, asked for, low; then what sells for the most a day.
+  int _rank(Map<String, dynamic> l) => switch ('${l['reason']}') {
+        'out' => 0,
+        'runs_out' => 1,
+        _ when asInt(l['requests']) > 0 => 2,
+        'low' => 3,
+        'manual' => 4,
+        _ => 5,
+      };
+
+  /// Keep, in order of need, what fits in the budget; the rest drops to 0.
+  void _applyBudget(int? budget) {
+    setState(() {
+      for (final id in _trimmed) {
+        _packs.remove(id);
+      }
+      _trimmed.clear();
+      _budget = budget;
+      if (budget == null) return;
+      final lines = [..._allLines]..sort((a, b) {
+          final r = _rank(a).compareTo(_rank(b));
+          if (r != 0) return r;
+          double v(Map<String, dynamic> l) => (l['per_day'] is num ? (l['per_day'] as num).toDouble() : 0.0) * asInt(l['unit_price']);
+          return v(b).compareTo(v(a));
+        });
+      var left = budget;
+      for (final l in lines) {
+        if (_chosen(l) == 0) continue;
+        final c = _lineCost(l) ?? 0; // no last price: kept, it can't be weighed
+        if (c <= left) {
+          left -= c;
+        } else {
+          _trimmed.add(asInt(l['product_id']));
+          _packs[asInt(l['product_id'])] = 0;
+        }
+      }
+    });
+  }
+
+  Future<void> _askBudget() async {
+    final c = TextEditingController(text: _budget == null ? '' : groupDigits(_budget!));
+    final v = await showDialog<int?>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const T('Bajeti ya mzigo huu'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const T('Zilizoisha na zinazouzika zaidi zinabaki kwanza; nyingine zinawekwa 0.', style: TextStyle(fontSize: 13, color: mutedText)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: c,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: const [MoneyInput()],
+            decoration: InputDecoration(labelText: tr('Kiasi (TSh)')),
+          ),
+        ]),
+        actions: [
+          if (_budget != null) TextButton(onPressed: () => Navigator.of(d).pop(-1), child: const T('Ondoa bajeti')),
+          TextButton(onPressed: () => Navigator.of(d).pop(), child: const T('Ghairi')),
+          FilledButton(onPressed: () => Navigator.of(d).pop(moneyValue(c.text)), child: const T('Weka')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    _applyBudget(v <= 0 ? null : v);
+  }
+
+  // ------------------------------------------------------------- buying trip, Wanaouliza
+
+  /// Every chosen line becomes the buying trip (Kariakoo, or a rep at the door).
+  Future<void> _toShoppingList() async {
+    final lines = [
+      for (final g in _groups)
+        for (final l in (g['lines'] as List).cast<Map<String, dynamic>>())
+          if (_chosen(l) > 0)
+            {
+              'product_id': asInt(l['product_id']),
+              'supplier_id': asInt((g['supplier'] as Map?)?['id']) == 0 ? null : asInt((g['supplier'] as Map?)?['id']),
+              'pack_name': _pack(l).$1,
+              'pack_size': _pack(l).$2,
+              'packs': _chosen(l),
+            },
+    ];
+    if (lines.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Chagua angalau bidhaa moja yenye idadi.'))));
+      return;
+    }
+    try {
+      final r = await _api.post('shopping-lists', {'lines': lines}) as Map<String, dynamic>;
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShoppingListScreen(session: widget.session, listId: asInt(r['id']))));
+      if (mounted) _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _openLists() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShoppingListScreen(session: widget.session)));
+    if (mounted) _load();
+  }
+
+  /// It came in: call or text the customers who asked, then "Nimewajulisha".
+  Future<void> _arrivedSheet(Map<String, dynamic> a) async {
+    final customers = ((a['customers'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final shop = widget.session.user?.shopName ?? '';
+    final told = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: cardColor,
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(tr(':a imefika', {'a': a['name']}), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text(tr('Wateja :n waliuliza. Wajulishe warudi.', {'n': a['count']}), style: const TextStyle(color: mutedText)),
+            const SizedBox(height: 8),
+            if (customers.isEmpty)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: T('Hawakuacha namba za simu.', style: TextStyle(color: mutedText))),
+            for (final c in customers)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(backgroundColor: primarySoft, child: Icon(Icons.person_outline, color: brandGreen)),
+                title: Text('${c['name'] ?? tr('Mteja')}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('${c['phone']}'),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(
+                    tooltip: tr('Piga simu'),
+                    icon: const Icon(Icons.call_outlined, color: brandGreen),
+                    onPressed: () => launchUrl(Uri.parse('tel:${'${c['phone']}'.replaceAll(' ', '')}')),
+                  ),
+                  IconButton(
+                    tooltip: 'WhatsApp',
+                    icon: const Icon(Icons.chat_outlined, color: brandGreen),
+                    onPressed: () {
+                      var digits = '${c['phone']}'.replaceAll(RegExp(r'[^0-9]'), '');
+                      if (digits.startsWith('0')) digits = '255${digits.substring(1)}';
+                      final text = tr('Habari, :a uliyoulizia imefika :shop. Karibu.', {'a': a['name'], 'shop': shop});
+                      launchUrl(Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(text)}'), mode: LaunchMode.externalApplication);
+                    },
+                  ),
+                ]),
+              ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () => Navigator.of(sheet).pop(true),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              child: const T('Nimewajulisha'),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (told != true || !mounted) return;
+    try {
+      await _api.post('product-requests/notified', {'ids': a['ids']});
+      if (mounted) _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Asked for, not in the shop at all: add it (then order), or let it go.
+  Future<void> _unknownAction(Map<String, dynamic> u, String action) async {
+    if (action == 'close') {
+      try {
+        await _api.post('product-requests/close', {'ids': u['ids']});
+        if (mounted) _load();
+      } on ApiException catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
+    }
+    if (!_canCreate) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Mwombe mwenye ruhusa ya kuongeza bidhaa.'))));
+      return;
+    }
+    final made = await _createProduct('${u['name']}');
+    if (made == null || !mounted) return;
+    setState(() {
+      (_extra[0] ??= []).add({
+        'product_id': made.id,
+        'name': made.name,
+        'units': [for (final x in made.units) {'name': x.name, 'base_quantity': x.baseQuantity, 'price': x.price}],
+        'on_hand': 0,
+        'days_left': null,
+        'on_order': 0,
+        'reason': 'manual',
+        'requests': u['count'],
+        'pack_name': made.units.isEmpty ? made.baseUnit : made.units.last.name,
+        'pack_size': made.units.isEmpty ? 1 : made.units.last.baseQuantity,
+        'pack_cost': null,
+        'suggested_packs': null,
+      });
+      _packs[made.id] = 1;
+    });
+  }
+
   // ------------------------------------------------------------- layout
+
+  /// Tuma from the bottom bar: one supplier's order at a time.
+  Future<void> _sendFromBar() async {
+    final ready = [for (final g in _groups) if ((g['lines'] as List).cast<Map<String, dynamic>>().any((l) => _chosen(l) > 0)) g];
+    if (ready.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Chagua angalau bidhaa moja yenye idadi.'))));
+      return;
+    }
+    if (ready.length == 1) return _send(ready.first);
+    final g = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: cardColor,
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: T('Kila msambazaji anapata ujumbe wake', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          ),
+          for (final g in ready)
+            ListTile(
+              leading: const Icon(Icons.send_rounded, color: brandGreen),
+              title: Text(g['supplier'] == null ? tr('Bila msambazaji') : '${(g['supplier'] as Map)['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(tr('bidhaa :n', {'n': (g['lines'] as List).cast<Map<String, dynamic>>().where((l) => _chosen(l) > 0).length})),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(sheet).pop(g),
+            ),
+        ]),
+      ),
+    );
+    if (g != null && mounted) await _send(g);
+  }
 
   @override
   Widget build(BuildContext context) {
     final groups = _groups;
+    final all = [for (final g in groups) ...((g['lines'] as List).cast<Map<String, dynamic>>())];
+    final picked = all.where((l) => _chosen(l) > 0).toList();
+    var total = 0;
+    var unpriced = 0;
+    for (final l in picked) {
+      final c = _lineCost(l);
+      c == null ? unpriced++ : total += c;
+    }
+    final arrived = ((_data?['arrived'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final unknown = ((_data?['unknown_requests'] as List?) ?? const []).cast<Map<String, dynamic>>();
+
     return PopScope(
       canPop: !_draftChanged,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _confirmLeave();
       },
       child: Scaffold(
-      // Drafts wait in the corner: saving one leaves this screen as it is
-      // (start the next order straight away); open one only when you choose.
-      floatingActionButton: _drafts == 0 && _draft == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _showDrafts,
-              backgroundColor: _justSaved ? brandGreen : const Color(0xFF2F5FA8),
-              foregroundColor: Colors.white,
-              icon: Icon(_justSaved ? Icons.check_circle : Icons.edit_note),
-              label: Text(_justSaved ? tr('Rasimu imehifadhiwa ✓') : tr('Rasimu :n', {'n': _drafts})),
-            ),
-      appBar: AppBar(
         backgroundColor: pageBackground,
-        title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          T('Agiza', style: TextStyle(fontWeight: FontWeight.w800)),
-          T('Zitakazoisha kabla mzigo ujao haujafika', style: TextStyle(fontSize: 12, color: mutedText)),
-        ]),
-        actions: [
-          TextButton.icon(
-            onPressed: () => _openOrders('all'),
-            icon: const Icon(Icons.receipt_long_outlined),
-            label: const T('Maagizo'),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 96), // room for the floating Rasimu button
-          children: [
-            // Which products: suggested, alerts, or all stock (to order anything).
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<String>(
-                segments: [
-                  for (final (v, label) in _views)
-                    ButtonSegment(value: v, label: Text(_counts[v] == null ? tr(label) : '${tr(label)} ${_counts[v]}', overflow: TextOverflow.ellipsis)),
-                ],
-                selected: {_view},
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: inkColor,
-                  selectedForegroundColor: Colors.white,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-                onSelectionChanged: (v) {
-                  setState(() {
-                    _view = v.first;
-                    _filter.clear();
-                  });
-                  _load();
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
-              child: Text(
-                switch (_view) {
-                  'alerts' => tr('Zilizoisha, au zilizofika kiwango chako cha kuagiza. Weka idadi kwa unazotaka.'),
-                  'all' => tr('Kila bidhaa dukani. Kuagiza ni uamuzi wako: weka idadi kwa yoyote.'),
-                  _ => tr('Zitakazoisha kabla mzigo ujao haujafika. Idadi imependekezwa; ibadilishe ukipenda.'),
-                },
-                style: const TextStyle(fontSize: 12, color: mutedText),
-              ),
-            ),
-            if (_view == 'all')
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: TextField(
-                  controller: _filter,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(prefixIcon: const Icon(Icons.filter_list), hintText: tr('Chuja kwa jina…'), isDense: true),
+        appBar: AppBar(
+          backgroundColor: pageBackground,
+          title: const T('Agiza', style: TextStyle(fontWeight: FontWeight.w800)),
+          actions: [
+            if (_drafts > 0 || _draft != null)
+              IconButton(
+                tooltip: tr('Zilizohifadhiwa'),
+                onPressed: _showDrafts,
+                icon: Badge(
+                  label: Text('$_drafts'),
+                  isLabelVisible: _drafts > 0,
+                  backgroundColor: _justSaved ? brandGreen : infoBlue,
+                  child: const Icon(Icons.bookmark_outline_rounded),
                 ),
               ),
-            // Said in words: how much to order, not a bare "7 / 14 / 30".
-            const T('Agiza kiasi cha kutosha kwa:', style: TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<int>(
-                segments: [for (final (d, label) in _covers) ButtonSegment(value: d, label: Text(tr(label)))],
-                selected: {_cover},
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: brandGreen,
-                  selectedForegroundColor: Colors.white,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                onSelectionChanged: (v) {
-                  setState(() => _cover = v.first);
-                  _load(fresh: true);
-                },
+            if (_lists > 0)
+              IconButton(
+                tooltip: tr('Orodha ya kununua'),
+                onPressed: _openLists,
+                icon: Badge(label: Text('$_lists'), child: const Icon(Icons.shopping_bag_outlined)),
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6, left: 4),
-              child: T('baada ya mzigo kufika', style: TextStyle(fontSize: 12, color: mutedText)),
-            ),
-            if (_open.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Material(
-                  color: const Color(0xFFDDF3EA),
-                  borderRadius: BorderRadius.circular(16),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    leading: const Icon(Icons.local_shipping_outlined, color: brandGreen),
-                    title: Text(tr('Maagizo :open yametumwa, yanasubiri kufika', {'open': _open.length}), style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const T('Bidhaa zake hazitapendekezwa tena mpaka mzigo ufike · gusa kuona'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _openOrders('sent'),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 4),
-            if (_loading && _data == null) const Padding(padding: EdgeInsets.all(40), child: Center(child: AfyaLoader())),
-            if (_error != null) Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: const TextStyle(color: dangerRed))),
-            if (!_loading && _error == null && groups.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: T('Hakuna bidhaa hapa. Angalia "Zote" kuagiza bidhaa yoyote.', textAlign: TextAlign.center, style: TextStyle(color: mutedText)),
-              ),
-            if (_draft != null) _draftCard(),
-            if (_draft != null)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
-                child: T('ONGEZA KUTOKA ORODHA HIZI: weka idadi, kisha ⋮ → "Weka zilizochaguliwa kwenye rasimu"',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: mutedText)),
-              ),
-            for (final g in groups) _group(g),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: _data == null ? null : _orderAnything,
-              icon: const Icon(Icons.add),
-              label: const T('Agiza bidhaa nyingine yoyote'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            ),
-            if (groups.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.fromLTRB(4, 14, 4, 0),
-                child: Text(
-                  tr('Idadi imehesabiwa kutoka mauzo ya siku 30, muda ambao msambazaji huchukua kuleta mzigo, na vifungashio alivyoleta mara ya mwisho. Gusa kifungashio kubadilisha (mfano kadi → boksi).'),
-                  style: TextStyle(fontSize: 12, color: mutedText),
-                ),
-              ),
+            TextButton(onPressed: () => _openOrders('all'), child: const T('Maagizo')),
           ],
         ),
-      ),
+        bottomNavigationBar: picked.isEmpty && _draft == null
+            ? null
+            : SafeArea(
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                  decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFE3EDE8)))),
+                  child: Row(children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: picked.isEmpty ? null : _toShoppingList,
+                        icon: const Icon(Icons.shopping_bag_outlined, size: 20),
+                        label: const T('Kununua', maxLines: 1),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: picked.isEmpty ? null : _sendFromBar,
+                        icon: const Icon(Icons.send_rounded, size: 20),
+                        label: Text(tr('Tuma · :n', {'n': picked.length}), maxLines: 1),
+                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+        body: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+            children: [
+              _summary(picked.length, total, unpriced),
+              const SizedBox(height: 12),
+              _tabs(),
+              if (_view == 'all')
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: TextField(
+                    controller: _filter,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Tafuta bidhaa…'), isDense: true),
+                  ),
+                ),
+              for (final a in arrived) _arrivedCard(a),
+              if (_open.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Pressable(
+                    onTap: () => _openOrders('sent'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                      child: Row(children: [
+                        const Icon(Icons.local_shipping_outlined, color: brandGreen, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(tr('Maagizo :open yanasubiri kufika', {'open': _open.length}),
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                        ),
+                        const Icon(Icons.chevron_right, color: mutedText),
+                      ]),
+                    ),
+                  ),
+                ),
+              if (_view == 'requests' && unknown.isNotEmpty) _unknownCard(unknown),
+              if (_loading && _data == null) const Padding(padding: EdgeInsets.all(40), child: Center(child: AfyaLoader())),
+              if (_error != null) Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: const TextStyle(color: dangerRed))),
+              if (!_loading && _error == null && groups.isEmpty && _draft == null && !(_view == 'requests' && unknown.isNotEmpty))
+                Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: T(
+                    _view == 'requests'
+                        ? 'Hakuna aliyeulizia bidhaa isiyokuwepo. Kwenye Uza, bidhaa ikikosekana gusa "Mteja ameulizia".'
+                        : 'Hakuna kinachohitajika sasa. Angalia "Zote" kuagiza bidhaa yoyote.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: mutedText),
+                  ),
+                ),
+              if (_draft != null) _draftCard(),
+              for (final g in groups) _group(g),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _data == null ? null : _orderAnything,
+                icon: const Icon(Icons.add),
+                label: const T('Agiza bidhaa nyingine yoyote'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _group(Map<String, dynamic> g) {
-    final s = g['supplier'] as Map<String, dynamic>?;
-    final lines = ((g['lines'] as List?) ?? const []).cast<Map<String, dynamic>>();
-    final lastDays = g['last_delivery_days'];
-    final lead = g['lead_days'];
-    final note = s == null
-        ? tr('Hazijawahi kuletwa na msambazaji anayejulikana')
-        : lead == null
-            ? tr('Umechagua mwenyewe')
-            : '${g['lead_learned'] == true ? tr('Huleta kila siku ~:lead', {'lead': lead}) : tr('Muda wa kuleta: siku :lead (makadirio)', {'lead': lead})}'
-                '${lastDays != null ? tr(' · mara ya mwisho siku :last_days zilizopita', {'last_days': lastDays}) : ''}';
-    var total = 0;
-    var priced = true;
-    for (final l in lines) {
-      // The last price is per the last packaging; a changed packaging has no price yet.
-      final changed = _packOf.containsKey(asInt(l['product_id']));
-      if (l['pack_cost'] == null || changed) priced = false;
-      total += _chosen(l) * asInt(l['pack_cost']);
-    }
-
+  /// "Bidhaa 12 · ~TSh 486,000", how far ahead, and the budget.
+  Widget _summary(int n, int total, int unpriced) {
     return Container(
-      margin: const EdgeInsets.only(top: 14),
-      decoration: softCard(radius: 22),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s == null ? tr('Bila msambazaji') : '${s['name']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                Text(note, style: const TextStyle(fontSize: 12, color: mutedText)),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+      decoration: BoxDecoration(color: const Color(0xFF0E3B31), borderRadius: BorderRadius.circular(22)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr('Bidhaa :n zimechaguliwa', {'n': n}), style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _costs ? (total == 0 && n > 0 ? '—' : '${unpriced > 0 ? '~' : ''}${formatTsh(total)}') : tr('Bidhaa :n', {'n': n}),
+                  style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (_costs && unpriced > 0)
+                Text(tr(':n bila bei ya mwisho', {'n': unpriced}), style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+            ]),
+          ),
+          PopupMenuButton<int>(
+            tooltip: tr('Agiza kiasi cha kutosha kwa:'),
+            initialValue: _cover,
+            onSelected: (v) {
+              setState(() => _cover = v);
+              _load(fresh: true);
+            },
+            itemBuilder: (_) => [for (final (d, label) in _covers) PopupMenuItem(value: d, child: Text(tr('Kwa :a', {'a': tr(label)})))],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(99)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(tr('Kwa :a', {'a': tr(_covers.firstWhere((c) => c.$1 == _cover).$2)}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12.5)),
+                const Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
               ]),
             ),
-            if (_costs && priced && total > 0) Text('~${formatTsh(total)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-            PopupMenuButton<String>(
-              tooltip: tr('Orodha hii'),
-              onSelected: (v) => _groupAction(v, lines, asInt(s?['id'])),
-              itemBuilder: (_) => [
-                PopupMenuItem(value: 'supplier', child: T('Agiza zote kutoka kwa…')),
-                PopupMenuItem(value: 'all', child: T('Chagua zote (1 ya kila moja)')),
-                PopupMenuItem(value: 'none', child: T('Ondoa zote (weka 0)')),
-                if (_draft != null) PopupMenuItem(value: 'todraft', child: T('Weka zilizochaguliwa kwenye rasimu')),
-              ],
+          ),
+        ]),
+        if (_costs) ...[
+          const SizedBox(height: 10),
+          Pressable(
+            onTap: _askBudget,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _budget == null ? Colors.white10 : const Color(0xFF3DDC97).withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(children: [
+                Icon(Icons.account_balance_wallet_outlined, size: 18, color: _budget == null ? Colors.white70 : const Color(0xFF3DDC97)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _budget == null
+                        ? tr('Weka bajeti')
+                        : '${tr('Bajeti :a', {'a': formatTsh(_budget!)})}${_trimmed.isEmpty ? '' : ' · ${tr(':n zimewekwa 0', {'n': _trimmed.length})}'}',
+                    style: TextStyle(color: _budget == null ? Colors.white70 : Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(_budget == null ? Icons.add_rounded : Icons.edit_outlined, size: 16, color: Colors.white54),
+              ]),
             ),
-          ]),
-        ),
-        for (final l in lines) _line(l, asInt(s?['id'])),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-          child: TextButton.icon(
-            onPressed: () => _addProduct(asInt(s?['id'])),
-            icon: const Icon(Icons.add),
-            label: const T('Ongeza bidhaa'),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _tabs() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Row(children: [
+        for (final (v, label) in _views)
+          Expanded(
+            child: Pressable(
+              onTap: () {
+                if (_view == v) return;
+                setState(() {
+                  _view = v;
+                  _filter.clear();
+                });
+                _load();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(color: _view == v ? inkColor : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Flexible(
+                    child: Text(tr(label),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: _view == v ? Colors.white : inkColor)),
+                  ),
+                  if (v != 'all' && asInt(_counts[v]) > 0) ...[
+                    const SizedBox(width: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: _view == v ? Colors.white24 : (v == 'requests' ? infoSoft : primarySoft),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text('${_counts[v]}',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _view == v ? Colors.white : (v == 'requests' ? infoBlue : brandGreen))),
+                    ),
+                  ],
+                ]),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Widget _arrivedCard(Map<String, dynamic> a) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Pressable(
+          onTap: () => _arrivedSheet(a),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: primarySoft, borderRadius: BorderRadius.circular(18)),
+            child: Row(children: [
+              const Icon(Icons.campaign_outlined, color: brandGreen),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(tr('Imefika: :a', {'a': a['name']}), style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text(tr('Wateja :n waliuliza · wajulishe', {'n': a['count']}), style: const TextStyle(fontSize: 12.5, color: mutedText)),
+                ]),
+              ),
+              const Icon(Icons.chevron_right, color: brandGreen),
+            ]),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-          child: FilledButton.icon(
-            onPressed: lines.any((l) => _chosen(l) > 0) ? () => _send(g) : null,
-            icon: const Icon(Icons.send_rounded),
-            label: Text(s == null ? tr('Andaa ujumbe') : tr('Tuma kwa :a', {'a': s['name']})),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+      );
+
+  /// Asked for, but not a product of this shop (typed at the till).
+  Widget _unknownCard(List<Map<String, dynamic>> unknown) => Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 6, 6),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const T('Hazipo dukani kabisa', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+          const T('Wateja waliuliza; ziongeze kuziagiza, au ziache.', style: TextStyle(fontSize: 12.5, color: mutedText)),
+          const SizedBox(height: 4),
+          for (final u in unknown)
+            Row(children: [
+              Expanded(
+                child: Text('${u['name']}', style: const TextStyle(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              _badge(tr('wateja :n', {'n': u['count']}), infoSoft, infoBlue),
+              PopupMenuButton<String>(
+                onSelected: (v) => _unknownAction(u, v),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'add', child: T('Ongeza bidhaa hii, iagize')),
+                  PopupMenuItem(value: 'close', child: T('Ondoa kwenye orodha')),
+                ],
+              ),
+            ]),
+        ]),
+      );
+
+  Widget _badge(String text, Color bg, Color fg) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+        child: Text(text, maxLines: 1, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
+      );
+
+  /// One supplier: name, how many, what it costs; tap to fold. ⋮ for the rest.
+  Widget _group(Map<String, dynamic> g) {
+    final s = g['supplier'] as Map<String, dynamic>?;
+    final key = asInt(s?['id']);
+    final lines = ((g['lines'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final lead = g['lead_days'];
+    final picked = lines.where((l) => _chosen(l) > 0).length;
+    var total = 0;
+    for (final l in lines) {
+      total += _lineCost(l) ?? 0;
+    }
+    final folded = _folded.contains(key);
+    final note = [
+      tr('bidhaa :n', {'n': lines.length}),
+      if (lead != null) tr('huleta ~siku :lead', {'lead': lead}),
+    ].join(' · ');
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        InkWell(
+          onTap: () => setState(() => folded ? _folded.remove(key) : _folded.add(key)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 2, 10),
+            child: Row(children: [
+              AnimatedRotation(
+                turns: folded ? -0.25 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: const Icon(Icons.expand_more_rounded, color: mutedText),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(s == null ? tr('Bila msambazaji') : '${s['name']}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
+                  Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: mutedText)),
+                ]),
+              ),
+              if (_costs && total > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text(groupDigits(total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+                ),
+              PopupMenuButton<String>(
+                tooltip: tr('Orodha hii'),
+                onSelected: (v) {
+                  if (v == 'remove') {
+                    _remove(lines, label: tr('Bidhaa :n za :a zimeondolewa', {'n': lines.length, 'a': s?['name'] ?? tr('bila msambazaji')}));
+                  } else if (v == 'send') {
+                    _send(g);
+                  } else {
+                    _groupAction(v, lines, key);
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (picked > 0) PopupMenuItem(value: 'send', child: Text(s == null ? tr('Andaa ujumbe') : tr('Tuma kwa :a', {'a': s['name']}))),
+                  PopupMenuItem(value: 'supplier', child: T('Agiza zote kutoka kwa…')),
+                  PopupMenuItem(value: 'all', child: T('Chagua zote (1 ya kila moja)')),
+                  PopupMenuItem(value: 'none', child: T('Weka 0 kwa zote')),
+                  if (_draft != null) PopupMenuItem(value: 'todraft', child: T('Weka zilizochaguliwa kwenye rasimu')),
+                  PopupMenuItem(value: 'remove', child: T('Ondoa zote', style: TextStyle(color: dangerRed))),
+                ],
+              ),
+            ]),
           ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: folded
+              ? const SizedBox(width: double.infinity)
+              : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  for (final l in lines) _line(l, key),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _addProduct(key),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const T('Ongeza bidhaa'),
+                    ),
+                  ),
+                ]),
         ),
       ]),
     );
@@ -1008,30 +1505,22 @@ class _ReorderScreenState extends State<ReorderScreen> {
       if (!keys.contains(k)) keys.add(k);
     }
     return Container(
-      margin: const EdgeInsets.only(top: 14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFF2F5FA8), width: 1.5),
-      ),
+      margin: const EdgeInsets.only(top: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: infoBlue.withValues(alpha: 0.45))),
+      clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+          padding: const EdgeInsets.fromLTRB(16, 12, 4, 6),
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const T('Rasimu: endelea kuhariri', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF2F5FA8))),
+                const T('Orodha iliyohifadhiwa', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: infoBlue)),
                 Text(tr('Bidhaa :n · tuma kila msambazaji akiwa tayari', {'n': chosen}), style: const TextStyle(fontSize: 12, color: mutedText)),
               ]),
             ),
-            IconButton(
-              tooltip: tr('Futa rasimu'),
-              onPressed: _savingDraft ? null : _deleteDraft,
-              icon: const Icon(Icons.delete_outline_rounded, color: dangerRed),
-            ),
-            // "Zote kutoka": one supplier for every product of the draft (each can still be changed).
-            TextButton(
-              onPressed: () async {
+            PopupMenuButton<String>(
+              onSelected: (v) async {
+                if (v == 'delete') return _deleteDraft();
                 final k = await _askSupplier(tr('Bidhaa zote za rasimu kutoka kwa nani?'), _draftSupplier);
                 if (k == null || !mounted) return;
                 setState(() {
@@ -1041,124 +1530,198 @@ class _ReorderScreenState extends State<ReorderScreen> {
                   }
                 });
               },
-              child: Text(tr('Zote: :a', {'a': s?['name'] ?? tr('chagua')})),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'supplier', child: Text(tr('Zote: :a', {'a': s?['name'] ?? tr('chagua')}))),
+                PopupMenuItem(value: 'delete', child: T('Futa rasimu', style: TextStyle(color: dangerRed))),
+              ],
             ),
           ]),
         ),
         for (final k in keys) ...[
           Container(
-            color: const Color(0xFFF1F5FC),
-            padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+            color: infoSoft,
+            padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
             child: Row(children: [
               Expanded(
                 child: Text(
                   '${_supplierById(k)?['name'] ?? tr('Bila msambazaji bado')} · ${tr('bidhaa :n', {'n': _draftLines.where((l) => asInt(l['supplier_id']) == k).length})}',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                 ),
               ),
-              FilledButton.tonal(
+              TextButton(
                 onPressed: _savingDraft || !_draftLines.any((l) => asInt(l['supplier_id']) == k && _chosen(l) > 0) ? null : () => _sendDraftPart(k),
-                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-                child: Text(_supplierById(k) == null ? tr('Tuma') : tr('Tuma kwa :a', {'a': _supplierById(k)!['name']}), overflow: TextOverflow.ellipsis),
+                child: const T('Tuma'),
               ),
             ]),
           ),
           for (final l in _draftLines.where((l) => asInt(l['supplier_id']) == k)) _line(l, k, inDraft: true),
         ],
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-          child: TextButton.icon(
-            onPressed: () => _addProduct(_draftSupplier, toDraft: true),
-            icon: const Icon(Icons.add),
-            label: const T('Ongeza bidhaa'),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-          child: FilledButton(
-            onPressed: _savingDraft ? null : _saveDraft,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            child: const T('Hifadhi rasimu'),
-          ),
+          padding: const EdgeInsets.fromLTRB(8, 0, 12, 10),
+          child: Row(children: [
+            TextButton.icon(
+              onPressed: () => _addProduct(_draftSupplier, toDraft: true),
+              icon: const Icon(Icons.add, size: 18),
+              label: const T('Ongeza bidhaa'),
+            ),
+            const Spacer(),
+            FilledButton.tonal(
+              onPressed: _savingDraft ? null : _saveDraft,
+              child: T(_draftChanged ? 'Hifadhi mabadiliko' : 'Imehifadhiwa'),
+            ),
+          ]),
         ),
       ]),
     );
   }
 
+  /// One compact row: name and why, the packaging, − n +, what it costs, and a faint ×.
   Widget _line(Map<String, dynamic> l, int supplierKey, {bool inDraft = false}) {
     final id = asInt(l['product_id']);
     final onHand = asInt(l['on_hand']);
     final days = l['days_left'];
-    final onOrder = asInt(l['on_order']);
     final units = _units(l);
     final reason = '${l['reason']}';
+    final requests = asInt(l['requests']);
     final (packName, packSize) = _pack(l);
-    final stock = tr('zipo :a', {'a': describeStock(onHand, units)});
-    final (why, color) = switch (reason) {
-      'out' => (tr('Imeisha'), dangerRed),
-      'runs_out' => (tr('Itaisha baada ya siku :days:a · :stock', {'days': days, 'a': asInt(days) < 2 ? '!' : '', 'stock': stock}), asInt(days) < 2 ? dangerRed : warnAmber),
-      'low' => (tr('Chini ya kiwango cha kuagiza · :stock', {'stock': stock}), warnAmber),
-      'ok' => (tr('Inatosha · :stock', {'stock': stock}), mutedText),
-      'draft' => (tr('Kwenye rasimu · :stock', {'stock': stock}), mutedText),
-      _ => (tr('Umeongeza mwenyewe · :stock', {'stock': stock}), mutedText),
+    final (why, bg, fg) = switch (reason) {
+      'out' => (tr('Imeisha'), dangerSoft, dangerRed),
+      'runs_out' => (tr('Siku :days', {'days': days}), warnSoft, warnAmber),
+      'low' => (tr('Chini'), warnSoft, warnAmber),
+      'asked' => (tr('Wanaouliza'), infoSoft, infoBlue),
+      'draft' => (tr('Rasimu'), infoSoft, infoBlue),
+      'manual' => (tr('Umeongeza'), const Color(0xFFEFF3F1), mutedText),
+      _ => (tr('Inatosha'), const Color(0xFFEFF3F1), mutedText),
     };
     final n = _chosen(l);
-    final base = units.isEmpty ? '' : units.first.name;
+    final cost = _lineCost(l);
+    final trimmed = _trimmed.contains(id) && n == 0;
 
-    return Container(
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE3EDE8)))),
-      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('${l['name']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-        InkWell(
-          onTap: () async {
-            if (!inDraft) return _moveLine(l, supplierKey);
-            final k = await _askSupplier(tr('Agiza :a kutoka kwa nani?', {'a': l['name']}), supplierKey);
-            if (k != null && mounted) setState(() => l['supplier_id'] = k);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(tr('Kutoka: :a', {'a': _supplierById(supplierKey)?['name'] ?? tr('bila msambazaji')}),
-                  style: const TextStyle(fontSize: 12, color: brandGreen, fontWeight: FontWeight.w700)),
-              const Icon(Icons.arrow_drop_down, size: 18, color: brandGreen),
+    final row = Container(
+      decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFEDF2F0)))),
+      padding: const EdgeInsets.fromLTRB(14, 9, 4, 9),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${l['name']}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: n == 0 ? mutedText : inkColor)),
+            const SizedBox(height: 3),
+            Wrap(spacing: 5, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              _badge(why, bg, fg),
+              if (requests > 0 && reason != 'asked') _badge(tr('wateja :n', {'n': requests}), infoSoft, infoBlue),
+              if (trimmed) _badge(tr('bajeti'), const Color(0xFFEFF3F1), mutedText),
+              // The packaging is a button: strips last time, boxes now.
+              InkWell(
+                onTap: () => _choosePack(l),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                  child: Text(
+                    '${unitLabel(packName)}${packSize > 1 ? ' ($packSize)' : ''} · ${tr('zipo :a', {'a': describeStock(onHand, units)})}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5, color: brandGreen, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              if (inDraft || _supplierOf.containsKey(id))
+                InkWell(
+                  onTap: () async {
+                    if (!inDraft) return _moveLine(l, supplierKey);
+                    final k = await _askSupplier(tr('Agiza :a kutoka kwa nani?', {'a': l['name']}), supplierKey);
+                    if (k != null && mounted) setState(() => l['supplier_id'] = k);
+                  },
+                  child: Text(tr('Kutoka: :a', {'a': _supplierById(supplierKey)?['name'] ?? tr('bila msambazaji')}),
+                      style: const TextStyle(fontSize: 11.5, color: mutedText, decoration: TextDecoration.underline)),
+                ),
             ]),
+          ]),
+        ),
+        const SizedBox(width: 6),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          _stepper(n, (v) => setState(() {
+                _packs[id] = v;
+                _trimmed.remove(id);
+              })),
+          if (_costs && cost != null && n > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, right: 4),
+              child: Text(groupDigits(cost), style: const TextStyle(fontSize: 11.5, color: mutedText, fontWeight: FontWeight.w600)),
+            ),
+        ]),
+        // Faint, so it isn't hit by mistake; swiping left does the same.
+        SizedBox(
+          width: 34,
+          child: IconButton(
+            tooltip: tr('Ondoa'),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFFA9B8B2)),
+            onPressed: () => inDraft ? _removeFromDraft(l) : _remove([l]),
           ),
         ),
-        Text(why, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
-        if (onOrder > 0) Text(tr('Imeshaagizwa: :a', {'a': describeStock(onOrder, units)}), style: const TextStyle(fontSize: 12, color: mutedText)),
-        const SizedBox(height: 4),
-        Row(children: [
-          // The packaging is a button: strips last time, boxes now.
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () => _choosePack(l),
-                icon: const Icon(Icons.swap_horiz, size: 18),
-                label: Text(
-                  packSize > 1 ? '${unitLabel(packName)} (${unitLabel(base, packSize)} $packSize)' : unitLabel(packName),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 10)),
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: tr('Punguza'),
-            onPressed: n > 0 ? () => setState(() => _packs[id] = n - 1) : null,
-            icon: const Icon(Icons.remove_circle_outline, color: brandGreen),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text('$n', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          ),
-          IconButton(
-            tooltip: tr('Ongeza'),
-            onPressed: () => setState(() => _packs[id] = n + 1),
-            icon: const Icon(Icons.add_circle, color: brandGreen),
-          ),
-        ]),
+      ]),
+    );
+
+    return Dismissible(
+      key: ValueKey('line-$id-$inDraft'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: dangerSoft,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const T('Ondoa', style: TextStyle(color: dangerRed, fontWeight: FontWeight.w800)),
+      ),
+      onDismissed: (_) => inDraft ? _removeFromDraft(l) : _remove([l]),
+      child: row,
+    );
+  }
+
+  void _removeFromDraft(Map<String, dynamic> l) {
+    final i = _draftLines.indexOf(l);
+    if (i < 0) return;
+    final packs = _packs[asInt(l['product_id'])];
+    setState(() => _draftLines.removeAt(i));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(tr('Imeondolewa kwenye rasimu: :a. Kumbuka kuihifadhi.', {'a': l['name']})),
+        action: SnackBarAction(
+          label: tr('Rudisha'),
+          onPressed: () {
+            if (!mounted) return;
+            setState(() {
+              _draftLines.insert(i.clamp(0, _draftLines.length), l);
+              if (packs != null) _packs[asInt(l['product_id'])] = packs;
+            });
+          },
+        ),
+      ));
+  }
+
+  /// − n +, small: the number is what's ordered, in the packaging shown.
+  Widget _stepper(int n, ValueChanged<int> set) {
+    Widget b(IconData icon, VoidCallback? onTap) => InkWell(
+          onTap: onTap == null ? null : () {
+            tick();
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(width: 32, height: 32, child: Icon(icon, size: 18, color: onTap == null ? const Color(0xFFC5D2CD) : brandGreen)),
+        );
+    return Container(
+      decoration: BoxDecoration(color: const Color(0xFFF2F6F4), borderRadius: BorderRadius.circular(12)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        b(Icons.remove_rounded, n > 0 ? () => set(n - 1) : null),
+        SizedBox(
+          width: 30,
+          child: Text('$n', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: n == 0 ? mutedText : inkColor)),
+        ),
+        b(Icons.add_rounded, () => set(n + 1)),
       ]),
     );
   }
