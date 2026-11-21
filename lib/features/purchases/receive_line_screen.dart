@@ -13,6 +13,7 @@ import '../../core/units.dart';
 import '../../models/product.dart';
 import '../stock/unit_picker.dart';
 import 'new_product.dart';
+import '../../core/product_photo.dart';
 import 'new_product_screen.dart';
 import 'receive_line.dart';
 import '../../core/i18n.dart';
@@ -70,6 +71,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
 
   // ---- the line
   Product? _product;
+  String? _photo; // set when a photo was taken here
   NewProductDraft? _draft; // set when this product arrives for the first time
   String? _barcode; // scanned on the box: learned for the counter
   int? _linkId; // "Ndiyo, ni hiyo": link this catalogue entry to the existing product
@@ -509,6 +511,22 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
             // Product
             _card([
               Row(children: [
+                // The box is in your hand: one tap and it has a photo (v0.48.2). A new
+                // product gets its photo once the delivery has created it.
+                if (_draft == null) ...[
+                  ProductThumb(
+                    url: _photo ?? p.photoUrl,
+                    size: 52,
+                    radius: 14,
+                    badge: true,
+                    fallback: Container(color: const Color(0xFFEFF4F2), child: const Icon(Icons.photo_camera_outlined, color: mutedText)),
+                    onTap: () async {
+                      final url = await editProductPhoto(context, api: widget.api, productId: p.id, current: _photo ?? p.photoUrl);
+                      if (url != null && mounted) setState(() => _photo = url);
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     if (_draft != null)

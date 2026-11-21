@@ -12,6 +12,7 @@ import '../../core/share_export.dart';
 import '../../core/session.dart';
 import '../../core/smooth.dart';
 import '../../core/empty_shelves.dart';
+import '../../core/order_basket.dart';
 import '../bulk/bulk_entry_screen.dart';
 import '../orders/reorder_screen.dart';
 import '../purchases/receive_screen.dart';
@@ -67,6 +68,10 @@ class _StockScreenState extends State<StockScreen> {
   Set<int> _cats = {...UiMemory.get<Set<int>>('stock.cats', const {})};
   RangeValues? _price = UiMemory.get<RangeValues?>('stock.price', null);
   bool _panel = false; // Vichujio unfolded
+  // Ordering from Hisa (v0.48.3): what's already in Agiza's basket, and rows held to pick several.
+  Set<int> _inBasket = {};
+  final Set<int> _picked = {};
+  bool get _canOrder => _can(Perm.prepareOrders);
   final _q = TextEditingController();
 
   ApiClient get _api => widget.session.api;
@@ -87,6 +92,65 @@ class _StockScreenState extends State<StockScreen> {
       if (widget.startWithScan) _scan();
     });
     _q.addListener(() => setState(() {}));
+    if (_canOrder) _readBasket();
+  }
+
+  Future<void> _readBasket() async {
+    final ids = await OrderBasket.ids(widget.session);
+    if (mounted) setState(() => _inBasket = ids);
+  }
+
+  /// Into Agiza's basket (1 pack of the biggest unit). Tapping again takes it out.
+  Future<void> _toBasket(List<Map<String, dynamic>> products) async {
+    if (products.isEmpty) return;
+    tick();
+    final fresh = [for (final p in products) if (!_inBasket.contains(asInt(p['id']))) p];
+    for (final p in fresh) {
+      await OrderBasket.addFromStock(widget.session, p);
+    }
+    setState(() {
+      _inBasket.addAll(fresh.map((p) => asInt(p['id'])));
+      _picked.clear();
+    });
+    if (!mounted || fresh.isEmpty) return;
+    final m = ScaffoldMessenger.of(context);
+    showUndoSnack(
+      m,
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(fresh.length == 1 ? tr(':a imewekwa kikapuni', {'a': '${fresh.first['name']}'}) : tr('Bidhaa :n zimewekwa kikapuni', {'n': fresh.length})),
+        action: SnackBarAction(
+          label: tr('Rudisha'),
+          onPressed: () async {
+            for (final p in fresh) {
+              await OrderBasket.remove(widget.session, p['id']);
+            }
+            if (mounted) setState(() => _inBasket.removeAll(fresh.map((p) => asInt(p['id']))));
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _fromBasket(Map<String, dynamic> p) async {
+    tick();
+    await OrderBasket.remove(widget.session, p['id']);
+    if (mounted) setState(() => _inBasket.remove(asInt(p['id'])));
+  }
+
+  void _togglePick(Map<String, dynamic> p) {
+    tick();
+    final id = asInt(p['id']);
+    setState(() => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
+  }
+
+  Future<void> _openBasket() async {
+    tick();
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReorderScreen(session: widget.session)));
+    if (mounted) {
+      _readBasket();
+      _load();
+    }
   }
 
   @override
@@ -221,7 +285,7 @@ class _StockScreenState extends State<StockScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      floatingActionButton: !_can(Perm.receive)
+      floatingActionButton: !_can(Perm.receive) || _picked.isNotEmpty
           ? null
           : FloatingActionButton.extended(
               onPressed: () => _push(ReceiveScreen(session: widget.session)),
@@ -231,6 +295,7 @@ class _StockScreenState extends State<StockScreen> {
               icon: const Icon(Icons.local_shipping_outlined),
               label: const T('Pokea mzigo'),
             ),
+      bottomNavigationBar: _canOrder ? _basketBar() : null,
       body: SafeArea(
         bottom: false,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -784,15 +849,27 @@ class _StockScreenState extends State<StockScreen> {
           child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
         );
 
-    return Semantics(
+    final id = asInt(p['id']);
+    final picked = _picked.contains(id);
+    final inBasket = _inBasket.contains(id);
+    final wants = out || p['is_low'] == true;
+
+    final card = Semantics(
       button: true,
       label: '${p['name']}, ${tr(look.label)}, ${stockText(p)}',
       excludeSemantics: true,
       child: Pressable(
-        onTap: () => _openProduct(p),
-        child: Container(
+        onTap: _picked.isNotEmpty ? () => _togglePick(p) : () => _openProduct(p),
+        onLongPress: _canOrder ? () => _togglePick(p) : null,
+        child: AnimatedContainer(
+          duration: Motion.of(context, Motion.fast),
+          curve: Motion.curve,
           clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+          decoration: BoxDecoration(
+            color: picked ? const Color(0xFFEAF6F0) : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: picked ? const Color(0xFF8FD0B4) : Colors.transparent, width: 1.4),
+          ),
           child: IntrinsicHeight(
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               // A coloured edge only on rows that need something.
@@ -801,6 +878,17 @@ class _StockScreenState extends State<StockScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
                   child: Row(children: [
+                    // Picking several: a tick where the photo was.
+                    if (_picked.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: AnimatedScale(
+                          scale: picked ? 1 : .85,
+                          duration: Motion.of(context, Motion.fast),
+                          child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                              size: 24, color: picked ? _primary : const Color(0xFFB8C4C0)),
+                        ),
+                      ),
                     // The photo when there is one (v0.46.1), else the pack icon.
                     ProductThumb(
                       url: p['photo_url'] as String?,
@@ -844,6 +932,10 @@ class _StockScreenState extends State<StockScreen> {
                         const SizedBox(height: 4),
                         Text(mainPrice(p), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis,
                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: p['needs_price'] == true ? const Color(0xFF7A4A12) : _muted)),
+                        if (_canOrder && _picked.isEmpty && (wants || inBasket)) ...[
+                          const SizedBox(height: 8),
+                          _orderPill(p, inBasket),
+                        ],
                       ]),
                     ),
                   ]),
@@ -853,6 +945,140 @@ class _StockScreenState extends State<StockScreen> {
           ),
         ),
       ),
+    );
+    if (!_canOrder || _picked.isNotEmpty) return card;
+    // Swipe right: into the basket, and the row springs back.
+    return Dismissible(
+      key: ValueKey('basket-$id'),
+      direction: DismissDirection.startToEnd,
+      dismissThresholds: const {DismissDirection.startToEnd: .28},
+      confirmDismiss: (_) async {
+        inBasket ? await _fromBasket(p) : await _toBasket([p]);
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        decoration: BoxDecoration(color: inBasket ? const Color(0xFFFBEDEA) : const Color(0xFFE3F4EC), borderRadius: BorderRadius.circular(18)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(inBasket ? Icons.remove_shopping_cart_outlined : Icons.add_shopping_cart_rounded, color: inBasket ? const Color(0xFFB4503F) : _primary, size: 20),
+          const SizedBox(width: 8),
+          Text(inBasket ? tr('Toa kikapuni') : tr('Weka kikapuni'),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: inBasket ? const Color(0xFFB4503F) : _primary)),
+        ]),
+      ),
+      child: card,
+    );
+  }
+
+  /// "Agiza" on what's out or low; "✓ Kikapuni" once it's in (tap to take out).
+  Widget _orderPill(Map<String, dynamic> p, bool inBasket) => Pressable(
+        onTap: () => inBasket ? _fromBasket(p) : _toBasket([p]),
+        child: AnimatedContainer(
+          duration: Motion.of(context, Motion.fast),
+          curve: Motion.curve,
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: inBasket ? const Color(0xFFE3F4EC) : Colors.white,
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: inBasket ? const Color(0xFFBFE3D2) : _line),
+          ),
+          child: AnimatedSwitcher(
+            duration: Motion.of(context, Motion.fast),
+            transitionBuilder: (c, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: .9, end: 1.0).animate(a), child: c)),
+            child: Row(key: ValueKey(inBasket), mainAxisSize: MainAxisSize.min, children: [
+              Icon(inBasket ? Icons.check_rounded : Icons.add_shopping_cart_rounded, size: 14, color: _primary),
+              const SizedBox(width: 4),
+              Text(inBasket ? tr('Kikapuni') : tr('Agiza'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _primary)),
+            ]),
+          ),
+        ),
+      );
+
+  /// Bottom: while picking, "n zimechaguliwa · Weka kikapuni"; otherwise the basket, when it has something.
+  Widget _basketBar() {
+    return ValueListenableBuilder<int>(
+      valueListenable: OrderBasket.count,
+      builder: (context, n, _) {
+        final picking = _picked.isNotEmpty;
+        final show = picking || n > 0;
+        final rows = [for (final p in _all) if (_picked.contains(asInt(p['id']))) p];
+        return AnimatedSize(
+          duration: Motion.of(context, Motion.base),
+          curve: Motion.curve,
+          alignment: Alignment.bottomCenter,
+          child: !show
+              ? const SizedBox(width: double.infinity)
+              : SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                    child: AnimatedSwitcher(
+                      duration: Motion.of(context, Motion.base),
+                      switchInCurve: Motion.curve,
+                      transitionBuilder: (c, a) => FadeTransition(
+                        opacity: a,
+                        child: SlideTransition(position: Tween(begin: const Offset(0, .35), end: Offset.zero).animate(a), child: c),
+                      ),
+                      child: picking
+                          ? Container(
+                              key: const ValueKey('pick'),
+                              height: 56,
+                              padding: const EdgeInsets.only(left: 6, right: 6),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(99),
+                                  boxShadow: [BoxShadow(color: const Color(0xFF0E3B31).withValues(alpha: .10), blurRadius: 18, offset: const Offset(0, 6))]),
+                              child: Row(children: [
+                                IconButton(
+                                  tooltip: tr('Acha kuchagua'),
+                                  onPressed: () => setState(_picked.clear),
+                                  icon: const Icon(Icons.close_rounded, color: _muted),
+                                ),
+                                Expanded(
+                                  child: Text(tr('Zimechaguliwa :n', {'n': _picked.length}),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, color: _ink)),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: () => _toBasket(rows),
+                                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2F8A6C), shape: const StadiumBorder(), minimumSize: const Size(0, 44)),
+                                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                                  label: Text(tr('Weka kikapuni')),
+                                ),
+                              ]),
+                            )
+                          : Pressable(
+                              key: const ValueKey('basket'),
+                              onTap: _openBasket,
+                              child: Container(
+                                height: 56,
+                                padding: const EdgeInsets.only(left: 8, right: 16),
+                                decoration: BoxDecoration(color: const Color(0xFF0E3B31), borderRadius: BorderRadius.circular(99),
+                                    boxShadow: [BoxShadow(color: const Color(0xFF0E3B31).withValues(alpha: .22), blurRadius: 18, offset: const Offset(0, 6))]),
+                                child: Row(children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: .12), shape: BoxShape.circle),
+                                    child: const Icon(Icons.shopping_basket_outlined, color: Color(0xFF3DDC97), size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(tr('Kikapu cha kuagiza'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                                      Text(tr('bidhaa :n', {'n': n}), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                    ]),
+                                  ),
+                                  Text(tr('Fungua Agiza'), style: const TextStyle(color: Color(0xFF3DDC97), fontWeight: FontWeight.w800, fontSize: 13)),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.arrow_forward_rounded, color: Color(0xFF3DDC97), size: 18),
+                                ]),
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+        );
+      },
     );
   }
 }

@@ -4,10 +4,11 @@ import 'package:flutter/services.dart';
 import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
+import '../../core/form_style.dart';
 import '../../core/format.dart';
+import '../../core/smooth.dart';
 import '../../core/session.dart';
 import '../../core/i18n.dart';
-import '../../core/phone_field.dart';
 
 /// Personal details of staff, built to protect them as much as the shop:
 /// optional, owner-only, encrypted on the server, NIDA masked (seeing it needs
@@ -308,15 +309,55 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
     }
   }
 
-  Widget _field(String key, String label, {TextInputType? type, String? hint, int lines = 1}) => type == TextInputType.phone
-      ? Padding(padding: const EdgeInsets.only(bottom: 12), child: PhoneField(controller: _fields[key]!, label: label))
-      : Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: TextField(
-          controller: _fields[key],
-          keyboardType: type,
-          maxLines: lines,
-          decoration: InputDecoration(labelText: label, hintText: hint),
+  /// v0.48.3: labels above, soft boxes, grouped in cards (the Sajili mteja look).
+  Widget _field(String key, String label, {TextInputType? type, String? hint, int lines = 1}) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          formLabel(label),
+          type == TextInputType.phone
+              ? formPhone(_fields[key]!, onCard: true)
+              : TextField(
+                  controller: _fields[key],
+                  keyboardType: type,
+                  maxLines: lines,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: formBox(hint, onCard: true),
+                ),
+        ],
+      );
+
+  Widget _tick(bool value, String title, String? sub, ValueChanged<bool> onChanged) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Material(
+          color: value ? const Color(0xFFEFF8F3) : const Color(0xFFF6F9F8),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onChanged(!value),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: value ? brandGreen : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: value ? brandGreen : const Color(0xFFB7C6C0), width: 1.6),
+                  ),
+                  child: value ? const Icon(Icons.check_rounded, size: 17, color: Colors.white) : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                    if (sub != null) Text(sub, style: const TextStyle(fontSize: 12, color: mutedText)),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
         ),
       );
 
@@ -324,70 +365,92 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
   Widget build(BuildContext context) {
     final masked = widget.current['nida_masked'] as String?;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Taarifa za :a', {'a': widget.current['name']})), backgroundColor: pageBackground),
+      backgroundColor: pageBackground,
+      appBar: AppBar(title: Text(tr('Taarifa za :a', {'a': widget.current['name']}), style: const TextStyle(fontWeight: FontWeight.w800)), backgroundColor: pageBackground),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+          child: FilledButton(
+            onPressed: _saving ? null : _save,
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+            child: _saving
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
+                : const T('Hifadhi'),
+          ),
+        ),
+      ),
       body: ListView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          const T('Zote ni za hiari. Zinahifadhiwa kwa usimbaji fiche, na wewe pekee ndiye unaziona. Mfanyakazi anaweza kuona taarifa zake mwenyewe.',
-              style: TextStyle(color: mutedText, fontSize: 13)),
-          const SizedBox(height: 16),
-          _field('phone', tr('Simu'), type: TextInputType.phone, hint: tr('07xx xxx xxx')),
-          const T('Mtu wa kuwasiliana naye kwa dharura', style: TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          _field('emergency_name', tr('Jina')),
-          _field('emergency_relation', tr('Uhusiano'), hint: tr('mf. Mama, Kaka, Mume')),
-          _field('emergency_phone', tr('Simu yake'), type: TextInputType.phone),
-          _field('residence_area', tr('Makazi: mtaa / kata'), hint: tr('mf. Sinza, Kinondoni (si anwani kamili)')),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const T('Alianza kazi'),
-            subtitle: Text(_started == null ? tr('Chagua tarehe') : swahiliDate(_started!)),
-            trailing: const Icon(Icons.event_outlined),
-            onTap: () async {
-              final d = await showDatePicker(
-                context: context,
-                initialEntryMode: DatePickerEntryMode.calendarOnly,
-                initialDate: _started ?? DateTime.now(),
-                firstDate: DateTime(2000),
-                lastDate: DateTime.now(),
-              );
-              if (d != null) setState(() => _started = d);
-            },
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: staggered([
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFE9F3EE), borderRadius: BorderRadius.circular(16)),
+            child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.lock_outline_rounded, size: 18, color: brandGreen),
+              SizedBox(width: 8),
+              Expanded(
+                child: T('Zote ni za hiari. Zinahifadhiwa kwa usimbaji fiche, na wewe pekee ndiye unaziona. Mfanyakazi anaweza kuona taarifa zake mwenyewe.',
+                    style: TextStyle(color: Color(0xFF2E5A4C), fontSize: 12.5, height: 1.4)),
+              ),
+            ]),
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _nida,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(20)],
-            decoration: InputDecoration(
-              labelText: masked == null ? tr('NIDA (tarakimu 20)') : tr('NIDA mpya (acha wazi kubaki na :masked)', {'masked': masked}),
-              counterText: '',
+          formSection(icon: Icons.person_outline_rounded, title: tr('Mawasiliano'), children: [
+            _field('phone', tr('Simu yake'), type: TextInputType.phone),
+            _field('residence_area', tr('Makazi: mtaa / kata'), hint: tr('mf. Sinza, Kinondoni (si anwani kamili)')),
+            formLabel(tr('Alianza kazi')),
+            Material(
+              color: const Color(0xFFF6F9F8),
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: context,
+                    initialEntryMode: DatePickerEntryMode.calendarOnly,
+                    initialDate: _started ?? DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                  );
+                  if (d != null) setState(() => _started = d);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE3EBE7))),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(_started == null ? tr('Chagua tarehe') : swahiliDate(_started!),
+                          style: TextStyle(fontSize: 15, color: _started == null ? mutedText : inkColor)),
+                    ),
+                    const Icon(Icons.event_outlined, color: brandGreen, size: 20),
+                  ]),
+                ),
+              ),
             ),
-          ),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _verified,
-            onChanged: (v) => setState(() => _verified = v ?? false),
-            title: const T('Nimeona kitambulisho chake na kulinganisha'),
-          ),
-          _field('notes', tr('Maelezo (wewe tu unayaona)'), lines: 3),
+          ]),
+          formSection(icon: Icons.emergency_outlined, title: tr('Mtu wa dharura'), note: tr('Wa kupigiwa ikitokea jambo kazini.'), children: [
+            _field('emergency_name', tr('Jina')),
+            _field('emergency_relation', tr('Uhusiano'), hint: tr('mf. Mama, Kaka, Mume')),
+            _field('emergency_phone', tr('Simu yake'), type: TextInputType.phone),
+          ]),
+          formSection(icon: Icons.badge_outlined, title: tr('Kitambulisho (NIDA)'), children: [
+            formLabel(masked == null ? tr('NIDA (tarakimu 20)') : tr('NIDA mpya (acha wazi kubaki na :masked)', {'masked': masked})),
+            TextField(
+              controller: _nida,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(20)],
+              style: const TextStyle(letterSpacing: 1.2),
+              decoration: formBox('19900101-12345-00001-27', counter: '', onCard: true),
+            ),
+            _tick(_verified, tr('Nimeona kitambulisho chake na kulinganisha'), null, (v) => setState(() => _verified = v)),
+          ]),
+          formSection(icon: Icons.sticky_note_2_outlined, title: tr('Maelezo'), note: tr('Wewe tu unayaona.'), children: [
+            _field('notes', tr('Maelezo'), lines: 3),
+          ]),
           if (!_hadConsent)
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _consent,
-              onChanged: (v) => setState(() => _consent = v ?? false),
-              title: const T('Mfanyakazi amekubali taarifa hizi zihifadhiwe'),
-              subtitle: const T('Anaweza kuziona kwenye "Taarifa zangu".'),
-            ),
-          if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-            child: Text(_saving ? tr('Inahifadhi…') : tr('Hifadhi')),
-          ),
-        ],
+            _tick(_consent, tr('Mfanyakazi amekubali taarifa hizi zihifadhiwe'), tr('Anaweza kuziona kwenye "Taarifa zangu".'), (v) => setState(() => _consent = v)),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700))),
+        ]),
       ),
     );
   }

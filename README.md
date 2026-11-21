@@ -631,3 +631,90 @@ Built from canvas boards 10–14.
   - Chips: Wote, Kazini, Wameacha, Ruhusa za muda.
   - 🖨 opens the staff list on A4 (print / PDF, WhatsApp or link). It has no NIDA and no personal details. The code is `shareStaffList` in `share_export.dart`.
 - This package also contains the **v0.47.3** files, for anyone who hadn't installed it.
+
+### v0.48.1: Agiza as a basket, hold to select, Ripoti fix
+- **Ripoti:** the four vitals tiles overflowed by 2 px when the ↑/↓ badge was showing. Each pair is now a row as tall as its taller tile (`IntrinsicHeight`), so the tiles still line up and grow with the text size instead of being cut off.
+- **Agiza works like the till:** the list is the shelf, and the order is a basket you fill.
+  - **Rows:** a product starts with **+ Weka · n** (the suggested amount). Once it's in the basket, that becomes − n +; going to 0 takes it out.
+  - **The ×** is a small pale-red circle. Swipe left still works.
+  - **Empty basket:** two cards at the top. **Anza na pendekezo** puts everything needed (out, running out, asked for, low) in at once. **Chagua mwenyewe** means one by one, with + Weka.
+  - **Hold a row** to select several. Tick boxes appear, with **Chagua zote** at the top. One action for all: **Ondoa n**, **Msambazaji…**, or **Weka kikapuni n**. ⋮ on a supplier card has "Chagua kadhaa" too.
+  - **The basket pill** at the bottom shows the count and total. It opens **Kikapu cha agizo**, by supplier, with steppers, "Chagua msambazaji" for products with none, and Futa vyote. Three ways out: **Hifadhi** (a saved list), **Kununua** (a buying list) and **Tuma** (one WhatsApp order per supplier).
+  - **The basket is kept on the phone** (secure storage, per person), so it's still there after leaving the screen or closing the app.
+  - **Bajeti** now trims the basket: what doesn't fit steps out, and comes back when the budget is removed.
+
+### v0.48.2: sign-in "mix", Msaada with Mwongozo, Uhamisho, sharing deliveries, Agiza fixes
+- **Sign-in** (`auth/pin_screen.dart`). Three looks, each where it fits:
+  - **Glass:** your own phone ("Karibu tena, Hamisi"). Deep green with two soft lights, glassy PIN boxes and keys, and a white pill **Ingia**.
+  - **Calm:** the shared counter phone, on white. People are cards with initials, with "Kwa namba" at the end, and the PIN pad sits in one white card.
+  - **Sheet:** a new phone, or signing in by number. A painted shelf behind the header, then a white sheet. The number field is a soft grey box.
+  - Type is smaller everywhere: titles 20–22 (were 26), keys 23 (were 27), buttons 52 high.
+  - The iPad layout is unchanged.
+- **Msaada** (`support/support_screen.dart`, `support/help_content.dart`):
+  - A dark card asks "Tukusaidie nini leo?", with a search across every question and guide.
+  - **Maswali:** 16 questions in 6 topics, folding open.
+  - **Mwongozo:** 11 step-by-step guides on how to use the app (selling, receiving, ordering, stock-take, credit, expenses, staff, new phones, transfers, customers, sharing). There's also a new **Zaidi → Mwongozo** tile.
+  - **Wasiliana:** in the app, WhatsApp, phone and email, from the server's `contact`.
+  - **Maombi:** your requests.
+  - A request is a chat: your messages are on the right in dark, Saola's on the left in white, grouped by day. You can attach a **screenshot** (picture icon); tap a photo to zoom.
+  - The content is in the app, so it opens without a connection.
+- **Uhamisho wa hisa:**
+  - The shop code is a chip in the top bar: tap to copy, ↗ to share on WhatsApp.
+  - Linked shops are a row of chips (tap one to unlink), with **+ Unganisha** at the end.
+  - Tabs: **Zinanisubiri** (receive, approve, link requests) and **Historia** (cards with a status pill).
+- **Uhamisho mpya:**
+  - Shops are cards, not a dropdown, which fixes the overflow with long names.
+  - Products have − n + (tap the number to type it) and a pale-red ×.
+  - A dark send bar stays at the bottom.
+- **Mizigo:** a share button (PDF / Excel, WhatsApp or link) for the list as filtered. One delivery has ↗ for its receiving note (print / PDF, WhatsApp, link).
+- **Photo in Pokea:** the product's photo square sits on the delivery line; tap it to take or change the photo. A brand-new product gets its photo once the delivery has created it.
+- **Agiza fixes:**
+  - "Chagua mwenyewe" now works: the cards step aside, with a hint.
+  - Tap the number in any stepper to type it.
+  - The basket has a pale-red × on each product, and swipe to take one out.
+  - Hifadhi kwa baadaye and Orodha ya kununua sit side by side, with a full-width **Tuma kwa WhatsApp** under them ("Sav" was cut off).
+- **Undo bars** ("Imeondolewa · Rudisha") close by themselves after 4 seconds (`showUndoSnack` in `smooth.dart`). Since Flutter 3.29, a snack bar with a button stays until tapped.
+- `ApiClient.upload(fields:)`; `Product.photoUrl`.
+
+## v0.48.3: smoother sign-in, staff redesign, ordering from Hisa, Saola console
+- **Sign-in:**
+  - The phone field is a frosted glass box, with a ✓ that pops in once the number is valid.
+  - **Endelea** is a soft pill: pale mint until the number is ready, then #2F8A6C.
+  - The sheet is mint-white and joins the header smoothly, with smaller type.
+  - **"Si wewe? Ingia hapa kwa namba"** is a clear outlined button with an arrow, so it reads as something to tap.
+- **Agiza:**
+  - In the basket, the line cost sits on the info line, so the stepper and × line up.
+  - **Chagua mwenyewe** opens *Zote* with the search box focused.
+- **Order from Hisa** (`stock/stock_screen.dart`, `core/order_basket.dart`):
+  - Rows that are out or low carry **Agiza**, which turns into **✓ Kikapuni**.
+  - Swipe a row right to put it in (or take it out), or hold to select several, then **Weka kikapuni**.
+  - A dark basket pill, **Kikapu cha kuagiza · bidhaa n · Fungua Agiza**, slides up at the bottom.
+  - It is the same basket Agiza uses (`agiza.cart.<userId>`, now read and written through `OrderBasket`). When Agiza opens, a product put in from Hisa picks up its supplier and last price.
+  - Needs `prepare_orders`.
+- **Staff** (`staff/staff_permissions_screen.dart`, `core/form_style.dart`):
+  - **Ongeza mfanyakazi** is a full sheet like Sajili mteja: name, phone, role cards, and a PIN with **Tengeneza**.
+  - List cards show the role and each area as "Mauzo 3/4", plus timed grants in amber.
+  - The detail page has a dark header with quick actions (Piga, PIN mpya, Namba), role cards, foldable permission areas, and private details folded away.
+  - The profile form is in sections, with a sticky Hifadhi.
+- **Msaada:**
+  - Guide tiles are all the same height.
+  - Tabs fade and slide, and items and guide steps arrive one after another.
+  - **Omba msaada:** pick what it's about (8 categories) and how urgent it is (**Dharura / Muhimu / Kawaida**), then the subject and details. The send button turns red-brown for urgent.
+  - Requests show a priority pill, and the FAQ explains the order.
+- **Saola console** (`features/saola/`, `home/widgets/saola_home.dart`): everything now opens in the app, not the browser.
+  - **Home:**
+    - A dark card shows the shops plus a live "today" row (shops, people, sales).
+    - **Afya ya mfumo** shows requests and errors today, the 7-day error rate and failed jobs.
+    - A 14-day chart toggles Mauzo / Matumizi; tap a bar to read that day.
+    - Four task tiles: Msaada (urgent count first), Maduka mapya, Ya kufuatilia, Malipo.
+    - The calls to make this week.
+    - The catalogue and the map are still on the web and are labelled that way.
+  - **Maduka:** search, plus filter chips with counts (Ya kufuatilia, Hai, Inaanza, Inapoa, Imelala, Malipo, Imesimamishwa).
+  - **One shop:**
+    - A dark header with the state, payment line and quick actions (Piga mmiliki, PIN mpya, Simamisha/Rudisha, Malipo).
+    - Stats, a 14-day chart, the setup checklist, people, devices (approve the owner's phone with his 6-digit code), and payments (record with months, amount and reference; void the latest).
+    - Its support tickets.
+  - **Maombi ya maduka:** licence (copy), call the requester, then **Kubali na fungua** or **Kataa** with a reason.
+  - **Msaada:** Inasubiri / Wamejibiwa / Imefungwa, urgent first. Opening one goes to the ordinary chat, which shows the shop's name.
+  - Counts only, as on the web: a shop's money, customers and stock never show.
+- Checked with the Dart analyzer only (no device build here).

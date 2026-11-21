@@ -162,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (_error != null) _errorBox(),
                     ?_billingBanner(),
                     if (_saola)
-                      SaolaHome(api: _api, refreshTick: _tick, onSwitchShop: () => _open(MyShopsScreen(session: widget.session)))
+                      SaolaHome(session: widget.session, refreshTick: _tick, onSwitchShop: () => _open(MyShopsScreen(session: widget.session)))
                     else ...[
                     if (_shift == null) _noShiftBanner(),
                     if (_shopView)
@@ -933,6 +933,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_can(Perm.manageDevices))
         _MoreItem('shop', Icons.phonelink_lock, tr('Vifaa'), tr('Simu na kompyuta zinazoruhusiwa'), () => _open(DevicesScreen(session: widget.session))),
       _MoreItem('shop', Icons.support_agent_rounded, tr('Msaada'), tr('Uliza Saola, ona majibu'), () => _open(SupportScreen(session: widget.session))),
+      // v0.48.2: how to use the app, step by step.
+      _MoreItem('shop', Icons.menu_book_rounded, tr('Mwongozo'), tr('Jinsi ya kutumia app'), () => _open(SupportScreen(session: widget.session, initialTab: 1))),
     ];
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => _MoreScreen(items: items, onAccount: _account),

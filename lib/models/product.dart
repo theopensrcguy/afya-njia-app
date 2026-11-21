@@ -36,7 +36,11 @@ class Product {
     this.nextExpiry,
     this.suggested = false,
     this.units = const [],
+    this.photoUrl,
   });
+
+  /// The product's photo (v0.46.1), when it has one.
+  final String? photoUrl;
 
   final int id;
   final String name;
@@ -68,6 +72,7 @@ class Product {
         // "== true" instead of a cast: an older server without this field still works.
         suggested: json['suggested'] == true,
         units: _units(json),
+        photoUrl: json['photo_url'] as String?,
       );
 
   /// An older server sends no units: sell by the base unit at the base price.

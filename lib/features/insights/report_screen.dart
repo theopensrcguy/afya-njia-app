@@ -253,14 +253,23 @@ class _ReportScreenState extends State<ReportScreen> {
         const SizedBox(height: 12),
         Text('${v['text'] ?? ''}', style: const TextStyle(fontSize: 16.5, height: 1.45, fontWeight: FontWeight.w600, color: Colors.white)),
         const SizedBox(height: 14),
-        LayoutBuilder(builder: (context, box) {
-          final w = (box.maxWidth - 10) / 2;
-          return Wrap(spacing: 10, runSpacing: 10, children: [
-            for (final x in vitals)
-              Container(
-                width: w,
-                // Every tile the same height, footer line or not (v0.47.3: the pairs didn't line up).
-                height: MediaQuery.textScalerOf(context).scale(92),
+        // Pairs side by side, each pair as tall as its taller tile: they line up
+        // and grow with the text (v0.48.1: a fixed height overflowed by 2 px with the delta badge).
+        for (var i = 0; i < vitals.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: 10),
+          IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(child: _vitalTile(vitals[i])),
+              const SizedBox(width: 10),
+              Expanded(child: i + 1 < vitals.length ? _vitalTile(vitals[i + 1]) : const SizedBox()),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _vitalTile(Map<String, dynamic> x) => Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: Colors.white.withValues(alpha: .07), borderRadius: BorderRadius.circular(16)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -283,12 +292,7 @@ class _ReportScreenState extends State<ReportScreen> {
                   else if (x['key'] == 'cover')
                     T('kwa mwendo huu', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: Color(0xFFB7D3C9))),
                 ]),
-              ),
-          ]);
-        }),
-      ]),
-    );
-  }
+              );
 
   // ------------------------------------------------------------ actions
 

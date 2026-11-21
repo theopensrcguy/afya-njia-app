@@ -88,12 +88,13 @@ class ApiClient {
   /// a photo on a slow connection takes much more than 15 seconds.
   ///
   /// Bytes, not a file path: a browser has no file system path (web build).
-  Future<dynamic> upload(String path, String field, Uint8List bytes, String filename) {
+  Future<dynamic> upload(String path, String field, Uint8List bytes, String filename, {Map<String, String> fields = const {}}) {
     final uri = Uri.parse('$apiBaseUrl/$path');
     return _send(() async {
       final req = http.MultipartRequest('POST', uri)
         // No JSON Content-Type here: MultipartRequest sets its own.
         ..headers.addAll({'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'})
+        ..fields.addAll(fields)
         ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
       return http.Response.fromStream(await _http.send(req));
     }, timeout: const Duration(seconds: 60));

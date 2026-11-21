@@ -9,6 +9,7 @@ import '../../core/format.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../core/share_export.dart';
 import '../../core/units.dart';
 import '../../core/i18n.dart';
 import '../../core/range_picker.dart';
@@ -235,6 +236,36 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         backgroundColor: _bg,
         surfaceTintColor: Colors.transparent,
         title: Text(_canConfirm ? tr('Mizigo') : tr('Mizigo yangu'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        actions: [
+          // Share the deliveries as the list stands (v0.48.2): PDF or Excel, WhatsApp or a link.
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Material(
+              color: Colors.white,
+              shape: const CircleBorder(),
+              child: IconButton(
+                tooltip: tr('Shiriki mizigo'),
+                icon: const Icon(Icons.ios_share_rounded, color: brandGreen, size: 20),
+                onPressed: () {
+                  final q = _query(1)..remove('page');
+                  shareDeliveries(context,
+                      api: _api,
+                      from: q['from'],
+                      to: q['to'],
+                      supplier: q['supplier'],
+                      status: q['status'],
+                      q: q['q'] ?? '',
+                      describe: [
+                        _periodLabel,
+                        if (_supplier.isNotEmpty) _supplierLabel,
+                        if (_status == 'received') tr('Zilizopokelewa') else if (_status == 'rejected') tr('Zilizokataliwa'),
+                        if (_q.text.trim().isNotEmpty) '“${_q.text.trim()}”',
+                      ]);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -687,7 +718,23 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
     final total = asInt(_p['total_cost']);
 
     return Scaffold(
-      appBar: AppBar(title: const T('Mzigo'), backgroundColor: pageBackground),
+      appBar: AppBar(
+        title: const T('Mzigo'),
+        backgroundColor: pageBackground,
+        actions: [
+          // The receiving note on A4: print / PDF, WhatsApp, or a link (v0.48.2).
+          PopupMenuButton<String>(
+            tooltip: tr('Chapisha au shiriki'),
+            icon: const Icon(Icons.ios_share_rounded),
+            onSelected: (how) => shareDelivery(context, api: widget.session.api, purchaseId: asInt(_p['id']), how: how),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'open', child: ListTile(dense: true, leading: const Icon(Icons.print_outlined), title: T('Chapisha / PDF'))),
+              PopupMenuItem(value: 'wa', child: ListTile(dense: true, leading: const Icon(Icons.chat_outlined), title: T('Tuma kwa WhatsApp'))),
+              PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: const Icon(Icons.link_rounded), title: T('Nakili kiungo'))),
+            ],
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         children: [

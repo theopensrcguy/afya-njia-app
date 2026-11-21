@@ -258,6 +258,87 @@ class _StockSheetState extends State<_StockSheet> {
   }
 }
 
+// ------------------------------------------------------------ deliveries (v0.48.2)
+
+/// Mizigo as the list is filtered now (period, supplier, status, search), or all of it, as PDF or Excel.
+Future<void> shareDeliveries(BuildContext context,
+    {required ApiClient api, String? from, String? to, String? supplier, String? status, String q = '', List<String> describe = const []}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: const Color(0xFFF5F8F7),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+    builder: (_) => _DeliveriesSheet(api: api, query: {'from': ?from, 'to': ?to, 'supplier': ?supplier, 'status': ?status, if (q.trim().isNotEmpty) 'q': q.trim()}, describe: describe),
+  );
+}
+
+class _DeliveriesSheet extends StatefulWidget {
+  const _DeliveriesSheet({required this.api, required this.query, required this.describe});
+
+  final ApiClient api;
+  final Map<String, String> query;
+  final List<String> describe;
+
+  @override
+  State<_DeliveriesSheet> createState() => _DeliveriesSheetState();
+}
+
+class _DeliveriesSheetState extends State<_DeliveriesSheet> {
+  String _format = 'pdf';
+  bool _all = false;
+  bool _busy = false;
+
+  Future<void> _go(String how) async {
+    setState(() => _busy = true);
+    try {
+      final r = await widget.api.get('purchases/export/link', query: {'format': _format, if (!_all) ...widget.query}) as Map<String, dynamic>;
+      if (!mounted) return;
+      await _deliver(context, how, '${r['url']}', tr('Mizigo iliyopokelewa.'));
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetFrame(
+      icon: Icons.local_shipping_outlined,
+      title: tr('Shiriki mizigo'),
+      subtitle: tr('Kwa mhasibu, mshirika au msambazaji'),
+      actions: _actions(_busy, _format, _go),
+      children: [
+        if (widget.query.isNotEmpty) ...[
+          _label(tr('Nini kiingie')),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            _chip(tr('Kama orodha ilivyo sasa'), !_all, () => setState(() => _all = false)),
+            _chip(tr('Mizigo yote'), _all, () => setState(() => _all = true)),
+          ]),
+          if (!_all && widget.describe.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(widget.describe.join(' · '), style: const TextStyle(fontSize: 12.5, color: _muted)),
+            ),
+        ],
+        _formatPicker(_format, (f) => setState(() => _format = f)),
+      ],
+    );
+  }
+}
+
+/// One delivery's receiving note: print it, save it as PDF, or send it.
+Future<void> shareDelivery(BuildContext context, {required ApiClient api, required int purchaseId, required String how}) async {
+  try {
+    final r = await api.get('purchases/$purchaseId/print-link') as Map<String, dynamic>;
+    if (!context.mounted) return;
+    await _deliver(context, how, '${r['url']}', tr('Hati ya kupokea mzigo:'), pop: false);
+  } on ApiException catch (e) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+  }
+}
+
 // ------------------------------------------------------------ receipt
 
 /// Any past sale's receipt: print it, save it as PDF, or send it.

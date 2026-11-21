@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -455,4 +457,18 @@ class CountUp extends StatelessWidget {
 List<Widget> staggered(List<Widget> children) {
   var i = 0;
   return [for (final c in children) c is SizedBox ? c : Appear(index: i++, child: c)];
+}
+
+
+/// A snack bar with an action ("Rudisha") that still goes away by itself.
+/// Since Flutter 3.29 a snack bar with an action stays until it's tapped or
+/// swiped, so an undo bar would follow you to the next screen (v0.48.2).
+void showUndoSnack(ScaffoldMessengerState messenger, SnackBar bar, {Duration after = const Duration(seconds: 4)}) {
+  messenger.hideCurrentSnackBar();
+  final c = messenger.showSnackBar(bar);
+  var closed = false;
+  c.closed.then((_) => closed = true);
+  Timer(after, () {
+    if (!closed) messenger.hideCurrentSnackBar();
+  });
 }
