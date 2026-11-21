@@ -35,9 +35,12 @@ import '../../core/smooth.dart';
 import '../insights/expenses_insight_screen.dart';
 import '../insights/finance_screen.dart';
 import '../insights/forecast_screen.dart';
+import '../insights/report_screen.dart';
+import '../insurance/claims_screen.dart';
 import '../insights/insight_parts.dart' show kDeep, kInk, kMint;
 import 'widgets/owner_home.dart';
 import 'widgets/recent_sales_card.dart';
+import 'widgets/saola_home.dart';
 import 'widgets/stock_insight_card.dart';
 import '../../core/i18n.dart';
 
@@ -76,7 +79,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _can(String permission) => widget.session.user!.can(permission);
 
   /// The shop-wide view (today's total, goal ring, chart, alerts) or one's own.
-  bool get _shopView => _can(Perm.viewShopSales);
+  bool get _shopView => _can(Perm.viewShopSales) && !_saola;
+
+  /// Signed in to Saola's own workspace (v0.46.1): not a shop.
+  bool get _saola => widget.session.user!.isSaolaWorkspace;
 
   @override
   void initState() {
@@ -96,6 +102,11 @@ class _HomeScreenState extends State<HomeScreen> {
       // Both requests at once: the screen waits for the slower one, not for both in a row.
       // Permissions may have changed since last time (granted, revoked, expired).
       await widget.session.refreshMe();
+      // Saola's workspace is not a shop: no sales or shift to load (SaolaHome loads its own).
+      if (_saola) {
+        if (mounted) setState(() => _tick++);
+        return;
+      }
       final results = await Future.wait([
         _shopView ? _api.get('dashboard/today') : _api.get('sales'),
         _api.get('shifts/current'),
@@ -150,6 +161,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 14),
                     if (_error != null) _errorBox(),
                     ?_billingBanner(),
+                    if (_saola)
+                      SaolaHome(api: _api, refreshTick: _tick, onSwitchShop: () => _open(MyShopsScreen(session: widget.session)))
+                    else ...[
                     if (_shift == null) _noShiftBanner(),
                     if (_shopView)
                       _ownerHome()
@@ -171,11 +185,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     // The owner's home ends with top sellers and stock (canvas);
                     // every sale is one tap away under Mauzo.
                     if (!_shopView) ...[const SizedBox(height: 14), _recentSales()],
+                    ],
                   ],
                 ),
               ),
       ),
-      bottomNavigationBar: _bottomBar(),
+      bottomNavigationBar: _saola ? null : _bottomBar(),
     );
   }
 
@@ -250,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ]),
           ),
         ),
-        if (_can(Perm.viewStock)) ...[
+        if (_can(Perm.viewStock) && !_saola) ...[
           _round(Icons.search_rounded, tr('Tafuta bidhaa'), () => _open(StockScreen(session: widget.session))),
           const SizedBox(width: 8),
         ],
@@ -578,9 +593,9 @@ class _HomeScreenState extends State<HomeScreen> {
       title: tr('Lengo la mauzo kwa siku'),
       message: tr('Kiasi unachotaka kuuza kila siku. Pete itaonyesha umefika wapi.'),
       label: tr('Kiasi (TSh)'),
-      hint: tr('mfano 250000'),
+      hint: tr('mfano 250,000'),
       initial: current?.toString() ?? '',
-      digitsOnly: true,
+      money: true,
       clearLabel: current != null ? tr('Ondoa lengo') : null,
     );
     if (answer == null || !mounted) return; // cancelled
@@ -608,8 +623,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final reorder = ((t['low_stock'] as List?) ?? const []).length;
 
     final tiles = <Widget>[
-      if (_can(Perm.sell))
-        _tile(Icons.add_rounded, tr('Uza sasa'), () => _open(CounterScreen(session: widget.session)), primary: true),
       // Deliveries come in every week: stock in is as important as stock out.
       if (_can(Perm.receive))
         _tile(Icons.local_shipping_outlined, tr('Pokea mzigo'), () => _open(ReceiveScreen(session: widget.session)),
@@ -634,8 +647,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     // Two per row; GridView inside a ListView would need shrinkWrap, rows are simpler.
+    // Uza first and full width (v0.46.1): selling is what the helper is here for.
     return Column(
       children: [
+        if (_can(Perm.sell)) ...[
+          UzaButton(label: tr('Uza sasa'), height: 84, onTap: () => _open(CounterScreen(session: widget.session))),
+          const SizedBox(height: 14),
+        ],
         for (var i = 0; i < tiles.length; i += 2)
           Padding(
             padding: EdgeInsets.only(top: i == 0 ? 0 : 12),
@@ -868,6 +886,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_can(Perm.sellOnCredit) || _can(Perm.manageCredit))
         _MoreItem('day', Icons.account_balance_wallet_outlined, tr('Madeni'), tr('Wanaodaiwa, malipo, kuidhinisha'),
             () => _open(MadeniScreen(session: widget.session))),
+      if (_shopView)
+        _MoreItem('day', Icons.health_and_safety_outlined, tr('Madai ya bima'), tr('Bima zinadaiwa kiasi gani, taarifa za kudai'),
+            () => _open(ClaimsScreen(session: widget.session))),
       if (_can(Perm.recordExpenses))
         _MoreItem('day', Icons.receipt_long_outlined, tr('Matumizi'), tr('Kodi, umeme, mishahara… na yanayokuja'),
             () => _open(ExpensesInsightScreen(session: widget.session))),
@@ -894,6 +915,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_can(Perm.receive))
         _MoreItem('stock', Icons.table_chart_outlined, tr('Ingiza kwa wingi'), wide ? tr('Hisa ya mwanzo, mizigo mikubwa') : tr('Bora kwenye kompyuta'),
             () => _open(BulkEntryScreen(session: widget.session))),
+      if (_can(Perm.viewShopSales))
+        _MoreItem('day', Icons.query_stats_rounded, tr('Ripoti'), tr('Mambo ya kujua na ya kufanya: faida, 80/20, hisa, madeni'),
+            () => _open(ReportScreen(session: widget.session))),
       if (_can(Perm.viewShopSales))
         _MoreItem('stock', Icons.bar_chart_rounded, tr('Fedha'), tr('Faida, matumizi, pesa iliyoingia na kutoka'),
             () => _open(FinanceScreen(session: widget.session))),
@@ -930,8 +954,8 @@ class _MoreItem {
 /// Zaidi: the rest of the app, in three groups of small tiles inside cards
 /// (4 a row on a phone), with a search that narrows as you type. Personal
 /// things (PIN, language, sign out) are under the avatar on home, and a
-/// last card says so. Tapping a tile closes this page and opens the screen
-/// from home, so Back returns home.
+/// last card says so. A tile opens its screen on top of this page, so Back
+/// returns to Zaidi.
 class _MoreScreen extends StatefulWidget {
   const _MoreScreen({required this.items, required this.onAccount});
 
@@ -951,9 +975,9 @@ class _MoreScreenState extends State<_MoreScreen> {
     ('shop', 'Duka na watu', Icons.groups_outlined, Color(0xFF6E5A9E)),
   ];
 
+  /// Opens on top of Zaidi, so Back comes back here (not to home).
   void _go(_MoreItem item) {
     tick();
-    Navigator.of(context).pop();
     item.onTap();
   }
 

@@ -1,6 +1,6 @@
 /// A person who can sign in on the counter phone: the owner or a helper.
 class Staff {
-  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false, this.locale, this.otherShops = 0, this.subscription, this.canPayOnline = false, this.shopName});
+  const Staff({required this.id, required this.name, required this.role, this.permissions = const [], this.mustChangePin = false, this.locale, this.otherShops = 0, this.subscription, this.canPayOnline = false, this.shopName, this.isSaolaWorkspace = false, this.isSaolaAdmin = false});
 
   final int id;
   final String name;
@@ -30,6 +30,13 @@ class Staff {
   /// The shop this sign-in is for (the home header shows it).
   final String? shopName;
 
+  /// Signed in to Saola's own workspace: not a shop, so home shows the Saola
+  /// summary instead of sales (v0.46.1).
+  final bool isSaolaWorkspace;
+
+  /// A Saola admin (in any place).
+  final bool isSaolaAdmin;
+
   /// The shop's payment ended (after the grace days): can see, can't record.
   bool get readOnly => subscription?['read_only'] == true;
 
@@ -49,8 +56,10 @@ class Staff {
         subscription: (json['subscription'] as Map?)?.cast<String, dynamic>(),
         canPayOnline: json['can_pay_online'] == true,
         shopName: json['shop_name'] as String?,
+        isSaolaWorkspace: json['is_saola_workspace'] == true,
+        isSaolaAdmin: json['is_saola_admin'] == true,
       );
 
   Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin, 'locale': locale, 'other_shops': otherShops, 'subscription': subscription, 'can_pay_online': canPayOnline, 'shop_name': shopName};
+      {'id': id, 'name': name, 'role': role, 'permissions': permissions, 'must_change_pin': mustChangePin, 'locale': locale, 'other_shops': otherShops, 'subscription': subscription, 'can_pay_online': canPayOnline, 'shop_name': shopName, 'is_saola_workspace': isSaolaWorkspace, 'is_saola_admin': isSaolaAdmin};
 }

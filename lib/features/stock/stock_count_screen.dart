@@ -8,6 +8,8 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
+import '../../core/product_photo.dart';
+import 'count_plan_sheet.dart';
 import '../../core/loader.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
@@ -74,18 +76,12 @@ class _StockCountScreenState extends State<StockCountScreen> {
     }
   }
 
+  /// Which count (full, an aisle, the A items, expiring, a spot check), then go (v0.46.1).
   Future<void> _start() async {
-    final note = await askText(
-      context,
-      title: tr('Anza hesabu ya hisa'),
-      message: tr('Pita rafu moja moja: gusa bidhaa (au skani barcode yake), andika ulichohesabu rafuni na stoo. Mauzo yanaendelea. Unaweza kuhesabu sehemu tu; zisizohesabiwa hazibadiliki. Tofauti zinabadilisha hisa baada ya idhini.'),
-      label: tr('Maelezo (si lazima)'),
-      hint: tr('mf. Hesabu ya mwisho wa mwezi'),
-      confirm: tr('Anza'),
-    );
-    if (note == null || !mounted) return;
+    final choice = await pickCountPlan(context, _api);
+    if (choice == null || !mounted) return;
     try {
-      await _api.post('stock-counts', {'note': note.isEmpty ? null : note});
+      await _api.post('stock-counts', choice);
       await _load();
     } on ApiException catch (e) {
       _snack(e.message);
@@ -310,7 +306,8 @@ class _StockCountScreenState extends State<StockCountScreen> {
           Text('${(pct * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w800, color: infoBlue, fontSize: 18)),
         ]),
         const SizedBox(height: 2),
-        Text(tr('imeanzishwa na :who', {'who': _count!['started_by'] ?? '—'}), style: const TextStyle(color: mutedText, fontSize: 12)),
+        Text([if (_count!['scope_label'] != null && '${_count!['scope_label']}'.isNotEmpty) '${_count!['scope_label']}', tr('imeanzishwa na :who', {'who': _count!['started_by'] ?? '—'})].join(' · '),
+            style: const TextStyle(color: mutedText, fontSize: 12)),
         const SizedBox(height: 10),
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
@@ -352,7 +349,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
     final d = _diff[id];
     return ListTile(
       onTap: _can(Perm.countStock) ? () => _countFrom(p) : null,
-      leading: _PackIcon(form: '${p['form'] ?? ''}', faded: d != null),
+      leading: ProductThumb(url: p['photo_url'] as String?, size: 40, fallback: Center(child: _PackIcon(form: '${p['form'] ?? ''}', faded: d != null))),
       title: Text('${p['name']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
       trailing: _StatusBadge(difference: d),
     );
@@ -364,7 +361,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
       const SizedBox(height: 16),
       T('Hesabu ya hisa', textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
-      T('Linganisha kilichopo rafuni na kilichopo kwenye mfumo. Inaonyesha kilichopotea, kilichoibiwa au kilichoandikwa vibaya. Wengi hufanya mara moja kwa mwezi.',
+      T('Linganisha kilichopo rafuni na kilichopo kwenye mfumo. Inaonyesha kilichopotea, kilichoibiwa au kilichoandikwa vibaya. Huna haja ya kuhesabu kila kitu kwa siku moja: anza na rafu moja, au bidhaa zinazoleta pesa.',
           textAlign: TextAlign.center, style: const TextStyle(color: mutedText)),
       const SizedBox(height: 24),
       if (_can(Perm.countStock))
@@ -418,6 +415,7 @@ class _CountSheet extends StatefulWidget {
 }
 
 class _CountSheetState extends State<_CountSheet> {
+  late String? _photo = widget.product['photo_url'] as String?;
   Map<String, dynamic>? _sheet;
   String? _error;
   bool _byBatch = false;
@@ -543,7 +541,21 @@ class _CountSheetState extends State<_CountSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(children: [
-              _PackIcon(form: '${widget.product['form'] ?? ''}', size: 1.3),
+              // While counting, snap the box too: one pass along the shelf does both (v0.46.1).
+              ProductThumb(
+                url: _photo,
+                size: 56,
+                radius: 16,
+                badge: true,
+                fallback: Container(color: const Color(0xFFEFF4F2), child: Center(child: _PackIcon(form: '${widget.product['form'] ?? ''}', size: 1.3))),
+                onTap: () async {
+                  final r = await editProductPhoto(context, api: widget.api, productId: asInt(widget.product['id']), current: _photo);
+                  if (r != null && mounted) {
+                    setState(() => _photo = r.isEmpty ? null : r);
+                    widget.product['photo_url'] = _photo;
+                  }
+                },
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

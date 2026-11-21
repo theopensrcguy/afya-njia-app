@@ -261,7 +261,19 @@ class Cart extends ChangeNotifier {
   }
 
   /// The server confirmed the sale: start a fresh basket with a NEW id.
+  /// Bima: what the insurer's claim needs (insurer, member_number, patient_name…), v0.46.1.
+  Map<String, String> insurance = {};
+
+  /// Some or all of this sale is paid by an insurer.
+  bool get usesInsurance => payments.any((p) => p.method == 'insurance' && p.amount > 0);
+
+  void setInsurance(Map<String, String> details) {
+    insurance = details;
+    notifyListeners();
+  }
+
   void clear() {
+    insurance = {};
     _lines.clear();
     discount = 0;
     paymentMethod = 'cash';
@@ -290,6 +302,7 @@ class Cart extends ChangeNotifier {
         else
           'payment_method': paymentMethod,
         'discount': discount,
+        if (usesInsurance && insurance.isNotEmpty) 'insurance': insurance,
         // On credit the customer is needed; otherwise they go on the sale only if they agreed to be kept on record.
         if (customer != null && (creditDue > 0 || customer!['consent'] == true)) 'customer_id': customer!['id'],
       };

@@ -9,6 +9,8 @@ import '../../core/ids.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../core/smooth.dart';
+import '../../core/units.dart';
 import '../suppliers/supplier_form.dart';
 import 'new_product.dart';
 import 'receive_line.dart';
@@ -21,9 +23,12 @@ import '../../core/i18n.dart';
 /// counts only after the owner confirms it, because whoever records
 /// deliveries could otherwise add stock that never arrived.
 class ReceiveScreen extends StatefulWidget {
-  const ReceiveScreen({super.key, required this.session});
+  const ReceiveScreen({super.key, required this.session, this.supplierId});
 
   final Session session;
+
+  /// Opened from a supplier's page: that supplier is already chosen.
+  final int? supplierId;
 
   @override
   State<ReceiveScreen> createState() => _ReceiveScreenState();
@@ -31,7 +36,7 @@ class ReceiveScreen extends StatefulWidget {
 
 class _ReceiveScreenState extends State<ReceiveScreen> {
   List<Map<String, dynamic>> _suppliers = [];
-  int? _supplierId;
+  late int? _supplierId = widget.supplierId;
   final _invoice = TextEditingController();
   final _invoiceTotal = TextEditingController();
   final List<ReceiveLine> _lines = [];
@@ -195,7 +200,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         'client_uuid': _deliveryId,
         'supplier_id': _supplierId,
         'invoice_number': _invoice.text.trim().isEmpty ? null : _invoice.text.trim(),
-        'invoice_total': int.tryParse(_invoiceTotal.text.trim()),
+        'invoice_total': moneyValue(_invoiceTotal.text),
         'lines': [for (final l in _lines) l.toJson()],
       }) as Map<String, dynamic>;
 
@@ -257,6 +262,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   // ----------------------------------------------------------------- layout
+  // v0.46 (canvas 13): three numbered steps (who from, the invoice, the
+  // products) and a dark bar at the bottom with the total, whether it
+  // matches the invoice, and the one button.
+
+  static const _tints = [
+    (Color(0xFFE7F6EF), Color(0xFF0E5A44)),
+    (Color(0xFFEAF0FD), Color(0xFF2F5FC4)),
+    (Color(0xFFFDF1E3), Color(0xFF7A4A12)),
+    (Color(0xFFF0ECF7), Color(0xFF5B4790)),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -266,106 +281,245 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         if (!didPop) _confirmLeave();
       },
       child: Scaffold(
-        appBar: AppBar(title: const T('Pokea mzigo'), backgroundColor: pageBackground),
-        body: Column(children: [
-          Expanded(
-            child: ListView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-              children: [
-                _supplierCard(),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Text(tr('Bidhaa :lines', {'lines': _lines.length}), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  if (_lines.isNotEmpty) const T('Gusa kubadilisha', style: TextStyle(fontSize: 12, color: mutedText)),
-                ]),
-                const SizedBox(height: 8),
-                for (var i = 0; i < _lines.length; i++) _lineCard(i),
-                OutlinedButton.icon(
-                  onPressed: _saving ? null : () => _editLine(),
-                  icon: const Icon(Icons.add),
-                  label: const T('Ongeza bidhaa'),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                ),
-                const SizedBox(height: 14),
-                _totalsCard(),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
+        backgroundColor: pageBackground,
+        body: SafeArea(
+          bottom: false,
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+              child: Row(children: [
+                Semantics(
+                  button: true,
+                  label: tr('Rudi'),
+                  excludeSemantics: true,
+                  child: Pressable(
+                    onTap: () => Navigator.of(context).maybePop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(14)),
+                      child: const Icon(Icons.chevron_left_rounded),
+                    ),
                   ),
-              ],
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(_countsNow ? tr('Hisa inaongezeka mara moja.') : tr('Hisa itaongezeka baada ya mzigo kuthibitishwa.'),
-                    style: const TextStyle(fontSize: 12, color: mutedText)),
-                const SizedBox(height: 6),
-                FilledButton(
-                  onPressed: _saving || _lines.isEmpty ? null : _submit,
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-                  child: Text(_saving ? tr('Inatuma…') : (_countsNow ? tr('Hifadhi mzigo') : tr('Tuma uthibitishwe'))),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const T('Pokea mzigo', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -.3)),
+                    Text(_countsNow ? tr('Hisa inaongezeka mara moja.') : tr('Hisa itaongezeka baada ya mzigo kuthibitishwa.'),
+                        style: const TextStyle(fontSize: 12, color: mutedText)),
+                  ]),
                 ),
               ]),
             ),
-          ),
-        ]),
+            Expanded(
+              child: ListView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                children: staggered([
+                  _step('1', tr('KUTOKA KWA NANI'), _supplierRow()),
+                  const SizedBox(height: 12),
+                  _step('2', tr('ANKARA'), _invoiceBox()),
+                  const SizedBox(height: 16),
+                  _linesBox(),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
+                    ),
+                ]),
+              ),
+            ),
+            _bottomBar(),
+          ]),
+        ),
       ),
     );
   }
 
-  Widget _supplierCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: softCard(radius: 22),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const T('Msambazaji', style: TextStyle(color: mutedText)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 6, children: [
-          for (final s in _suppliers)
-            ChoiceChip(
-              label: Text('${s['name']}'),
-              selected: _supplierId == asInt(s['id']),
-              showCheckmark: false,
-              selectedColor: brandGreen,
-              labelStyle: TextStyle(color: _supplierId == asInt(s['id']) ? Colors.white : inkColor, fontWeight: FontWeight.w700),
-              // Tap again to unselect (a delivery without a known supplier is allowed).
-              onSelected: (on) => setState(() => _supplierId = on ? asInt(s['id']) : null),
-            ),
-          ActionChip(label: const T('+ Mpya'), onPressed: _addSupplier),
+  Widget _step(String n, String title, Widget child) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(22)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('$n · $title', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: .6, color: mutedText)),
+          const SizedBox(height: 12),
+          child,
         ]),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _invoice,
-          decoration: InputDecoration(labelText: tr('Namba ya ankara (si lazima)')),
+      );
+
+  /// Suppliers as round-cornered avatars; tap again to clear (allowed).
+  Widget _supplierRow() {
+    Widget avatar(String label, Widget face, bool on, VoidCallback onTap) => Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Semantics(
+            button: true,
+            selected: on,
+            label: label,
+            excludeSemantics: true,
+            child: Pressable(
+              onTap: onTap,
+              child: SizedBox(
+                width: 68,
+                child: Column(children: [
+                  AnimatedContainer(
+                    duration: Motion.of(context, Motion.fast),
+                    width: 54,
+                    height: 54,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(19),
+                      border: Border.all(color: on ? brandGreen : Colors.transparent, width: 2.4),
+                    ),
+                    child: face,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(label, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11.5, height: 1.15, fontWeight: on ? FontWeight.w800 : FontWeight.w600)),
+                ]),
+              ),
+            ),
+          ),
+        );
+    return SizedBox(
+      height: 92,
+      child: ListView(scrollDirection: Axis.horizontal, children: [
+        for (var i = 0; i < _suppliers.length; i++)
+          Builder(builder: (_) {
+            final s = _suppliers[i];
+            final id = asInt(s['id']);
+            final (bg, fg) = _tints[i % _tints.length];
+            final words = '${s['name']}'.trim().split(RegExp(r'\s+'));
+            final initials = words.take(2).map((w) => w.isEmpty ? '' : w[0].toUpperCase()).join();
+            return avatar(
+              '${s['name']}',
+              Container(
+                decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+                child: Center(child: Text(initials, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: fg))),
+              ),
+              _supplierId == id,
+              () {
+                HapticFeedback.selectionClick();
+                setState(() => _supplierId = _supplierId == id ? null : id);
+              },
+            );
+          }),
+        avatar(
+          tr('Mpya'),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF9FB3AB), width: 1.4),
+            ),
+            child: const Icon(Icons.add_rounded, color: mutedText),
+          ),
+          false,
+          _addSupplier,
         ),
-        const SizedBox(height: 12),
-        Row(children: [
-          const Expanded(child: T('Picha ya ankara (si lazima)', style: TextStyle(color: mutedText))),
-          if (_photoBytes != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.memory(_photoBytes!, width: 44, height: 44, fit: BoxFit.cover),
-            ),
-            IconButton(tooltip: tr('Ondoa picha'), onPressed: () => setState(() => _photoBytes = null), icon: const Icon(Icons.close)),
-          ] else
-            FilledButton.tonalIcon(onPressed: _takePhoto, icon: const Icon(Icons.photo_camera_outlined), label: const T('Piga picha')),
-        ]),
       ]),
     );
   }
 
+  Widget _invoiceBox() {
+    InputDecoration dec(String label) => InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF5F8F7),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(child: TextField(controller: _invoice, textCapitalization: TextCapitalization.characters, decoration: dec(tr('Namba ya ankara')))),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: _invoiceTotal,
+            keyboardType: TextInputType.number,
+            inputFormatters: const [MoneyInput()],
+            onChanged: (_) => setState(() {}),
+            decoration: dec(tr('Jumla ya ankara')),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 10),
+      Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFB9CBC4), width: 1.2),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _takePhoto,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _photoBytes != null
+                    ? Image.memory(_photoBytes!, width: 54, height: 54, fit: BoxFit.cover)
+                    : Container(width: 54, height: 54, color: const Color(0xFFEEF3F1), child: const Icon(Icons.photo_camera_outlined, color: mutedText)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_photoBytes != null ? tr('Picha ya ankara imewekwa') : tr('Piga picha ya ankara'),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(_photoBytes != null ? tr('Gusa kubadilisha') : tr('Mwenye duka ataiona akithibitisha (si lazima)'),
+                      style: const TextStyle(fontSize: 12, color: mutedText)),
+                ]),
+              ),
+              if (_photoBytes != null)
+                IconButton(tooltip: tr('Ondoa picha'), onPressed: () => setState(() => _photoBytes = null), icon: const Icon(Icons.close)),
+            ]),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _linesBox() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+        child: Row(children: [
+          Text(tr('3 · BIDHAA (:n)', {'n': _lines.length}),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: .6, color: mutedText)),
+          const Spacer(),
+          if (_lines.isNotEmpty) const T('gusa kubadilisha · telezesha kufuta', style: TextStyle(fontSize: 11.5, color: mutedText)),
+        ]),
+      ),
+      for (var i = 0; i < _lines.length; i++) Appear(index: i, child: _lineCard(i)),
+      Material(
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: brandGreen, width: 1.4),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: _saving ? null : () => _editLine(),
+          child: const SizedBox(
+            height: 56,
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.add_rounded, color: brandGreen),
+              SizedBox(width: 8),
+              T('Ongeza bidhaa', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: brandGreen)),
+            ]),
+          ),
+        ),
+      ),
+    ]);
+  }
+
   Widget _lineCard(int i) {
     final l = _lines[i];
-    Widget tag(String text) => Container(
+    final now = DateTime.now();
+    final monthsLeft = (l.expiryYear - now.year) * 12 + l.expiryMonth - now.month;
+    final near = monthsLeft < 6;
+    Widget tag(String text, {Color bg = const Color(0xFFF2F6F4), Color fg = const Color(0xFF44564F)}) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(color: mintSoft, borderRadius: BorderRadius.circular(8)),
-          child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+          child: Text(text, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: fg)),
         );
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -375,32 +529,46 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(color: const Color(0xFFFDE7E4), borderRadius: BorderRadius.circular(18)),
+          decoration: BoxDecoration(color: const Color(0xFFFDE7E4), borderRadius: BorderRadius.circular(20)),
           child: const Icon(Icons.delete_outline, color: dangerRed),
         ),
         onDismissed: (_) => setState(() => _lines.removeAt(i)),
         child: Material(
           color: cardColor,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           child: InkWell(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             onTap: _saving ? null : () => _editLine(i),
             child: Padding(
               padding: const EdgeInsets.all(14),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(child: Text(l.product.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-                  Text(formatTsh(l.total), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                ]),
-                const SizedBox(height: 4),
-                Text(l.describe(), style: const TextStyle(fontSize: 13)),
-                const SizedBox(height: 6),
-                Wrap(spacing: 6, runSpacing: 4, children: [
-                  if (l.newProduct != null) tag(l.newProduct!.hasPrices ? tr('Bidhaa mpya') : tr('Bidhaa mpya · bila bei')),
-                  if (l.barcode != null) tag(tr('Barcode imefunzwa')),
-                  tag(tr('Batch :batch', {'batch': l.batch})),
-                  tag(tr('Inaisha :expiry_text', {'expiry_text': l.expiryText})),
-                  tag(tr(':a kila moja', {'a': formatTsh(l.packCost)})),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(color: near ? const Color(0xFFFDF1E3) : const Color(0xFFE7F6EF), borderRadius: BorderRadius.circular(12)),
+                  child: Icon(Icons.inventory_2_outlined, size: 20, color: near ? const Color(0xFF7A4A12) : brandGreen),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(l.product.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(l.describe(), style: const TextStyle(fontSize: 12.5, color: Color(0xFF44564F))),
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 6, runSpacing: 4, children: [
+                      if (l.newProduct != null)
+                        tag(l.newProduct!.hasPrices ? tr('Bidhaa mpya') : tr('Bidhaa mpya · bila bei'), bg: const Color(0xFFEAF0FD), fg: const Color(0xFF2F5FC4)),
+                      tag(tr('Batch :batch', {'batch': l.batch})),
+                      tag('EXP ${l.expiryText}',
+                          bg: near ? const Color(0xFFFDF1E3) : const Color(0xFFE7F6EF), fg: near ? const Color(0xFF7A4A12) : const Color(0xFF0E5A44)),
+                      if (l.barcode != null) tag(tr('Barcode imefunzwa')),
+                    ]),
+                  ]),
+                ),
+                const SizedBox(width: 8),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text(formatTsh(l.total), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
+                  Text('${formatTsh(l.packCost)} / ${unitLabel(l.packName)}', style: const TextStyle(fontSize: 11.5, color: mutedText)),
                 ]),
               ]),
             ),
@@ -410,36 +578,59 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  /// The delivery's total against the invoice's total: a mismatch means a
-  /// line was typed wrong (or the invoice is wrong). Catch it before saving.
-  Widget _totalsCard() {
-    final invoiceTotal = int.tryParse(_invoiceTotal.text.trim());
-    final match = invoiceTotal == null ? null : invoiceTotal == _total;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: softCard(radius: 20),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Expanded(child: T('Jumla ya mzigo', style: TextStyle(color: mutedText))),
-          Text(formatTsh(_total), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-        ]),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _invoiceTotal,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(labelText: tr('Jumla kwenye ankara (si lazima)')),
+  /// The total against the invoice's total (a mismatch means a line was
+  /// typed wrong, or the invoice is), and the one button.
+  Widget _bottomBar() {
+    final invoiceTotal = moneyValue(_invoiceTotal.text);
+    final match = invoiceTotal == null || _lines.isEmpty ? null : invoiceTotal == _total;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF14211D),
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: const [BoxShadow(color: Color(0x55142A23), blurRadius: 30, offset: Offset(0, 12))],
         ),
-        if (match != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              match ? tr('✓ Inalingana na ankara') : tr('Tofauti ya :a: angalia bidhaa na bei.', {'a': formatTsh((invoiceTotal! - _total).abs())}),
-              style: TextStyle(fontWeight: FontWeight.w800, color: match ? brandGreen : dangerRed),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr('Bidhaa :n · jumla ya mistari', {'n': _lines.length}), style: const TextStyle(fontSize: 12, color: Color(0xFFB7C7C1))),
+                CountUp(value: _total, format: formatTsh, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+              ]),
             ),
+            if (match != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: match ? const Color(0x293DDC97) : const Color(0x33F9B4A6), borderRadius: BorderRadius.circular(99)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(match ? Icons.check_rounded : Icons.error_outline_rounded, size: 15, color: match ? const Color(0xFF8FE6BE) : const Color(0xFFF9B4A6)),
+                  const SizedBox(width: 5),
+                  Text(
+                    match ? tr('Inalingana na ankara') : tr('Tofauti :a', {'a': formatTsh((invoiceTotal! - _total).abs())}),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: match ? const Color(0xFF8FE6BE) : const Color(0xFFF9B4A6)),
+                  ),
+                ]),
+              ),
+          ]),
+          const SizedBox(height: 10),
+          FilledButton(
+            onPressed: _saving || _lines.isEmpty ? null : _submit,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF3DDC97),
+              foregroundColor: const Color(0xFF0E3B31),
+              disabledBackgroundColor: const Color(0xFF2B3A35),
+              disabledForegroundColor: const Color(0xFF7D8F89),
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            ),
+            child: Text(_saving ? tr('Inatuma…') : (_countsNow ? tr('Hifadhi mzigo') : tr('Tuma uthibitishwe')),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           ),
-      ]),
+        ]),
+      ),
     );
   }
 }

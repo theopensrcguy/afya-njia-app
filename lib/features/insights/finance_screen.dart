@@ -7,6 +7,7 @@ import '../../core/session.dart';
 import '../../core/smooth.dart';
 import 'expenses_insight_screen.dart';
 import 'forecast_screen.dart';
+import 'report_screen.dart';
 import 'insight_parts.dart';
 
 /// Fedha (v0.45, canvas screen 7): the month's money in one place. Profit
@@ -179,6 +180,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
             const SizedBox(width: 10),
             Expanded(child: _link(Icons.receipt_long_outlined, tr('Matumizi'), () => _open(ExpensesInsightScreen(session: widget.session)))),
           ]),
+          const SizedBox(height: 10),
+          _link(Icons.query_stats_rounded, tr('Ripoti ya biashara: mambo ya kufanya'), () => _open(ReportScreen(session: widget.session))),
         ],
       ),
     );

@@ -13,6 +13,7 @@ import '../customers/customer_consent.dart';
 import 'cart.dart';
 import 'quantity_dialog.dart';
 import '../../core/i18n.dart';
+import '../insurance/insurance_form.dart';
 
 /// Checkout: the basket in full, quantities, discount, payment, "Kamilisha".
 ///
@@ -24,7 +25,10 @@ import '../../core/i18n.dart';
 /// so a change here shows there instantly and nothing has to be synced.
 /// Pops with `true` when a sale was completed.
 class CheckoutScreen extends StatefulWidget {
-  const CheckoutScreen({super.key, required this.api, required this.cart, this.canApproveCredit = false});
+  const CheckoutScreen({super.key, required this.api, required this.cart, this.canApproveCredit = false, this.asSheet = false});
+
+  /// Opened as a sheet over the counter: a ⌄ closes it to keep choosing.
+  final bool asSheet;
 
   final ApiClient api;
   final Cart cart;
@@ -43,6 +47,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _completeSale() async {
     if (_cart.isEmpty || _submitting) return;
+    // Bima: ask for the claim details once before sending (they can be filled
+    // later in Madai ya bima, but the till is where the card is in hand).
+    if (_cart.usesInsurance && !_insuranceComplete && !_cart.uncertain) {
+      final ok = await _editInsurance(skip: true);
+      if (ok == null || !mounted) return;
+    }
     setState(() => _submitting = true);
     try {
       final sale = await widget.api.post('sales', _cart.toRequest()) as Map<String, dynamic>;
@@ -191,7 +201,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       label: tr('Kiasi'),
       helper: tr('Jumla: :a', {'a': formatTsh(_cart.subtotal)}),
       initial: _cart.discount == 0 ? '' : '${_cart.discount}',
-      digitsOnly: true,
+      money: true,
       clearLabel: tr('Ondoa'), // "Ondoa" returns '' = no discount
     );
     if (value != null) _cart.setDiscount(int.tryParse(value) ?? 0);
@@ -224,8 +234,58 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (!didPop) _showMessage(tr('Tuma mauzo haya kwanza kabla ya kutoka.'));
         },
         child: Scaffold(
-          appBar: AppBar(title: Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount}))),
+          appBar: AppBar(
+            automaticallyImplyLeading: !widget.asSheet,
+            leading: widget.asSheet
+                ? IconButton(
+                    tooltip: tr('Endelea kuchagua'),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  )
+                : null,
+            title: Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount})),
+            actions: [
+              if (widget.asSheet)
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const T('Ongeza bidhaa'),
+                ),
+            ],
+          ),
           body: _cart.isEmpty ? _buildEmpty() : _buildBasket(),
+        ),
+      ),
+    );
+  }
+
+  Widget _payTile(String method, IconData icon) {
+    final on = _cart.paymentMethod == method;
+    return Material(
+      color: on ? const Color(0xFFDDF3EA) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: on ? brandGreen : const Color(0xFFDCE5E1), width: on ? 1.6 : 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _cart.canEdit
+            ? () {
+                HapticFeedback.selectionClick();
+                _cart.setPaymentMethod(method);
+              }
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 21, color: on ? brandGreen : mutedText),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(paymentLabels[method] ?? method,
+                  maxLines: 1, style: TextStyle(fontSize: 13, fontWeight: on ? FontWeight.w800 : FontWeight.w600, color: on ? brandGreen : inkColor)),
+            ),
+          ]),
         ),
       ),
     );
@@ -355,24 +415,37 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     icon: const Icon(Icons.local_offer_outlined, size: 18),
                     label: Text(_cart.discount > 0 ? tr('Punguzo :a', {'a': formatTsh(_cart.discount)}) : tr('Punguzo')),
                   ),
-                  const Spacer(),
-                  const T('Jumla ', style: TextStyle(color: mutedText)),
-                  Text(formatTsh(_cart.total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 8),
+                  // The label sits above the amount, so a long total never covers it.
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      const T('Jumla', style: TextStyle(color: mutedText, fontSize: 12)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(formatTsh(_cart.total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                      ),
+                    ]),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               if (_cart.isSplit) _buildSplit() else ...[
-                SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: [
-                    const ButtonSegment(value: 'cash', label: T('Taslimu')),
-                    const ButtonSegment(value: 'mobile', label: T('Simu')),
-                    const ButtonSegment(value: 'insurance', label: T('Bima')),
-                    if (_cart.creditAllowed) const ButtonSegment(value: 'credit', label: T('Deni')),
-                  ],
-                  selected: {_cart.paymentMethod},
-                  onSelectionChanged: _cart.canEdit ? (s) => _cart.setPaymentMethod(s.first) : null,
-                ),
+                // Equal tiles with an icon: every label fits ("Insurance" used to wrap).
+                Row(children: [
+                  for (final (v, icon) in [
+                    ('cash', Icons.payments_outlined),
+                    ('mobile', Icons.phone_android_rounded),
+                    ('insurance', Icons.health_and_safety_outlined),
+                    if (_cart.creditAllowed) ('credit', Icons.account_balance_wallet_outlined),
+                  ])
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: _payTile(v, icon),
+                      ),
+                    ),
+                ]),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
@@ -382,6 +455,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 ),
               ],
+              if (_cart.usesInsurance) _buildInsurance(),
               _cart.creditDue > 0 ? _buildCustomer() : _buildOptionalCustomer(),
               const SizedBox(height: 8),
               SizedBox(
@@ -407,6 +481,54 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   /// No credit: a customer is optional, and goes on the sale only if they agree
   /// (their history, and a reminder before the medicine runs out).
+  bool get _insuranceComplete => kInsuranceRequired.every((f) => (_cart.insurance[f] ?? '').isNotEmpty);
+
+  int get _insuranceAmount => _cart.payments.where((p) => p.method == 'insurance').fold<int>(0, (a, p) => a + p.amount);
+
+  /// Returns the details (empty = "later"), or null when closed.
+  Future<Map<String, String>?> _editInsurance({bool skip = false}) async {
+    final d = await askInsuranceDetails(context,
+        initial: _cart.insurance, amount: _insuranceAmount, skipLabel: skip ? tr('Ruka: nitajaza baadaye (Madai ya bima)') : null);
+    if (d != null) _cart.setInsurance(d);
+    if (mounted) setState(() {});
+    return d;
+  }
+
+  /// Bima on this sale: who pays and the card, or a nudge to fill it.
+  Widget _buildInsurance() {
+    final i = _cart.insurance;
+    final done = _insuranceComplete;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: done ? const Color(0xFFE7F6EF) : const Color(0xFFFFF4DC),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _cart.canEdit ? () => _editInsurance() : null,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+            child: Row(children: [
+              Icon(done ? Icons.verified_outlined : Icons.health_and_safety_outlined, color: done ? brandGreen : warnAmber),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  done
+                      ? [i['insurer'], i['member_number'], i['patient_name']].join(' · ')
+                      : tr('Jaza taarifa za bima: kampuni, namba ya kadi, mgonjwa'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: done ? const Color(0xFF0E5A44) : const Color(0xFF7A5300)),
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildOptionalCustomer() {
     final c = _cart.customer;
     final agreed = customerAgreed(c);
@@ -514,10 +636,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         initialValue: parts[i].amount > 0 ? '${parts[i].amount}' : '',
                         enabled: _cart.canEdit,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: const [MoneyInput()],
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, hintText: tr('kiasi')),
-                        onChanged: (v) => _cart.setSplitAmount(i, int.tryParse(v) ?? 0),
+                        onChanged: (v) => _cart.setSplitAmount(i, moneyValue(v) ?? 0),
                       )
                     // The last row: worked out, never typed.
                     : Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

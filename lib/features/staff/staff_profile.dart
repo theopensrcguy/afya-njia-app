@@ -347,6 +347,7 @@ class _StaffProfileFormScreenState extends State<StaffProfileFormScreen> {
             onTap: () async {
               final d = await showDatePicker(
                 context: context,
+                initialEntryMode: DatePickerEntryMode.calendarOnly,
                 initialDate: _started ?? DateTime.now(),
                 firstDate: DateTime(2000),
                 lastDate: DateTime.now(),

@@ -6,9 +6,12 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
+import '../../core/product_photo.dart';
 import '../../core/scan_once.dart';
 import '../../core/session.dart';
 import '../../core/smooth.dart';
+import '../../core/empty_shelves.dart';
+import '../bulk/bulk_entry_screen.dart';
 import '../orders/reorder_screen.dart';
 import '../purchases/receive_screen.dart';
 import 'deletions_screen.dart';
@@ -264,7 +267,13 @@ class _StockScreenState extends State<StockScreen> {
                         ? KeyedSubtree(key: const ValueKey('orodha'), child: _orodha())
                         : KeyedSubtree(
                             key: const ValueKey('rafu'),
-                            child: RafuView(
+                            child: _all.isEmpty
+                                ? LayoutBuilder(
+                                    builder: (context, box) => SingleChildScrollView(
+                                      child: ConstrainedBox(constraints: BoxConstraints(minHeight: box.maxHeight), child: Center(child: _emptyShop())),
+                                    ),
+                                  )
+                                : RafuView(
                               products: _all,
                               categories: _catNames,
                               mode: _rafuMode,
@@ -702,31 +711,41 @@ class _StockScreenState extends State<StockScreen> {
   String shortTsh(int v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(v % 1000 == 0 ? 0 : 1)}K' : '$v';
 
   Widget _empty(bool nothingAtAll) {
+    if (nothingAtAll) return Padding(padding: const EdgeInsets.only(bottom: 110), child: _emptyShop());
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 30, 32, 120),
       child: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
         const PackIcon(form: 'other', color: Color(0xFFB8C4C0), size: 44, empty: true),
         const SizedBox(height: 14),
-        T(nothingAtAll ? 'Bado hakuna bidhaa dukani.' : 'Hakuna bidhaa kwenye kichujio hiki.',
-            textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _ink)),
+        const T('Hakuna bidhaa kwenye kichujio hiki.',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _ink)),
         const SizedBox(height: 12),
-        if (nothingAtAll && _can(Perm.receive))
-          FilledButton.icon(
-            onPressed: () => _push(ReceiveScreen(session: widget.session)),
-            icon: const Icon(Icons.local_shipping_outlined),
-            label: const T('Pokea mzigo wa kwanza'),
-          )
-        else if (!nothingAtAll)
-          OutlinedButton(
-            onPressed: () {
-              _q.clear();
-              _clearAll();
-            },
-            child: const T('Onyesha zote'),
-          ),
+        OutlinedButton(
+          onPressed: () {
+            _q.clear();
+            _clearAll();
+          },
+          child: const T('Onyesha zote'),
+        ),
       ]),
     );
   }
+
+  /// No products at all: the drawn empty shelves and the two ways to fill them.
+  Widget _emptyShop() => EmptyShelves(actions: [
+        if (_can(Perm.receive))
+          FilledButton.icon(
+            onPressed: () => _push(ReceiveScreen(session: widget.session)),
+            icon: const Icon(Icons.local_shipping_outlined),
+            label: const T('Pokea mzigo'),
+          ),
+        if (_can(Perm.receive))
+          OutlinedButton.icon(
+            onPressed: () => _push(BulkEntryScreen(session: widget.session)),
+            icon: const Icon(Icons.table_chart_outlined),
+            label: const T('Ingiza hisa ya mwanzo'),
+          ),
+      ]);
 
   Widget _row(Map<String, dynamic> p) {
     final st = stateOf(p);
@@ -762,11 +781,13 @@ class _StockScreenState extends State<StockScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
                   child: Row(children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(color: out ? Colors.white : look.soft, borderRadius: BorderRadius.circular(12)),
-                      child: Center(child: PackIcon(form: '${p['form'] ?? ''}', color: look.ink, size: 24, empty: out)),
+                    // The photo when there is one (v0.46.1), else the pack icon.
+                    ProductThumb(
+                      url: p['photo_url'] as String?,
+                      fallback: Container(
+                        decoration: BoxDecoration(color: out ? Colors.white : look.soft, borderRadius: BorderRadius.circular(12)),
+                        child: Center(child: PackIcon(form: '${p['form'] ?? ''}', color: look.ink, size: 24, empty: out)),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'money.dart';
+
 import 'brand.dart';
 import 'i18n.dart';
 
@@ -25,6 +27,7 @@ Future<String?> askText(
   String? clearLabel,
   bool danger = false,
   bool digitsOnly = false,
+  bool money = false,
   bool required = false,
 }) {
   return showDialog<String>(
@@ -39,7 +42,8 @@ Future<String?> askText(
       confirm: confirm ?? tr('Weka'),
       clearLabel: clearLabel,
       danger: danger,
-      digitsOnly: digitsOnly,
+      digitsOnly: digitsOnly || money,
+      money: money,
       required: required,
     ),
   );
@@ -57,6 +61,7 @@ class _TextDialog extends StatefulWidget {
     required this.clearLabel,
     required this.danger,
     required this.digitsOnly,
+    this.money = false,
     required this.required,
   });
 
@@ -70,6 +75,7 @@ class _TextDialog extends StatefulWidget {
   final String? clearLabel;
   final bool danger;
   final bool digitsOnly;
+  final bool money; // grouped as 125,000; returned without the commas
   final bool required;
 
   @override
@@ -77,7 +83,8 @@ class _TextDialog extends StatefulWidget {
 }
 
 class _TextDialogState extends State<_TextDialog> {
-  late final _controller = TextEditingController(text: widget.initial);
+  late final _controller = TextEditingController(
+      text: widget.money && moneyValue(widget.initial) != null ? groupDigits(moneyValue(widget.initial)!) : widget.initial);
   bool _showRequired = false;
 
   @override
@@ -87,7 +94,8 @@ class _TextDialogState extends State<_TextDialog> {
   }
 
   void _submit() {
-    final text = _controller.text.trim();
+    final raw = _controller.text.trim();
+    final text = widget.money ? raw.replaceAll(',', '') : raw;
     if (widget.required && text.isEmpty) {
       setState(() => _showRequired = true);
       return;
@@ -98,7 +106,9 @@ class _TextDialogState extends State<_TextDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.title),
+      // Titles can be product names: two lines at most, readable size (v0.46.1).
+      title: Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, height: 1.25)),
+      scrollable: true,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +118,7 @@ class _TextDialogState extends State<_TextDialog> {
             controller: _controller,
             autofocus: true,
             keyboardType: widget.digitsOnly ? TextInputType.number : TextInputType.text,
-            inputFormatters: widget.digitsOnly ? [FilteringTextInputFormatter.digitsOnly] : null,
+            inputFormatters: widget.money ? const [MoneyInput()] : (widget.digitsOnly ? [FilteringTextInputFormatter.digitsOnly] : null),
             onSubmitted: (_) => _submit(),
             onChanged: (_) {
               if (_showRequired) setState(() => _showRequired = false);

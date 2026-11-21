@@ -4,6 +4,7 @@ import 'core/loader.dart';
 import 'core/api_client.dart';
 import 'core/brand.dart';
 import 'core/i18n.dart';
+import 'core/keyboard.dart';
 import 'core/session.dart';
 import 'features/auth/change_pin_screen.dart';
 import 'features/auth/pin_screen.dart';
@@ -52,16 +53,24 @@ class AfyaNjiaApp extends StatelessWidget {
       // (iPhone number keyboards have no "Done" key, so without this the only
       // way out was the back button.) Buttons still get their taps: the
       // innermost widget wins the tap, this only sees taps on empty space.
-      builder: (context, child) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      // (v0.46.1: a raw-finger listener, so buttons and rows under the finger
+      // no longer swallow the tap; see core/keyboard.dart.)
+      builder: (context, child) => KeyboardDismisser(
         // The loading bar and the Afya Njia loader, over every screen.
         child: ActivityLayer(child: child ?? const SizedBox()),
       ),
+      // Coming back to a screen never reopens its keyboard.
+      navigatorObservers: [keyboardObserver],
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: brandGreen, primary: brandGreen),
         scaffoldBackgroundColor: pageBackground,
+        // Every dialog: a readable title, not the 24pt headline that a long
+        // product name turned into a wall of text (v0.46.1).
+        dialogTheme: DialogThemeData(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          titleTextStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF16231F), height: 1.25),
+        ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,

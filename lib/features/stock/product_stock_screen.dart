@@ -14,6 +14,7 @@ import 'deletions_screen.dart';
 import '../../models/product.dart';
 import 'units_editor_screen.dart';
 import '../../core/i18n.dart';
+import '../../core/product_photo.dart';
 
 /// One product: what's on the shelf, how it's sold, its batches, and every
 /// change to its stock (who, when, why). Owner only.
@@ -210,6 +211,8 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
                 children: [
+                  _photoCard(),
+                  const SizedBox(height: 14),
                   _onHandCard(),
                   const SizedBox(height: 14),
                   _unitsCard(),
@@ -245,6 +248,52 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
         decoration: softCard(radius: 22),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
       );
+
+  /// The product's photo: tap to take or change it (v0.46.1).
+  Widget _photoCard() {
+    final url = _p!['photo_url'] as String?;
+    final has = url != null && url.isNotEmpty;
+    Future<void> edit() async {
+      final r = await editProductPhoto(context, api: _api, productId: widget.productId, current: url);
+      if (r != null && mounted) setState(() => _p!['photo_url'] = r.isEmpty ? null : r);
+    }
+
+    return GestureDetector(
+      onTap: edit,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          height: has ? 200 : 92,
+          color: const Color(0xFFEFF4F2),
+          child: has
+              ? Stack(fit: StackFit.expand, children: [
+                  Image.network(url, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined))),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(99)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.photo_camera_outlined, size: 15, color: Colors.white),
+                        const SizedBox(width: 5),
+                        Text(tr('Badilisha'), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ]),
+                    ),
+                  ),
+                ])
+              : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.add_a_photo_outlined, color: Color(0xFF0E3B31)),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(tr('Weka picha ya bidhaa: inaitambua haraka, na tayari kwa kuuza mtandaoni'),
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0E3B31))),
+                  ),
+                ]),
+        ),
+      ),
+    );
+  }
 
   Widget _onHandCard() {
     final p = _p!;

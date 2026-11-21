@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/loader.dart';
 import '../../core/api_client.dart';
@@ -71,7 +70,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   Future<void> _open() async {
     setState(() => _busy = true);
     try {
-      await _api.post('shifts', {'opening_float': int.tryParse(_floatController.text) ?? 0});
+      await _api.post('shifts', {'opening_float': moneyValue(_floatController.text) ?? 0});
       _floatController.clear();
       await _load();
       _message(tr('Zamu imefunguliwa.'));
@@ -84,7 +83,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   }
 
   Future<void> _close() async {
-    final counted = int.tryParse(_countedController.text);
+    final counted = moneyValue(_countedController.text);
     if (counted == null) {
       _message(tr('Andika kiasi ulichohesabu kwenye droo.'), isError: true);
       return;
@@ -173,7 +172,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
       TextField(
         controller: _floatController,
         keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        inputFormatters: const [MoneyInput()],
         decoration: InputDecoration(
           labelText: tr('Fedha zilizopo kwenye droo sasa (TSh)'),
           helperText: tr('Chenji ya kuanzia. Weka 0 kama droo ni tupu.'),
@@ -282,7 +281,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
   /// Count the drawer. The gap updates while typing, before anything is sent.
   List<Widget> _closeForm(int expected) {
-    final counted = int.tryParse(_countedController.text);
+    final counted = moneyValue(_countedController.text);
     final gap = counted == null ? null : counted - expected;
 
     return [
@@ -293,7 +292,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
           controller: _countedController,
           autofocus: true,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: const [MoneyInput()],
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
           decoration: InputDecoration(labelText: tr('Taslimu iliyohesabiwa (TSh)')),
         ),

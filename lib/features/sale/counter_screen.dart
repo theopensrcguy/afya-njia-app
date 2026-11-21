@@ -8,6 +8,7 @@ import '../../core/brand.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../core/smooth.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'cart.dart';
@@ -19,10 +20,12 @@ import '../../core/i18n.dart';
 
 /// Screen 2 of the mockups: search and add to the basket.
 ///
-/// The search results get the whole screen; the basket is a slim bar at the
-/// bottom ("Kikapu · 2 bidhaa · TSh 600 · Lipa"). Tapping it opens the checkout
-/// screen. (The first version put the whole basket here, and with the keyboard
-/// open there was no room left to see the results.)
+/// v0.45.3: one scroll. Aina chips, the Haraka tiles and the products scroll
+/// together, so the tiles never hold half the screen; once they scroll out of
+/// sight a slim Haraka strip appears under the search, and its ↑ brings the
+/// tiles back. The tiles can also be folded away (remembered). The basket
+/// floats at the bottom; tapping it opens the checkout as a sheet over this
+/// screen, which slides down again ("Endelea kuchagua") to keep adding.
 class CounterScreen extends StatefulWidget {
   const CounterScreen({super.key, required this.session});
 
@@ -50,6 +53,11 @@ class _CounterScreenState extends State<CounterScreen> {
   int _unsorted = 0;
   String? _shelf;
   String? _part; // asubuhi | mchana | jioni
+
+  final _scroll = ScrollController();
+  final _harakaKey = GlobalKey();
+  bool _strip = false; // the tiles have scrolled away: show the slim strip
+  bool _harakaOpen = UiMemory.get('counter.haraka', true);
 
   ApiClient get _api => widget.session.api;
 
@@ -113,6 +121,7 @@ class _CounterScreenState extends State<CounterScreen> {
     // Anything that keeps running (timers, controllers, notifiers) must be
     // stopped when the screen closes, or it leaks memory.
     _debounce?.cancel();
+    _scroll.dispose();
     _searchController.dispose();
     _cart.dispose();
     super.dispose();
@@ -138,9 +147,23 @@ class _CounterScreenState extends State<CounterScreen> {
     }
   }
 
+  /// Tapping the chosen shelf again goes back to everything.
   void _pickShelf(String? id) {
-    setState(() => _shelf = id);
+    tick();
+    setState(() => _shelf = _shelf == id ? null : id);
     _search('');
+  }
+
+  bool get _showHaraka => _searchController.text.trim().isEmpty && _shelf == null && _haraka.isNotEmpty;
+
+  /// Shows the slim strip once the tiles are out of sight.
+  bool _onScroll(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    final box = _harakaKey.currentContext?.findRenderObject() as RenderBox?;
+    final h = (box?.hasSize ?? false) ? box!.size.height : 0.0;
+    final show = _showHaraka && _harakaOpen && h > 0 && n.metrics.pixels > h + 30;
+    if (show != _strip) setState(() => _strip = show);
+    return false;
   }
 
   Widget _buildShelves() {
@@ -158,7 +181,7 @@ class _CounterScreenState extends State<CounterScreen> {
           for (final (id, label) in chips)
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(label: Text(label), selected: _shelf == id, onSelected: (_) => _pickShelf(id)),
+              child: ChoiceChipX(label: label, selected: _shelf == id, onTap: () => _pickShelf(id)),
             ),
         ],
       ),
@@ -207,8 +230,18 @@ class _CounterScreenState extends State<CounterScreen> {
 
   Future<void> _openCheckout() async {
     FocusScope.of(context).unfocus(); // close the keyboard first
-    final completed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CheckoutScreen(api: _api, cart: _cart, canApproveCredit: widget.session.user!.can(Perm.manageCredit))),
+    final completed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: .94,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          child: CheckoutScreen(api: _api, cart: _cart, canApproveCredit: widget.session.user!.can(Perm.manageCredit), asSheet: true),
+        ),
+      ),
     );
     if (!mounted) return;
     // Stock changed after a sale (or a stock error at checkout): refresh the numbers.
@@ -273,8 +306,8 @@ class _CounterScreenState extends State<CounterScreen> {
           ],
         ),
       ),
-      body: Column(
-        children: [
+      body: Stack(children: [
+        Column(children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
@@ -307,38 +340,67 @@ class _CounterScreenState extends State<CounterScreen> {
               ),
             ),
           ),
-          // The results also listen to the cart, to show "×2" on items already in it.
+          // Tiles scrolled away: the same products as one slim strip.
+          ListenableBuilder(
+            listenable: _cart,
+            builder: (context, _) => AnimatedSize(
+              duration: Motion.of(context, Motion.base),
+              curve: Motion.curve,
+              alignment: Alignment.topCenter,
+              child: _strip && _showHaraka ? _harakaStrip() : const SizedBox(width: double.infinity),
+            ),
+          ),
           Expanded(
             child: ListenableBuilder(
               listenable: _cart,
-              builder: (context, _) => Column(children: [
-                // Haraka only while not searching: typing means you know what you want.
-                if (_searchController.text.trim().isEmpty && _shelves.isNotEmpty) _buildShelves(),
-                if (_searchController.text.trim().isEmpty && _shelf == null && _haraka.isNotEmpty) _buildHaraka(),
-                Expanded(child: _buildResults()),
-              ]),
+              builder: (context, _) => NotificationListener<ScrollNotification>(
+                onNotification: _onScroll,
+                child: CustomScrollView(
+                  controller: _scroll,
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  slivers: [
+                    if (_searchController.text.trim().isEmpty && _shelves.isNotEmpty) SliverToBoxAdapter(child: _buildShelves()),
+                    if (_showHaraka) SliverToBoxAdapter(child: KeyedSubtree(key: _harakaKey, child: _buildHaraka())),
+                    ..._buildResults(),
+                    // Room under the last product for the floating basket.
+                    const SliverToBoxAdapter(child: SizedBox(height: 110)),
+                  ],
+                ),
+              ),
             ),
           ),
-          ListenableBuilder(listenable: _cart, builder: (context, _) => _buildCartBar()),
-        ],
-      ),
+        ]),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: ListenableBuilder(listenable: _cart, builder: (context, _) => _buildCartBar()),
+        ),
+      ]),
     );
   }
 
-  Widget _buildResults() {
+  List<Widget> _buildResults() {
     if (_searchError != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_searchError!, textAlign: TextAlign.center),
-            TextButton(onPressed: () => _search(_searchController.text), child: const T('Jaribu tena')),
-          ],
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_searchError!, textAlign: TextAlign.center),
+                TextButton(onPressed: () => _search(_searchController.text), child: const T('Jaribu tena')),
+              ],
+            ),
+          ),
         ),
-      );
+      ];
     }
     if (_results.isEmpty && !_searching) {
-      return const Center(child: T('Hakuna bidhaa iliyopatikana.'));
+      return const [
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: T('Hakuna bidhaa iliyopatikana.'))),
+      ];
     }
 
     // The server sends only suggestions, or only real matches, never a mix.
@@ -348,10 +410,10 @@ class _CounterScreenState extends State<CounterScreen> {
     final suggesting = _results.isNotEmpty && _results.every((p) => p.suggested);
     final offset = suggesting ? 1 : 0;
 
-    return ListView.separated(
-      // Scrolling the results closes the keyboard, so the whole list is visible.
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverList.separated(
       itemCount: _results.length + offset,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
@@ -434,7 +496,9 @@ class _CounterScreenState extends State<CounterScreen> {
           ),
         );
       },
-    );
+        ),
+      ),
+    ];
   }
 
   static const _parts = {'asubuhi': 'asubuhi', 'mchana': 'mchana', 'jioni': 'jioni'};
@@ -444,13 +508,41 @@ class _CounterScreenState extends State<CounterScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const T('Haraka', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-          const Spacer(),
-          Text(tr('zinazouzwa sana :a', {'a': tr(_parts[_part] ?? 'sasa')}), style: const TextStyle(fontSize: 12, color: mutedText)),
-        ]),
-        const SizedBox(height: 8),
-        GridView(
+        // The header folds the tiles away (and back); remembered while the app is open.
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            tick();
+            setState(() => _harakaOpen = !_harakaOpen);
+            UiMemory.set('counter.haraka', _harakaOpen);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              const T('Haraka', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(tr('zinazouzwa sana :a', {'a': tr(_parts[_part] ?? 'sasa')}),
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: mutedText)),
+              ),
+              Text(_harakaOpen ? tr('Ficha') : tr('Onyesha'), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: brandGreen)),
+              AnimatedRotation(
+                turns: _harakaOpen ? .5 : 0,
+                duration: Motion.of(context, Motion.fast),
+                child: const Icon(Icons.expand_more_rounded, size: 20, color: brandGreen),
+              ),
+            ]),
+          ),
+        ),
+        AnimatedSize(
+          duration: Motion.of(context, Motion.base),
+          curve: Motion.curve,
+          alignment: Alignment.topCenter,
+          child: !_harakaOpen
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           // A fixed height that grows with the phone's text size (Settings ›
@@ -507,7 +599,57 @@ class _CounterScreenState extends State<CounterScreen> {
               }),
           ],
         ),
+                ),
+        ),
       ]),
+    );
+  }
+
+  /// The tiles as one slim row while they're scrolled out of sight. ↑ goes back to them.
+  Widget _harakaStrip() {
+    return Container(
+      height: 46,
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE3EAE7)))),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+        children: [
+          IconButton(
+            tooltip: tr('Rudi juu'),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _scroll.animateTo(0, duration: Motion.of(context, Motion.base), curve: Motion.curve),
+            icon: const Icon(Icons.keyboard_arrow_up_rounded, color: brandGreen),
+          ),
+          for (final (p, usual) in _haraka)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Builder(builder: (context) {
+                final n = _cart.quantityOf(p.id);
+                return Pressable(
+                  onTap: () => _tapTile(p, usual),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(color: n > 0 ? const Color(0xFFDDF3EA) : Colors.white, borderRadius: BorderRadius.circular(99)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 130),
+                        child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                      ),
+                      if (n > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(color: brandGreen, borderRadius: BorderRadius.circular(99)),
+                          child: Text('$n', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
+                        ),
+                      ],
+                    ]),
+                  ),
+                );
+              }),
+            ),
+        ],
+      ),
     );
   }
 
@@ -576,46 +718,58 @@ class _CounterScreenState extends State<CounterScreen> {
     }
   }
 
-  /// One slim bar: how many items, the total, and "Lipa". About 64 points
-  /// high, so the results keep the screen even with the keyboard open.
+  /// The basket floats over the list: a dark pill with the count, the total
+  /// and "Lipa". It slides in with the first item.
   Widget _buildCartBar() {
-    if (_cart.isEmpty) return const SizedBox.shrink();
-
-    return Material(
-      color: Colors.white,
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: InkWell(
-          onTap: _openCheckout,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-            child: Row(
-              children: [
-                const Icon(Icons.shopping_basket_outlined, color: brandGreen),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount}), style: const TextStyle(fontSize: 12, color: mutedText)),
-                      Text(formatTsh(_cart.total), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                    ],
+    final empty = _cart.isEmpty;
+    return IgnorePointer(
+      ignoring: empty,
+      child: AnimatedSlide(
+        offset: empty ? const Offset(0, 1.4) : Offset.zero,
+        duration: Motion.of(context, Motion.base),
+        curve: Motion.curve,
+        child: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Material(
+            color: const Color(0xFF14211D),
+            borderRadius: BorderRadius.circular(24),
+            elevation: 10,
+            shadowColor: const Color(0x55142A23),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: empty ? null : _openCheckout,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+                child: Row(children: [
+                  Badge(
+                    label: Text('${_cart.itemCount}'),
+                    backgroundColor: const Color(0xFF3DDC97),
+                    textColor: const Color(0xFF0E3B31),
+                    child: const Icon(Icons.shopping_basket_outlined, color: Colors.white),
                   ),
-                ),
-                FilledButton(
-                  onPressed: _openCheckout,
-                  style: FilledButton.styleFrom(minimumSize: const Size(110, 48)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_cart.uncertain ? tr('Tuma tena') : tr('Lipa'), style: const TextStyle(fontSize: 16)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(tr('Kikapu · :item_count bidhaa', {'item_count': _cart.itemCount}), style: const TextStyle(fontSize: 12, color: Color(0xFFB7C7C1))),
+                      CountUp(value: _cart.total, format: formatTsh, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
+                    ]),
+                  ),
+                  FilledButton(
+                    onPressed: empty ? null : _openCheckout,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF3DDC97),
+                      foregroundColor: const Color(0xFF0E3B31),
+                      minimumSize: const Size(104, 46),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(_cart.uncertain ? tr('Tuma tena') : tr('Lipa'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                       const Icon(Icons.chevron_right),
-                    ],
+                    ]),
                   ),
-                ),
-              ],
+                ]),
+              ),
             ),
           ),
         ),

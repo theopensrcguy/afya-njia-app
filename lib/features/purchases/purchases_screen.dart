@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
@@ -12,6 +11,7 @@ import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
 import '../../core/i18n.dart';
+import '../../core/range_picker.dart';
 import '../../core/smooth.dart';
 
 const _statusLabels = {
@@ -194,13 +194,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Future<void> _pickPeriod(String k) async {
     if (k == 'tarehe') {
       final now = DateTime.now();
-      final r = await showDateRangePicker(
-        context: context,
-        firstDate: DateTime(now.year - 3),
-        lastDate: now,
-        initialDateRange: _custom,
-        helpText: tr('Chagua tarehe'),
-      );
+      final r = await pickDayOrRange(context, first: DateTime(now.year - 3), last: now, initial: _custom, maxDays: 3 * 366);
       if (r == null) return;
       _custom = r;
     }
@@ -210,26 +204,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _pickSupplier() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      builder: (sheet) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .7),
-          child: ListView(shrinkWrap: true, children: [
-            for (final (id, name) in [('', tr('Wasambazaji wote')), ('none', tr('Bila msambazaji')), for (final s in _suppliers) ('${s['id']}', '${s['name']}')])
-              ListTile(
-                title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                trailing: _supplier == id ? const Icon(Icons.check_rounded, color: _primary) : null,
-                onTap: () => Navigator.of(sheet).pop(id),
-              ),
-          ]),
-        ),
-      ),
+    final picked = await pickOne<String>(
+      context,
+      title: tr('Chagua msambazaji'),
+      selected: _supplier,
+      options: [
+        PickOption('', tr('Wasambazaji wote')),
+        PickOption('none', tr('Bila msambazaji')),
+        for (final sp in _suppliers) PickOption('${sp['id']}', '${sp['name']}'),
+      ],
     );
-    if (picked == null || picked == _supplier) return;
+    if (picked == null || picked == _supplier || !mounted) return;
     setState(() => _supplier = picked);
     _filterChanged();
   }
@@ -266,25 +251,33 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   padding: EdgeInsets.fromLTRB(4, 10, 4, 10),
                   child: T('Historia', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _ink)),
                 ),
-                _periodChips(),
-                const SizedBox(height: 10),
+                // Two half-width filters that always fit, then the status switch.
                 Row(children: [
-                  Expanded(child: _supplierButton()),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: SlidingSegments<String>(
-                      values: const ['', 'received', 'rejected'],
-                      labels: [tr('Zote'), tr('Zimepokelewa'), tr('Zimekataliwa')],
-                      selected: _status,
-                      height: 44,
-                      fontSize: 11.5,
-                      onChanged: (v) {
-                        setState(() => _status = v);
-                        _filterChanged();
-                      },
+                    child: DropPill(
+                      label: tr('Kipindi'),
+                      value: _periodLabel,
+                      active: _period != 'zote',
+                      onTap: _choosePeriod,
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropPill(label: tr('Msambazaji'), value: _supplierLabel, active: _supplier.isNotEmpty, onTap: _pickSupplier),
+                  ),
                 ]),
+                const SizedBox(height: 10),
+                SlidingSegments<String>(
+                  values: const ['', 'received', 'rejected'],
+                  labels: [tr('Zote'), tr('Zimepokelewa'), tr('Zimekataliwa')],
+                  selected: _status,
+                  height: 42,
+                  fontSize: 13,
+                  onChanged: (v) {
+                    setState(() => _status = v);
+                    _filterChanged();
+                  },
+                ),
                 const SizedBox(height: 10),
                 _searchBox(),
                 const SizedBox(height: 12),
@@ -378,39 +371,24 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  Widget _periodChips() {
-    final defs = [('leo', 'Leo'), ('wiki', 'Wiki hii'), ('mwezi', 'Mwezi huu'), ('jana', 'Mwezi uliopita'), ('miezi3', 'Miezi 3'), ('zote', 'Zote'), ('tarehe', 'Tarehe…')];
-    return SizedBox(
-      height: 38,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: defs.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final (k, l) = defs[i];
-          final label = k == 'tarehe' && _period == 'tarehe' && _custom != null
-              ? '${_custom!.start.day}/${_custom!.start.month} – ${_custom!.end.day}/${_custom!.end.month}'
-              : tr(l);
-          return ChoiceChipX(label: label, selected: _period == k, onTap: () => _pickPeriod(k));
-        },
-      ),
-    );
+  static const _periods = [('leo', 'Leo'), ('wiki', 'Wiki hii'), ('mwezi', 'Mwezi huu'), ('jana', 'Mwezi uliopita'), ('miezi3', 'Miezi 3'), ('zote', 'Zote'), ('tarehe', 'Tarehe…')];
+
+  String get _periodLabel {
+    if (_period == 'tarehe' && _custom != null) {
+      return '${_custom!.start.day}/${_custom!.start.month} – ${_custom!.end.day}/${_custom!.end.month}';
+    }
+    return tr(_periods.firstWhere((p) => p.$1 == _period, orElse: () => _periods[2]).$2);
   }
 
-  Widget _supplierButton() => Pressable(
-        onTap: _pickSupplier,
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFFDCE5E1), width: 1.5)),
-          child: Row(children: [
-            const Icon(Icons.storefront_outlined, size: 18, color: _muted),
-            const SizedBox(width: 8),
-            Expanded(child: Text(_supplierLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _ink))),
-            const Icon(Icons.expand_more_rounded, size: 18, color: _muted),
-          ]),
-        ),
-      );
+  Future<void> _choosePeriod() async {
+    final picked = await pickOne<String>(
+      context,
+      title: tr('Chagua kipindi'),
+      selected: _period,
+      options: [for (final (k, l) in _periods) PickOption(k, tr(l), sub: k == 'tarehe' ? tr('Chagua siku ya kuanzia na ya mwisho') : null)],
+    );
+    if (picked != null && mounted) _pickPeriod(picked);
+  }
 
   Widget _searchBox() => Container(
         height: 44,
@@ -633,7 +611,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
   int get _unpriced => _newProducts.where((n) {
         if (n['needs_price'] != true) return false;
         final units = ((n['units'] as List?) ?? const []).cast<Map<String, dynamic>>();
-        return units.any((u) => (int.tryParse(_price(asInt(n['id']), '${u['name']}').text.trim()) ?? 0) < 1);
+        return units.any((u) => (moneyValue(_price(asInt(n['id']), '${u['name']}').text) ?? 0) < 1);
       }).length;
 
   /// What this delivery paid per base unit for a product (for the profit hint).
@@ -678,8 +656,8 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
                       if (_nameFields[asInt(n['id'])] != null) 'name': _nameFields[asInt(n['id'])]!.text.trim(),
                       'prices': {
                         for (final u in ((n['units'] as List?) ?? const []).cast<Map<String, dynamic>>())
-                          if ((int.tryParse(_price(asInt(n['id']), '${u['name']}').text.trim()) ?? 0) >= 1)
-                            '${u['name']}': int.parse(_price(asInt(n['id']), '${u['name']}').text.trim()),
+                          if ((moneyValue(_price(asInt(n['id']), '${u['name']}').text) ?? 0) >= 1)
+                            '${u['name']}': moneyValue(_price(asInt(n['id']), '${u['name']}').text)!,
                       },
                     },
                 ],
@@ -827,7 +805,7 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
           decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
           child: Text(t, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
         );
-    final missing = needsPrice && units.any((u) => (int.tryParse(_price(id, '${u['name']}').text.trim()) ?? 0) < 1);
+    final missing = needsPrice && units.any((u) => (moneyValue(_price(id, '${u['name']}').text) ?? 0) < 1);
 
     return Container(
       margin: const EdgeInsets.only(top: 14),
@@ -862,13 +840,13 @@ class _PurchaseReviewScreenState extends State<PurchaseReviewScreen> {
               child: TextField(
                 controller: _price(id, '${u['name']}'),
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: const [MoneyInput()],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: '${needsPrice ? tr('Bei ya kuuza') : tr('Bei (si lazima kubadilisha)')}: '
                       '${unitLabel('${u['name']}')}${asInt(u['base_quantity']) > 1 ? ' (${asInt(u['base_quantity'])})' : ''}',
                   hintText: needsPrice ? null : formatTsh(asInt(u['price'])),
-                  helperText: _profit(cost, asInt(u['base_quantity']), int.tryParse(_price(id, '${u['name']}').text.trim())),
+                  helperText: _profit(cost, asInt(u['base_quantity']), moneyValue(_price(id, '${u['name']}').text)),
                 ),
               ),
             ),

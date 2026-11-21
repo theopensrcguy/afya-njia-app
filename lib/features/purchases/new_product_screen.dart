@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
@@ -82,7 +81,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
       _baseUnit = d.units.first.name;
       _packs = [for (final u in d.units.skip(1)) DraftUnit(name: u.name, baseQuantity: u.baseQuantity, price: u.price)];
       for (final u in d.units) {
-        if (u.price != null) _priceFor(u.baseQuantity).text = '${u.price}';
+        if (u.price != null) _priceFor(u.baseQuantity).text = groupDigits(u.price!);
       }
       final first = _packs.isEmpty ? 1 : _packs.first.baseQuantity;
       _reorderPacks = d.reorderLevel ~/ first;
@@ -191,7 +190,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
     final units = [DraftUnit(name: _baseUnit, baseQuantity: 1), ..._packs];
     if (error == null && widget.canPrice) {
       for (final u in units) {
-        final p = int.tryParse(_priceFor(u.baseQuantity).text.trim());
+        final p = moneyValue(_priceFor(u.baseQuantity).text);
         if (p == null || p < 1) {
           error = tr('Weka bei ya kuuza kwa :a.', {'a': unitLabel(u.name)});
           break;
@@ -431,7 +430,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
 
   Widget _pricesCard() {
     final units = [DraftUnit(name: _baseUnit, baseQuantity: 1), ..._packs];
-    final base = int.tryParse(_priceFor(1).text.trim());
+    final base = moneyValue(_priceFor(1).text);
     return _card([
       const T('Bei ya kuuza', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
       for (final u in units)
@@ -440,7 +439,7 @@ class _NewProductScreenState extends State<NewProductScreen> {
           child: TextField(
             controller: _priceFor(u.baseQuantity),
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: const [MoneyInput()],
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               labelText: u.baseQuantity == 1

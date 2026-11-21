@@ -502,32 +502,45 @@ class _ReorderScreenState extends State<ReorderScreen> {
     );
     if (picked == null || !mounted) return;
     // "+ Bidhaa mpya": a product the shop doesn't have yet, made first (no stock), then ordered.
-    final p = picked is String ? await _createProduct(picked) : picked as Product;
-    if (p == null || !mounted) return;
-    final already = _inDraft(p.id) ||
-        (!toDraft && _groups.expand((g) => (g['lines'] as List).cast<Map<String, dynamic>>()).any((l) => asInt(l['product_id']) == p.id));
-    if (already) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(':name tayari iko kwenye orodha.', {'name': p.name}))));
-      return;
+    final List<Product> chosen;
+    if (picked is String) {
+      final made = await _createProduct(picked);
+      if (made == null || !mounted) return;
+      chosen = [made];
+    } else {
+      chosen = (picked as List).cast<Product>();
     }
-    final biggest = p.units.isEmpty ? null : p.units.last;
+    final skipped = <String>[];
     setState(() {
-      (toDraft ? _draftLines : (_extra[supplierKey] ??= [])).add({
-        if (toDraft) 'supplier_id': supplierKey,
-        'product_id': p.id,
-        'name': p.name,
-        'units': [for (final u in p.units) {'name': u.name, 'base_quantity': u.baseQuantity, 'price': u.price}],
-        'on_hand': p.onHand,
-        'days_left': null,
-        'on_order': 0,
-        'reason': 'manual',
-        'pack_name': biggest?.name ?? p.baseUnit,
-        'pack_size': biggest?.baseQuantity ?? 1,
-        'pack_cost': null,
-        'suggested_packs': null,
-      });
-      _packs[p.id] = 1;
+      for (final p in chosen) {
+        final already = _inDraft(p.id) ||
+            (!toDraft && _groups.expand((g) => (g['lines'] as List).cast<Map<String, dynamic>>()).any((l) => asInt(l['product_id']) == p.id)) ||
+            (_extra[supplierKey] ?? const []).any((l) => asInt(l['product_id']) == p.id);
+        if (already) {
+          skipped.add(p.name);
+          continue;
+        }
+        final biggest = p.units.isEmpty ? null : p.units.last;
+        (toDraft ? _draftLines : (_extra[supplierKey] ??= [])).add({
+          if (toDraft) 'supplier_id': supplierKey,
+          'product_id': p.id,
+          'name': p.name,
+          'units': [for (final u in p.units) {'name': u.name, 'base_quantity': u.baseQuantity, 'price': u.price}],
+          'on_hand': p.onHand,
+          'days_left': null,
+          'on_order': 0,
+          'reason': 'manual',
+          'pack_name': biggest?.name ?? p.baseUnit,
+          'pack_size': biggest?.baseQuantity ?? 1,
+          'pack_cost': null,
+          'suggested_packs': null,
+        });
+        _packs[p.id] = 1;
+      }
     });
+    if (skipped.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(':name tayari iko kwenye orodha.', {'name': skipped.join(', ')}))));
+    }
   }
 
   /// The same form as a new product in a delivery (catalogue name, brand,
@@ -1066,7 +1079,11 @@ class _ReorderScreenState extends State<ReorderScreen> {
   }
 }
 
-/// Search the shop's products to order any of them.
+/// Pick what to order (v0.46.1): the shop's whole list, A–Z, to scroll
+/// through, so nothing is forgotten; or type to narrow it. Tap several, then
+/// "Ongeza". The ones that are out or low come first under "Zinaisha", since
+/// those are what people forget. Pops a `List<Product>`, or the typed name (a
+/// String) for a product the shop doesn't have yet.
 class _ProductPickSheet extends StatefulWidget {
   const _ProductPickSheet({required this.api, this.canCreate = false});
 
@@ -1082,12 +1099,16 @@ class _ProductPickSheet extends StatefulWidget {
 class _ProductPickSheetState extends State<_ProductPickSheet> {
   final _q = TextEditingController();
   Timer? _debounce;
-  List<Product> _results = [];
+  List<Product> _all = []; // the whole list, loaded once
+  List<Product>? _found; // the server's answer for a typed search (names it knows differently)
+  final _picked = <int, Product>{};
+  bool _loading = true;
+  bool _lowOnly = false;
 
   @override
   void initState() {
     super.initState();
-    _search('');
+    _load();
   }
 
   @override
@@ -1097,53 +1118,148 @@ class _ProductPickSheetState extends State<_ProductPickSheet> {
     super.dispose();
   }
 
+  Future<void> _load() async {
+    try {
+      final d = await widget.api.get('products', query: {'all': '1'}) as List;
+      if (mounted) setState(() => _all = d.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList());
+    } on ApiException {
+      // an empty list says so below
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Typing filters the list at once; the server is asked too, for brand,
+  /// ingredient and barcode matches the name alone misses.
   void _search(String q) {
+    setState(() => _found = null);
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
+    if (q.trim().length < 2) return;
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
       try {
         final d = await widget.api.get('products', query: {'q': q.trim()}) as List;
-        if (mounted && q == _q.text) setState(() => _results = d.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList());
+        if (mounted && q == _q.text) setState(() => _found = d.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList());
       } on ApiException {
-        // keep the old list
+        // the local filter stays
       }
     });
   }
 
+  bool _low(Product p) => p.onHand <= 0 || p.lowStock;
+
+  List<Product> get _shown {
+    final q = _q.text.trim().toLowerCase();
+    var list = q.isEmpty ? _all : _all.where((p) => p.name.toLowerCase().contains(q)).toList();
+    if (q.isNotEmpty && _found != null) {
+      final ids = list.map((p) => p.id).toSet();
+      list = [...list, ..._found!.where((p) => !ids.contains(p.id))];
+    }
+    if (_lowOnly) list = list.where(_low).toList();
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final shown = _shown;
+    final typed = _q.text.trim();
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + MediaQuery.of(context).viewInsets.bottom),
       child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
+        height: MediaQuery.of(context).size.height * 0.82,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const T('Agiza bidhaa gani?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           TextField(
             controller: _q,
-            autofocus: true,
             onChanged: (q) {
-              setState(() {}); // the "Bidhaa mpya: …" button shows what was typed
+              setState(() {});
               _search(q);
             },
-            decoration: InputDecoration(labelText: tr('Tafuta dawa'), prefixIcon: Icon(Icons.search)),
+            decoration: InputDecoration(
+              hintText: tr('Andika jina, au pitia orodha'),
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: typed.isEmpty ? null : IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setState(() => _q.clear())),
+              isDense: true,
+            ),
           ),
+          const SizedBox(height: 8),
+          Row(children: [
+            FilterChip(
+              label: Text(tr('Zinaisha tu')),
+              avatar: const Icon(Icons.warning_amber_rounded, size: 16),
+              selected: _lowOnly,
+              onSelected: (v) => setState(() => _lowOnly = v),
+            ),
+            const Spacer(),
+            Text(tr('bidhaa :n', {'n': '${shown.length}'}), style: const TextStyle(fontSize: 12, color: mutedText)),
+          ]),
           Expanded(
-            child: ListView(children: [
-              for (final p in _results)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(tr('Zipo: :a', {'a': describeStock(p.onHand, p.units)})),
-                  trailing: const Icon(Icons.add_circle_outline, color: brandGreen),
-                  onTap: () => Navigator.of(context).pop(p),
-                ),
-            ]),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : shown.isEmpty
+                    ? Center(
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.inventory_2_outlined, size: 44, color: mutedText),
+                          const SizedBox(height: 8),
+                          Text(_all.isEmpty ? tr('Duka hili halina bidhaa bado.') : tr('Hakuna inayolingana na ":q".', {'q': typed}),
+                              textAlign: TextAlign.center, style: const TextStyle(color: mutedText)),
+                        ]),
+                      )
+                    : ListView.builder(
+                        itemCount: shown.length,
+                        itemBuilder: (context, i) {
+                          final p = shown[i];
+                          final on = _picked.containsKey(p.id);
+                          final letter = p.name.isEmpty ? '' : p.name[0].toUpperCase();
+                          final head = typed.isEmpty && (i == 0 || (shown[i - 1].name.isEmpty ? '' : shown[i - 1].name[0].toUpperCase()) != letter);
+                          final low = _low(p);
+                          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            if (head)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(4, 10, 0, 2),
+                                child: Text(letter, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: mutedText)),
+                              ),
+                            Material(
+                              color: on ? const Color(0xFFE6F4EC) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              child: ListTile(
+                                dense: true,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                leading: Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(shape: BoxShape.circle, color: p.onHand <= 0 ? dangerRed : (low ? warnAmber : brandGreen)),
+                                ),
+                                minLeadingWidth: 10,
+                                title: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                subtitle: Text(p.onHand <= 0 ? tr('Imeisha') : tr('Zipo: :a', {'a': describeStock(p.onHand, p.units)}),
+                                    style: TextStyle(fontSize: 12, color: p.onHand <= 0 ? dangerRed : mutedText)),
+                                trailing: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 150),
+                                  child: Icon(on ? Icons.check_circle_rounded : Icons.add_circle_outline,
+                                      key: ValueKey(on), color: brandGreen),
+                                ),
+                                onTap: () => setState(() => on ? _picked.remove(p.id) : _picked[p.id] = p),
+                              ),
+                            ),
+                          ]);
+                        },
+                      ),
           ),
-          if (widget.canCreate)
+          const SizedBox(height: 8),
+          if (_picked.isNotEmpty)
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(_picked.values.toList()),
+              icon: const Icon(Icons.playlist_add_check_rounded),
+              label: Text(tr('Ongeza :n kwenye oda', {'n': '${_picked.length}'})),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+            )
+          else if (widget.canCreate)
             OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).pop(_q.text.trim()),
+              onPressed: () => Navigator.of(context).pop(typed),
               icon: const Icon(Icons.add_box_outlined),
-              label: Text(_q.text.trim().length >= 2 ? tr('Bidhaa mpya: :a', {'a': _q.text.trim()}) : tr('Bidhaa mpya (haipo dukani)')),
+              label: Text(typed.length >= 2 ? tr('Bidhaa mpya: :a', {'a': typed}) : tr('Bidhaa mpya (haipo dukani)')),
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
             )
           else

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/money.dart';
+
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/units.dart';
@@ -29,7 +31,7 @@ class UnitsEditorScreen extends StatefulWidget {
 class _Row {
   _Row(this.name, int size, int price)
       : size = TextEditingController(text: size == 0 ? '' : '$size'),
-        price = TextEditingController(text: price == 0 ? '' : '$price');
+        price = TextEditingController(text: price == 0 ? '' : groupDigits(price));
 
   String name;
   final TextEditingController size;
@@ -77,7 +79,7 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
       final r = _rows[i];
       final name = normalUnitName(r.name);
       final size = i == 0 ? 1 : int.tryParse(r.size.text.trim()) ?? 0;
-      final price = int.tryParse(r.price.text.trim());
+      final price = moneyValue(r.price.text);
       if (name.isEmpty || size < 1 || price == null) {
         setState(() => _error = tr('Chagua kipimo, na ujaze ukubwa na bei kwa kila kimoja.'));
         return;
@@ -191,7 +193,7 @@ class _UnitsEditorScreenState extends State<UnitsEditorScreen> {
             child: TextField(
               controller: r.price,
               keyboardType: TextInputType.number,
-              inputFormatters: digits,
+              inputFormatters: const [MoneyInput()],
               decoration: InputDecoration(labelText: tr('Bei (TSh)')),
             ),
           ),

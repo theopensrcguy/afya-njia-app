@@ -72,11 +72,11 @@ class _RafuViewState extends State<RafuView> {
     ];
   }
 
+  /// Tapping an aisle shows only that aisle, opened in full; tapping it
+  /// again shows every aisle.
   void _jump(int id) {
     tick();
-    setState(() => _current = id);
-    final ctx = _keys[id]?.currentContext;
-    if (ctx != null) Scrollable.ensureVisible(ctx, duration: Motion.of(context, Motion.base), curve: Motion.curve);
+    setState(() => _current = _current == id ? null : id);
   }
 
   @override
@@ -86,7 +86,7 @@ class _RafuViewState extends State<RafuView> {
     final shown = [
       for (final a in aisles)
         if (q.isEmpty) a else _Aisle(a.id, a.name, a.items.where((p) => '${p['name']}'.toLowerCase().contains(q)).toList()),
-    ].where((a) => a.items.isNotEmpty).toList();
+    ].where((a) => a.items.isNotEmpty && (_current == null || a.id == _current)).toList();
     final hits = shown.fold<int>(0, (s, a) => s + a.items.length);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -121,7 +121,7 @@ class _RafuViewState extends State<RafuView> {
                 Padding(
                   key: _keys.putIfAbsent(a.id, GlobalKey.new),
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: _AisleCard(aisle: a, mode: widget.mode, searching: q.isNotEmpty, onBay: _sheet),
+                  child: _AisleCard(key: ValueKey('aisle${a.id}'), aisle: a, mode: widget.mode, searching: q.isNotEmpty || _current == a.id, onBay: _sheet),
                 ),
             ]),
           ),
@@ -345,7 +345,7 @@ class _RafuViewState extends State<RafuView> {
 }
 
 class _AisleCard extends StatefulWidget {
-  const _AisleCard({required this.aisle, required this.mode, required this.searching, required this.onBay});
+  const _AisleCard({super.key, required this.aisle, required this.mode, required this.searching, required this.onBay});
   final _Aisle aisle;
   final String mode;
   final bool searching;

@@ -6,6 +6,7 @@ import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
+import '../../core/range_picker.dart';
 import '../../core/i18n.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
@@ -33,6 +34,7 @@ class SalesListScreen extends StatefulWidget {
 
 class _SalesListScreenState extends State<SalesListScreen> {
   late DateTime _day = _today;
+  DateTime? _to; // set: a range from _day to _to (both included)
   final _q = TextEditingController();
   String _pay = 'all';
   int _tick = 0;
@@ -44,7 +46,21 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   ApiClient get _api => widget.session.api;
   bool get _allSales => widget.session.user!.can(Perm.viewShopSales);
-  String get _key => '${_day.year}-${_two(_day.month)}-${_two(_day.day)}';
+  String _iso(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
+  String get _key => _to == null ? _iso(_day) : '${_iso(_day)}_${_iso(_to!)}';
+  bool get _range => _to != null;
+  Map<String, String> get _query => _to == null ? {'date': _iso(_day)} : {'from': _iso(_day), 'to': _iso(_to!)};
+
+  /// "10 Okt – 2 Nov" (the year only when it isn't this year).
+  String get _periodText {
+    if (_to == null) return swahiliDate(_day);
+    String short(DateTime d) {
+      final m = monthNames[d.month - 1];
+      return '${d.day} ${m.length > 3 ? m.substring(0, 3) : m}${d.year == _today.year ? '' : ' ${d.year}'}';
+    }
+
+    return '${short(_day)} – ${short(_to!)}';
+  }
   static String _two(int n) => n.toString().padLeft(2, '0');
 
   @override
@@ -54,21 +70,35 @@ class _SalesListScreenState extends State<SalesListScreen> {
   }
 
   void _setDay(DateTime d) {
-    if (d == _day) return;
+    if (d == _day && _to == null) return;
     tick();
-    setState(() => (_day = d, _pay = 'all'));
+    setState(() => (_day = d, _to = null, _pay = 'all'));
   }
 
+  /// One day or a period: the calendar lets you tap one day, or a first and
+  /// a last day (e.g. 10 Oct – 2 Nov). At most 93 days at a time.
   Future<void> _pickDay() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _day,
-      firstDate: DateTime(2024),
-      lastDate: _today,
-      helpText: tr('Chagua siku'),
+    // Tap the days on a calendar (or a quick choice); no typing (v0.46.1).
+    final r = await pickDayOrRange(
+      context,
+      first: DateTime(2024),
+      last: _today,
+      initial: DateTimeRange(start: _day, end: _to ?? _day),
     );
-    if (d != null) _setDay(DateTime(d.year, d.month, d.day));
+    if (r == null || !mounted) return;
+    var start = DateTime(r.start.year, r.start.month, r.start.day);
+    final end = DateTime(r.end.year, r.end.month, r.end.day);
+    if (end.difference(start).inDays > 92) {
+      start = end.subtract(const Duration(days: 92));
+      _toast(tr('Kipindi kirefu zaidi ni siku 93: kimeanzia :d.', {'d': swahiliDate(start)}));
+    }
+    tick();
+    setState(() => (_day = start, _to = end == start ? null : end, _pay = 'all'));
   }
+
+  void _toast(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text)));
 
   String _dayName(DateTime d) {
     final diff = _today.difference(d).inDays;
@@ -99,7 +129,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
             child: CachedJson(
               api: _api,
               path: 'sales',
-              query: {'date': _key},
+              query: _query,
               refreshTick: _tick,
               skeleton: const Padding(
                 padding: EdgeInsets.all(16),
@@ -154,7 +184,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.calendar_month_outlined, size: 18, color: kPrimary),
                   const SizedBox(width: 6),
-                  Text(swahiliDate(_day), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kInk)),
+                  Text(_periodText, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kInk)),
                 ]),
               ),
             ),
@@ -175,7 +205,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
           for (final d in days.reversed)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: ChoiceChipX(label: _dayName(d), selected: d == _day, onTap: () => _setDay(d)),
+              child: ChoiceChipX(label: _dayName(d), selected: !_range && d == _day, onTap: () => _setDay(d)),
             ),
         ],
       ),
@@ -200,9 +230,12 @@ class _SalesListScreenState extends State<SalesListScreen> {
     }
 
     final shown = sales.where(match).toList()..sort((a, b) => '${b['sold_at']}'.compareTo('${a['sold_at']}'));
+    // One day: by hour. A period: by day.
     final byHour = <int, List<Map<String, dynamic>>>{};
     for (final s in shown) {
-      byHour.putIfAbsent(parseDate(s['sold_at'])?.toLocal().hour ?? 0, () => []).add(s);
+      final at = parseDate(s['sold_at'])?.toLocal();
+      final k = at == null ? 0 : (_range ? at.year * 10000 + at.month * 100 + at.day : at.hour);
+      byHour.putIfAbsent(k, () => []).add(s);
     }
     final counts = <String, int>{};
     for (final s in done) {
@@ -218,7 +251,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 40),
       children: [
         Appear(index: n++, child: _summary(done, voided)),
-        if (done.isNotEmpty) ...[const SizedBox(height: 12), Appear(index: n++, child: _hours(done))],
+        if (done.isNotEmpty) ...[const SizedBox(height: 12), Appear(index: n++, child: _range ? _days(done) : _hours(done))],
         const SizedBox(height: 14),
         if (sales.isNotEmpty) ...[
           TextField(
@@ -256,7 +289,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
             child: Column(children: [
               const Icon(Icons.receipt_long_outlined, size: 44, color: Color(0xFFB8C4C0)),
               const SizedBox(height: 10),
-              Text(_day == _today ? tr('Hakuna mauzo leo bado.') : tr('Hakuna mauzo siku hii.'), style: const TextStyle(color: kMuted)),
+              Text(_range ? tr('Hakuna mauzo kipindi hiki.') : (_day == _today ? tr('Hakuna mauzo leo bado.') : tr('Hakuna mauzo siku hii.')), style: const TextStyle(color: kMuted)),
             ]),
           )
         else if (shown.isEmpty)
@@ -284,7 +317,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
         Row(children: [
           Expanded(
             child: Text(
-              _day == _today ? (_allSales ? tr('Mauzo ya leo') : tr('Mauzo yangu ya leo')) : tr('Mauzo ya :d', {'d': swahiliDate(_day)}),
+              !_range && _day == _today ? (_allSales ? tr('Mauzo ya leo') : tr('Mauzo yangu ya leo')) : tr('Mauzo ya :d', {'d': _periodText}),
               style: const TextStyle(fontSize: 13, color: Color(0xFFB7D3C9)),
             ),
           ),
@@ -389,6 +422,65 @@ class _SalesListScreenState extends State<SalesListScreen> {
     );
   }
 
+  /// A period: one bar per day, the best day marked.
+  Widget _days(List<Map<String, dynamic>> done) {
+    final per = <int, int>{};
+    for (final s in done) {
+      final at = parseDate(s['sold_at'])?.toLocal();
+      if (at == null) continue;
+      final k = DateTime(at.year, at.month, at.day).difference(_day).inDays;
+      per[k] = (per[k] ?? 0) + asInt(s['total']);
+    }
+    final days = _to!.difference(_day).inDays + 1;
+    final max = math.max(1, per.values.fold<int>(0, math.max));
+    final best = per.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+    final bestDay = _day.add(Duration(days: best));
+    final avg = per.values.fold<int>(0, (a, v) => a + v) ~/ days;
+    final step = days <= 14 ? 2 : (days <= 31 ? 5 : 10);
+    return InsightCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: CardTitle(tr('Kwa siku'))),
+          Text(tr('wastani :a kwa siku', {'a': shortMoney(avg)}), style: const TextStyle(fontSize: 12, color: kMuted)),
+        ]),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 74,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            for (var i = 0; i < days; i++)
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: (per[i] ?? 0) / max),
+                    duration: Motion.of(context, Duration(milliseconds: 380 + math.min(i, 30) * 12)),
+                    curve: Motion.curve,
+                    builder: (_, v, _) => Container(
+                      height: math.max(3, v * 54),
+                      margin: EdgeInsets.symmetric(horizontal: days > 40 ? .5 : 1.5),
+                      decoration: BoxDecoration(
+                        color: per[i] == null ? const Color(0xFFEEF3F1) : (i == best ? kPrimary : const Color(0xFFCDEFE0)),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 12,
+                    child: i % step == 0
+                        ? OverflowBox(maxWidth: 40, child: Text('${_day.add(Duration(days: i)).day}', style: const TextStyle(fontSize: 9.5, color: kMuted)))
+                        : null,
+                  ),
+                ]),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 6),
+        Text(tr('Siku bora: :d (:a)', {'d': swahiliDate(bestDay), 'a': formatTsh(per[best]!)}), style: const TextStyle(fontSize: 12, color: kMuted)),
+      ]),
+    );
+  }
+
   // ------------------------------------------------------------ list
 
   Widget _hourGroup(int h, List<Map<String, dynamic>> list) {
@@ -399,7 +491,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           child: Row(children: [
-            Text(tr('Saa :h', {'h': '${_two(h)}:00'}), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: kInk)),
+            Text(_range ? swahiliDate(DateTime(h ~/ 10000, h ~/ 100 % 100, h % 100)) : tr('Saa :h', {'h': '${_two(h)}:00'}),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: kInk)),
             const SizedBox(width: 8),
             Text(tr('mauzo :n', {'n': list.length}), style: const TextStyle(fontSize: 12, color: kMuted)),
             const Spacer(),

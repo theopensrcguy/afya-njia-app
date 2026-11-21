@@ -102,7 +102,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       });
       _count = l.packs;
       _batch.text = l.batch;
-      _cost.text = '${l.packCost}';
+      _cost.text = groupDigits(l.packCost);
       _year = l.expiryYear;
       _month = l.expiryMonth;
     } else {
@@ -285,7 +285,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final pack = _pack;
     if (last == null || pack == null) return;
     final sameSize = asInt(last['pack_size']) == pack.size;
-    _cost.text = '${sameSize ? asInt(last['pack_cost']) : asInt(last['unit_cost']) * pack.size}';
+    _cost.text = groupDigits(sameSize ? asInt(last['pack_cost']) : asInt(last['unit_cost']) * pack.size);
   }
 
   Future<void> _otherPack() async {
@@ -308,7 +308,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
 
   void _save() {
     final batch = _batch.text.trim().toUpperCase();
-    final cost = int.tryParse(_cost.text.trim());
+    final cost = moneyValue(_cost.text);
     String? error;
     if (_pack == null) {
       error = tr('Chagua kimekuja kwa kifungashio gani.');
@@ -496,7 +496,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final p = _product!;
     final base = p.units.first.name;
     final pack = _pack;
-    final cost = int.tryParse(_cost.text.trim()) ?? 0;
+    final cost = moneyValue(_cost.text) ?? 0;
     final total = cost * _count;
 
     return Column(children: [
@@ -543,7 +543,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
 
             // Packaging + how many
             _card([
-              const T('Kimekuja kwa kifungashio gani?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              _label('IMEKUJA KWENYE'),
               if (_last != null)
                 Text(
                   tr(':when: :pack ya :base :size, :cost', {
@@ -558,21 +558,44 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                   style: const TextStyle(fontSize: 12, color: mutedText),
                 ),
               const SizedBox(height: 10),
-              Wrap(spacing: 8, runSpacing: 6, children: [
-                for (final x in _packs)
-                  ChoiceChip(
-                    label: Text(x.size == 1 ? unitLabel(x.name) : '${unitLabel(x.name)} · ${unitLabel(base, x.size)} ${x.size}'),
-                    selected: pack != null && pack.same(x),
-                    showCheckmark: false,
-                    selectedColor: brandGreen,
-                    labelStyle: TextStyle(color: pack != null && pack.same(x) ? Colors.white : inkColor, fontWeight: FontWeight.w700),
-                    onSelected: (_) => setState(() {
-                      _pack = x;
-                      _fillCostFromLast();
-                    }),
-                  ),
-                ActionChip(label: const T('+ Nyingine'), onPressed: _otherPack),
-              ]),
+              // Packs as equal tiles: the name, and what's inside it.
+              LayoutBuilder(builder: (context, box) {
+                final cols = box.maxWidth > 420 ? 4 : 3;
+                final w = (box.maxWidth - (cols - 1) * 8) / cols;
+                Widget tile(String name, String size, bool on, VoidCallback onTap) => SizedBox(
+                      width: w,
+                      child: Material(
+                        color: on ? const Color(0xFFE7F6EF) : Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(color: on ? brandGreen : const Color(0xFFDCE5E1), width: on ? 1.8 : 1.2),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            onTap();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 2),
+                              Text(size, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: mutedText)),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    );
+                return Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final x in _packs)
+                    tile(unitLabel(x.name), x.size == 1 ? tr('kimoja') : '${unitLabel(base, x.size)} ${x.size}', pack != null && pack.same(x), () => setState(() {
+                          _pack = x;
+                          _fillCostFromLast();
+                        })),
+                  tile(tr('+ Nyingine'), tr('kifungashio kingine'), false, _otherPack),
+                ]);
+              }),
               const SizedBox(height: 14),
               Row(children: [
                 Expanded(
@@ -606,6 +629,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
 
             // Batch
             _card([
+              _label('KWENYE BOKSI'),
               TextField(
                 controller: _batch,
                 textCapitalization: TextCapitalization.characters,
@@ -633,42 +657,118 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                 ),
             ]),
 
-            // Cost
+            // Cost, against last time and the selling price.
             _card([
+              _label('BEI'),
               TextField(
                 controller: _cost,
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: const [MoneyInput()],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: tr('Bei ya kununua kwa :a (TSh)', {'a': pack == null ? tr('kifungashio') : unitLabel(pack.name)}),
                   helperText: _sellingHint(cost),
                 ),
               ),
+              if (_compare(cost) case final rows? when rows.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFF5F8F7), borderRadius: BorderRadius.circular(14)),
+                  child: Column(children: [
+                    for (final (label, value, color) in rows)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(children: [
+                          Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: mutedText))),
+                          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
+                        ]),
+                      ),
+                  ]),
+                ),
             ]),
             if (_error != null) Text(_error!, style: const TextStyle(color: dangerRed, fontWeight: FontWeight.w700)),
           ],
         ),
       ),
+      // The line's total and the one button, in a dark bar that stays put.
       SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              const Expanded(child: T('Jumla ya bidhaa hii', style: TextStyle(color: mutedText))),
-              Text(formatTsh(total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            ]),
-            const SizedBox(height: 8),
+        minimum: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 10, 10, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF14211D),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [BoxShadow(color: Color(0x44142A23), blurRadius: 24, offset: Offset(0, 10))],
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(
+                  pack == null || cost == 0 ? tr('Jumla ya bidhaa hii') : '${unitLabel(pack.name, _count)} $_count × ${formatTsh(cost)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFB7C7C1)),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(formatTsh(total), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
+                ),
+              ]),
+            ),
             FilledButton(
               onPressed: _save,
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-              child: Text(widget.initial == null ? tr('Ongeza kwenye mzigo') : tr('Hifadhi mabadiliko')),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF3DDC97),
+                foregroundColor: const Color(0xFF0E3B31),
+                minimumSize: const Size(0, 50),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: Text(widget.initial == null ? tr('Weka kwenye mzigo') : tr('Hifadhi mabadiliko'), style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
           ]),
         ),
       ),
     ]);
+  }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Text(tr(text), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: .6, color: mutedText)),
+      );
+
+  /// Last time's price for this pack, the selling price and the profit per
+  /// smallest unit: the three things to check before accepting a price.
+  List<(String, String, Color)>? _compare(int cost) {
+    final pack = _pack;
+    if (pack == null || _product == null) return null;
+    final base = _product!.units.first;
+    final out = <(String, String, Color)>[];
+    final last = _last;
+    if (last != null && asInt(last['pack_size']) == pack.size && asInt(last['pack_cost']) > 0) {
+      final lc = asInt(last['pack_cost']);
+      final diff = cost == 0 ? 0 : ((cost - lc) * 100 / lc).round();
+      out.add((
+        last['from_this_supplier'] == true ? tr('Mara ya mwisho (:s)', {'s': widget.supplierName ?? tr('msambazaji huyu')}) : tr('Mzigo wa mwisho'),
+        '${formatTsh(lc)}${diff == 0 ? '' : (diff > 0 ? '  ↑ $diff%' : '  ↓ ${-diff}%')}',
+        diff > 0 ? dangerRed : inkColor,
+      ));
+    }
+    if (base.price > 0) {
+      out.add((tr('Unauza kwa'), '${formatTsh(base.price)} / ${unitLabel(base.name)}', inkColor));
+      if (cost > 0) {
+        final per = cost / pack.size;
+        final profit = base.price - per;
+        out.add((
+          tr('Faida kwa :u', {'u': unitLabel(base.name)}),
+          '${formatTsh(profit.round())} · ${(profit / base.price * 100).round()}%',
+          profit <= 0 ? dangerRed : brandGreen,
+        ));
+      }
+    }
+    return out;
   }
 
   /// "TSh 20 kwa kidonge · unauza TSh 50": is this delivery worth it?

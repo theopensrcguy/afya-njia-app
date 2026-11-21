@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/loader.dart';
 import '../../core/api_client.dart';
@@ -242,7 +241,7 @@ class _AddExpenseScreenState extends State<_AddExpenseScreen> {
   }
 
   Future<void> _save() async {
-    final amount = int.tryParse(_amount.text) ?? 0;
+    final amount = moneyValue(_amount.text) ?? 0;
     if (_cat == null || amount <= 0) {
       setState(() => _error = tr('Chagua aina na weka kiasi.'));
       return;
@@ -283,7 +282,7 @@ class _AddExpenseScreenState extends State<_AddExpenseScreen> {
         TextField(
           controller: _amount,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: const [MoneyInput()],
           decoration: InputDecoration(labelText: tr('Kiasi (TSh)')),
         ),
         const SizedBox(height: 16),
@@ -302,7 +301,7 @@ class _AddExpenseScreenState extends State<_AddExpenseScreen> {
           title: Text(_iso(_day)),
           subtitle: const T('Tarehe'),
           onTap: () async {
-            final d = await showDatePicker(context: context, initialDate: _day, firstDate: DateTime.now().subtract(const Duration(days: 365)), lastDate: DateTime.now());
+            final d = await showDatePicker(context: context, initialEntryMode: DatePickerEntryMode.calendarOnly, initialDate: _day, firstDate: DateTime.now().subtract(const Duration(days: 365)), lastDate: DateTime.now());
             if (d != null) setState(() => _day = d);
           },
         ),

@@ -1,13 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import '../../core/format.dart';
 import '../../core/ids.dart';
 import '../../core/money.dart';
+import '../../core/month_picker.dart';
+import '../../core/smooth.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
@@ -16,7 +20,10 @@ import '../purchases/new_product.dart';
 import '../purchases/new_product_screen.dart';
 import '../../core/i18n.dart';
 
-/// "Ingiza kwa wingi": many lines at once, on a laptop.
+/// "Ingiza kwa wingi": many lines at once. A grid on a laptop or tablet; on a
+/// phone (under 720 wide) each line is a card, so nothing scrolls sideways.
+/// EXP is picked as month + year; amounts show thousands commas; the Excel
+/// template can be downloaded here and uploaded back once filled (v0.45.3).
 ///
 /// For the two days when typing on a phone hurts most: setup day (everything
 /// in the shop, from the owner's notebook) and big deliveries (a 40-line
@@ -145,6 +152,8 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
   Future<void> _choosePack(_Row r) async {
     final p = r.product;
     if (p == null) return;
+    // Close the keyboard first: a list opened over it hides half its choices.
+    FocusManager.instance.primaryFocus?.unfocus();
     final base = p.units.first.name;
     final picked = await showDialog<(String, int)>(
       context: context,
@@ -224,6 +233,77 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
     });
   }
 
+  // ------------------------------------------------------------- template
+
+  /// The browser downloads it (the phone can't add its sign-in to a browser
+  /// download, so the server gives a link that works for 10 minutes).
+  Future<void> _downloadTemplate() async {
+    try {
+      final r = await _api.get('bulk/template-link') as Map<String, dynamic>;
+      final ok = await launchUrl(Uri.parse('${r['url']}'), mode: LaunchMode.externalApplication);
+      if (!ok && mounted) setState(() => (_banner = tr('Kivinjari hakikufunguka.'), _bannerOk = false));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_banner = e.message, _bannerOk = false));
+    }
+  }
+
+  /// The filled template: its rows come onto this sheet (nothing is saved
+  /// until Hifadhi). Exact names find the shop's products; the rest wait for
+  /// a tap on the name, as when pasting.
+  Future<void> _uploadTemplate() async {
+    final f = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: const ['xlsx', 'xls', 'csv']);
+    if (f == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final bytes = await f.readAsBytes();
+      final res = await _api.upload('bulk/upload', 'file', bytes, f.name) as Map<String, dynamic>;
+      final rows = ((res['rows'] as List?) ?? const []).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      var matched = 0;
+      setState(() {
+        _rows.removeWhere((r) => r.isEmpty);
+        for (final x in rows) {
+          final r = _Row()
+            ..name.text = '${x['name'] ?? ''}'
+            ..packs.text = '${x['packs'] ?? ''}'
+            ..batch.text = '${x['batch'] ?? ''}'
+            ..exp.text = '${x['exp'] ?? ''}'
+            ..cost.text = moneyValue('${x['cost'] ?? ''}') == null ? '' : groupDigits(moneyValue('${x['cost']}')!)
+            ..noBatch = x['no_batch'] == true
+            ..packName = normalUnitName('${x['pack_name'] ?? ''}')
+            ..packSize = asInt(x['pack_size']) < 1 ? 1 : asInt(x['pack_size']);
+          final p = x['product'] as Map<String, dynamic>?;
+          if (p != null) {
+            final units = [for (final u in ((p['units'] as List?) ?? const []).cast<Map<String, dynamic>>()) ProductUnit.fromJson(u)];
+            if (units.isNotEmpty) {
+              r.product = Product(
+                id: asInt(p['id']), name: '${p['name']}', baseUnit: '${p['base_unit']}',
+                unitPrice: units.first.price, onHand: asInt(p['on_hand']), lowStock: false, units: units,
+              );
+              r.name.text = r.product!.name;
+              if (r.packName.isEmpty) {
+                r.packName = units.last.name;
+                r.packSize = units.last.baseQuantity;
+              }
+              matched++;
+            }
+          }
+          _rows.add(r);
+        }
+        _rows.add(_Row());
+        _bannerOk = matched == rows.length;
+        _banner = tr('Mistari :lines kutoka kiolezo. :a', {
+          'lines': rows.length,
+          'a': rows.length - matched == 0 ? tr('Bidhaa zote zimetambuliwa.') : tr('Bidhaa :a hazijatambuliwa: zichague (bofya jina).', {'a': rows.length - matched}),
+        });
+      });
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_banner = e.message, _bannerOk = false));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   // ------------------------------------------------------------- order
 
   Future<void> _fillFromOrder() async {
@@ -274,12 +354,12 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
       if (r.draft != null) 'new_product': r.draft!.toJson() else 'product_id': r.product!.id,
       if (r.linkId != null) 'link_catalogue_item_id': r.linkId,
       if (r.linkVariant != null) 'link_variant': r.linkVariant,
-      'batch_number': r.batch.text.trim(),
+      if (r.noBatch && r.batch.text.trim().isEmpty) 'no_batch': true else 'batch_number': r.batch.text.trim(),
       'expiry_month': '$y-${m.toString().padLeft(2, '0')}',
       'pack_name': r.packName,
       'pack_size': r.packSize,
       'packs': int.parse(r.packs.text),
-      'pack_cost': int.tryParse(r.cost.text) ?? 0,
+      'pack_cost': moneyValue(r.cost.text) ?? 0,
     };
   }
 
@@ -308,7 +388,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
         if (!dryRun) 'client_uuid': _clientUuid,
         if (!_opening && _supplierId != null) 'supplier_id': _supplierId,
         'invoice_number': _opening ? _openingLabel : (_invoice.text.trim().isEmpty ? null : _invoice.text.trim()),
-        if (!_opening && int.tryParse(_invoiceTotal.text) != null) 'invoice_total': int.parse(_invoiceTotal.text),
+        if (!_opening && moneyValue(_invoiceTotal.text) != null) 'invoice_total': moneyValue(_invoiceTotal.text),
         'lines': [for (final r in send) _lineJson(r)],
       };
       final res = await _api.post(dryRun ? 'purchases?dry_run=1' : 'purchases', body) as Map<String, dynamic>;
@@ -376,7 +456,8 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
         child: Actions(
           actions: {_NewRowIntent: CallbackAction<_NewRowIntent>(onInvoke: (_) => _addRow())},
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(MediaQuery.of(context).size.width < 720 ? 14 : 24, 8, MediaQuery.of(context).size.width < 720 ? 14 : 24, 32),
             children: [
               Wrap(spacing: 16, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 SegmentedButton<bool>(
@@ -389,8 +470,19 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
                   style: SegmentedButton.styleFrom(selectedBackgroundColor: brandGreen, selectedForegroundColor: Colors.white),
                   onSelectionChanged: (v) => setState(() => _opening = v.first),
                 ),
-                const T('Tab = kisanduku kinachofuata · Enter kwenye bei = mstari mpya · Ctrl+N = mstari mpya',
-                    style: TextStyle(fontSize: 12, color: mutedText)),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _downloadTemplate,
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const T('Pakua kiolezo (Excel)'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _uploadTemplate,
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  label: const T('Pakia kiolezo kilichojazwa'),
+                ),
+                if (MediaQuery.of(context).size.width >= 720)
+                  const T('Tab = kisanduku kinachofuata · Enter kwenye bei = mstari mpya · Ctrl+N = mstari mpya',
+                      style: TextStyle(fontSize: 12, color: mutedText)),
               ]),
               const SizedBox(height: 12),
               _header(total),
@@ -409,7 +501,12 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const T('Mstari mpya')),
+                child: Wrap(spacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  TextButton.icon(onPressed: _addRow, icon: const Icon(Icons.add), label: const T('Mstari mpya')),
+                  // As on the web: a product the shop doesn't have yet. Type its
+                  // name in a line; the list offers "Ongeza … kama bidhaa mpya".
+                  const T('Bidhaa mpya? Andika jina lake kwenye mstari.', style: TextStyle(fontSize: 12, color: mutedText)),
+                ]),
               ),
               const SizedBox(height: 8),
               Wrap(spacing: 12, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -447,17 +544,21 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
   }
 
   Widget _header(int total) {
+    final oneLine = Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: T('Mstari mmoja = batch moja.', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+    );
     if (_opening) {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: softCard(radius: 16),
-        child: Text(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [oneLine, Text(
           tr('Hisa ya mwanzo: kila kitu kilichopo dukani siku ya kuanza. Hesabu kutoka kwenye rafu, si kutoka kumbukumbu. Bila msambazaji: Agiza itajifunza msambazaji wa kila bidhaa mzigo wa kwanza ukifika.'),
           style: TextStyle(fontSize: 13),
-        ),
+        )]),
       );
     }
-    final inv = int.tryParse(_invoiceTotal.text);
+    final inv = moneyValue(_invoiceTotal.text);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: softCard(radius: 16),
@@ -484,7 +585,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
           child: TextField(
             controller: _invoiceTotal,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: const [MoneyInput()],
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(labelText: tr('Jumla ya ankara')),
           ),
@@ -500,9 +601,210 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
     );
   }
 
-  static const _widths = <double>[36, 300, 190, 80, 120, 100, 140, 190, 40];
+  static const _widths = <double>[36, 300, 190, 80, 120, 120, 140, 190, 40];
+
+  /// EXP: typed as 06/2028 on a keyboard, or picked (month + year) from the
+  /// calendar button; on a phone the box only opens the picker.
+  Widget _expField(_Row r, InputDecoration dec, {bool phone = false}) {
+    Future<void> pick() async {
+      FocusManager.instance.primaryFocus?.unfocus();
+      final now = DateTime.now();
+      final picked = await pickMonthYear(context,
+          initial: r.expiry, from: (now.year - 1, now.month), title: tr('EXP (mwezi na mwaka kwenye boksi)'));
+      if (picked != null && mounted) setState(() => r.exp.text = '${picked.$2.toString().padLeft(2, '0')}/${picked.$1}');
+    }
+
+    return TextField(
+      controller: r.exp,
+      readOnly: phone,
+      onTap: phone ? pick : null,
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9/]')), LengthLimitingTextInputFormatter(7)],
+      onChanged: (_) => setState(() {}),
+      decoration: dec.copyWith(
+        suffixIcon: IconButton(
+          tooltip: tr('Chagua mwezi'),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.calendar_month_outlined, size: 18, color: brandGreen),
+          onPressed: pick,
+        ),
+      ),
+    );
+  }
 
   Widget _grid() {
+    return LayoutBuilder(builder: (context, box) => box.maxWidth < 720 ? _cards() : _table());
+  }
+
+  /// Phone: one card per line, fields stacked so nothing scrolls sideways.
+  Widget _cards() {
+    return Column(children: [
+      for (var i = 0; i < _rows.length; i++) Appear(index: i, child: _card(i, _rows[i])),
+    ]);
+  }
+
+  Widget _card(int index, _Row r) {
+    final problem = r.problem;
+    final warning = problem == null ? r.warning(_costs) : null;
+    final edge = r.isExpired
+        ? const Color(0xFFB8C4C0)
+        : problem != null
+            ? dangerRed
+            : warning != null
+                ? warnAmber
+                : (r.isEmpty ? const Color(0xFFDCE5E1) : brandGreen);
+    InputDecoration dec(String label, [String? hint]) => InputDecoration(
+          labelText: label,
+          hintText: hint,
+          isDense: true,
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        );
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: r.isExpired ? const Color(0xFFF3F3F3) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border(left: BorderSide(color: edge, width: 4)),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10, right: 8),
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(color: const Color(0xFFEEF3F1), borderRadius: BorderRadius.circular(8)),
+            child: Center(child: Text('${index + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: mutedText))),
+          ),
+          Expanded(child: _nameCell(r)),
+          IconButton(tooltip: tr('Futa mstari'), onPressed: () => _removeRow(r), icon: const Icon(Icons.close, size: 18)),
+        ]),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // The same columns as the web sheet (v0.46.1): Kifungashio, Idadi,
+            // Batch, EXP, Bei ya kununua (kwa kifungashio), Jumla.
+            _label(tr('Kifungashio na idadi')),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: r.product == null ? null : () => _choosePack(r),
+                  style: OutlinedButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    minimumSize: const Size.fromHeight(46),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                  label: Text(r.packLabel, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 96,
+                child: TextField(
+                  controller: r.packs,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() {}),
+                  decoration: dec(tr('Idadi'), '0'),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            _label(tr('Batch na EXP')),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: r.batch,
+                  enabled: !r.noBatch,
+                  onChanged: (_) => setState(() {}),
+                  decoration: dec(tr('Batch'), r.noBatch ? tr('hakuna') : 'A91'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _expField(r, dec(tr('EXP'), '06/2028'), phone: true)),
+            ]),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: r.noBatch ? brandGreen : mutedText),
+                onPressed: () => setState(() => r.noBatch = !r.noBatch),
+                icon: Icon(r.noBatch ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18),
+                label: const T('Haina batch kwenye boksi'),
+              ),
+            ),
+            _label(tr('Bei ya kununua (kwa kifungashio)')),
+            TextField(
+              controller: r.cost,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [MoneyInput()],
+              onChanged: (_) => setState(() {}),
+              decoration: dec(
+                tr('TSh kwa :a', {'a': r.packName.isEmpty ? tr('kifungashio') : unitLabel(r.packName)}),
+                '0',
+              ),
+            ),
+            if (_costs)
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: const Color(0xFFEFF4F2), borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  const T('Jumla', style: TextStyle(fontWeight: FontWeight.w700, color: mutedText)),
+                  const Spacer(),
+                  Text(r.lineTotal > 0 ? formatTsh(r.lineTotal) : '—', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                ]),
+              ),
+            if (r.product != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                r.draft != null
+                    ? (r.draft!.hasPrices ? r.draft!.units.map((u) => '${unitLabel(u.name)} ${formatTsh(u.price!)}').join(' · ') : tr('Bei ya kuuza: mwenye duka ataweka'))
+                    : '${tr('Bei ya kuuza')}: ${r.product!.units.map((u) => '${unitLabel(u.name)} ${formatTsh(u.price)}').join(' · ')}',
+                style: const TextStyle(fontSize: 12, color: mutedText),
+              ),
+            ],
+            if (!r.isEmpty && (problem ?? warning ?? r.note) != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                problem ?? warning ?? r.note!,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: problem != null ? dangerRed : (warning != null ? warnAmber : mutedText)),
+              ),
+            ],
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(left: 2, bottom: 6),
+        child: Text(text.toUpperCase(), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: .5, color: mutedText)),
+      );
+
+  Widget _nameCell(_Row r) => _NameCell(
+        row: r,
+        api: _api,
+        drafts: _drafts,
+        onProduct: (p) => _setProduct(r, p),
+        onDraft: (d) => _setProduct(r, d.asProduct(), draft: d),
+        onCatalogue: (item, v) => _pickCatalogue(r, item, v, null),
+        onTyped: (t) => _pickCatalogue(r, null, null, t),
+        onEditDraft: () => _editDraft(r),
+        onClear: () => setState(() {
+          r
+            ..product = null
+            ..draft = null
+            ..linkId = null
+            ..linkVariant = null
+            ..serverError = null;
+        }),
+      );
+
+  Widget _table() {
     const heads = ['#', 'BIDHAA', 'KIFUNGASHIO', 'IDADI', 'BATCH', 'EXP (MM/YYYY)', 'BEI YA KUNUNUA', 'BEI YA KUUZA', ''];
     return Container(
       decoration: softCard(radius: 16),
@@ -556,24 +858,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           cell(0, Padding(padding: const EdgeInsets.only(top: 12), child: Text('${index + 1}', style: const TextStyle(color: mutedText)))),
-          cell(1, _NameCell(
-            row: r,
-            api: _api,
-            drafts: _drafts,
-            onProduct: (p) => _setProduct(r, p),
-            onDraft: (d) => _setProduct(r, d.asProduct(), draft: d),
-            onCatalogue: (item, v) => _pickCatalogue(r, item, v, null),
-            onTyped: (t) => _pickCatalogue(r, null, null, t),
-            onEditDraft: () => _editDraft(r),
-            onClear: () => setState(() {
-              r
-                ..product = null
-                ..draft = null
-                ..linkId = null
-                ..linkVariant = null
-                ..serverError = null;
-            }),
-          )),
+          cell(1, _nameCell(r)),
           cell(2, OutlinedButton(
             onPressed: r.product == null ? null : () => _choosePack(r),
             style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8)),
@@ -587,16 +872,11 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
             decoration: dec('0'),
           )),
           cell(4, TextField(controller: r.batch, onChanged: (_) => setState(() {}), decoration: dec('A91'))),
-          cell(5, TextField(
-            controller: r.exp,
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9/]')), LengthLimitingTextInputFormatter(7)],
-            onChanged: (_) => setState(() {}),
-            decoration: dec('06/2028'),
-          )),
+          cell(5, _expField(r, dec('06/2028'))),
           cell(6, TextField(
             controller: r.cost,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: const [MoneyInput()],
             onChanged: (_) => setState(() {}),
             // Enter on the last typed cell: next row.
             onSubmitted: (_) {
@@ -667,6 +947,7 @@ class _Row {
   final cost = TextEditingController();
   final nameFocus = FocusNode();
   String? serverError;
+  bool noBatch = false; // "Haina batch": stored as BILA-BATCH-<date> by the server
 
   void dispose() {
     for (final c in [name, packs, batch, exp, cost]) {
@@ -697,10 +978,10 @@ class _Row {
     return e.$1 < now.year || (e.$1 == now.year && e.$2 < now.month);
   }
 
-  int get lineTotal => (int.tryParse(packs.text) ?? 0) * (int.tryParse(cost.text) ?? 0);
+  int get lineTotal => (int.tryParse(packs.text) ?? 0) * (moneyValue(cost.text) ?? 0);
 
   String get packLabel {
-    if (product == null) return '—';
+    if (product == null) return tr('Chagua bidhaa kwanza');
     if (packName.isEmpty) return tr('Chagua');
     final base = product!.units.first.name;
     return packSize > 1 ? '${unitLabel(packName)} (${unitLabel(base, packSize)} $packSize)' : unitLabel(packName);
@@ -712,7 +993,7 @@ class _Row {
     if (isEmpty) return null;
     if (product == null) return name.text.trim().isEmpty ? tr('Chagua bidhaa') : tr('Chagua ":a" kwenye orodha (bofya jina)', {'a': name.text.trim()});
     if ((int.tryParse(packs.text) ?? 0) < 1) return tr('Andika idadi');
-    if (batch.text.trim().isEmpty) return tr('Andika namba ya batch (iko kwenye boksi)');
+    if (batch.text.trim().isEmpty && !noBatch) return tr('Andika namba ya batch (iko kwenye boksi)');
     if (expiry == null) return tr('EXP iandikwe kama 06/2028');
     if (cost.text.isEmpty) return tr('Andika bei ya kununua kwa :a', {'a': unitLabel(packName)});
     return null;
@@ -727,7 +1008,7 @@ class _Row {
       final months = (e.$1 - now.year) * 12 + e.$2 - now.month;
       if (months < 2) return tr('Inaisha karibuni (:a/:b): iuze kwanza', {'a': e.$2, 'b': e.$1});
     }
-    final c = int.tryParse(cost.text);
+    final c = moneyValue(cost.text);
     if (costs && c != null && product != null && packSize > 0) {
       final perBase = c / packSize;
       final p = draft != null ? (draft!.units.first.price ?? 0) : product!.units.first.price;
@@ -939,20 +1220,19 @@ class _OtherPackDialogState extends State<_OtherPackDialog> {
     final size = int.tryParse(_size.text) ?? 0;
     return AlertDialog(
       title: const T('Kifungashio kingine'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        InputDecorator(
-          decoration: InputDecoration(labelText: tr('Jina')),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _name,
-              isDense: true,
-              isExpanded: true,
-              items: [for (final (id, label) in standardUnits) DropdownMenuItem(value: id, child: Text(label))],
-              onChanged: (v) => setState(() => _name = v),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
+      // Chips, not a drop-down list: nothing opens over the keyboard.
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        T('Jina', style: const TextStyle(fontSize: 12, color: mutedText)),
+        const SizedBox(height: 6),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final (id, label) in standardUnits)
+            ChoiceChipX(label: label, selected: _name == id, onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              setState(() => _name = id);
+            }),
+        ]),
+        const SizedBox(height: 14),
         TextField(
           controller: _size,
           keyboardType: TextInputType.number,
@@ -961,6 +1241,7 @@ class _OtherPackDialogState extends State<_OtherPackDialog> {
           decoration: InputDecoration(labelText: tr('Ina :a ngapi?', {'a': unitLabel(widget.baseUnit, 2)})),
         ),
       ]),
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const T('Ghairi')),
         FilledButton(

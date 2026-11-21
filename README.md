@@ -487,3 +487,87 @@ Built from canvas screens 5–9. Each screen reads one endpoint (see the backend
   - `staggered()` applies Appear to a column.
   - Used on home, Zaidi, Mauzo, Fedha, Matumizi and Utabiri; off with Reduce Motion.
 - `CachedJson` also takes list answers (as `{"items": [...]}`).
+
+### v0.45.3: periods, counter, bulk entry on a phone, commas everywhere
+- **Mauzo:**
+  - The date button opens a calendar where you tap one day or a first and last day (e.g. 10 Oct – 2 Nov; at most 93 days).
+  - A period shows one bar per day with the best day and the daily average, and the list is grouped by day.
+- **Rafu:** tapping an aisle card shows only that aisle, opened in full. Tapping it again shows them all. The counter's Aina chips work the same way.
+- **Counter (Mauzo mapya):**
+  - **One scroll:** the Aina chips, the Haraka tiles and the products move together. Once the tiles are out of sight, a slim Haraka strip appears under the search (↑ jumps back up).
+  - **Ficha / Onyesha** folds the tiles away; the choice is remembered.
+  - **The basket floats:** a dark pill with the count, the total counting up, and **Lipa**.
+  - **Checkout opens as a sheet:** **⌄** or **Ongeza bidhaa** slides it down to keep choosing, and the basket stays.
+  - **Payment:** four equal tiles with icons (Taslimu, Simu, Bima, Deni), so "Insurance" no longer wraps. The total sits under its label.
+- **Amounts:**
+  - Every money box shows thousands commas as you type: prices, costs, invoice totals, expenses, the float, counted cash, discount, split parts, the daily goal.
+  - `MoneyInput` in `core/money.dart` formats; `moneyValue()` reads the number back.
+- **Ingiza kwa wingi on a phone:**
+  - Each line is a card (product; pack + quantity; batch + EXP; buying price with the line total), with no sideways scrolling.
+  - **EXP is picked:** year, then month (`core/month_picker.dart`). On a laptop it can still be typed, with a calendar button.
+  - "Haina batch kwenye boksi" on each card.
+  - Choosing a pack closes the keyboard first, and "another pack" uses chips instead of a list that opened under the keyboard.
+  - **Pakua kiolezo (Excel)** opens a 10-minute link in the browser. **Pakia kiolezo kilichojazwa** reads the filled file back onto the sheet; nothing is saved until Hifadhi.
+  - Needs `flutter pub add file_picker` (13.x — `FilePicker.pickFile()` + `readAsBytes()`; 10.x clashes with flutter_secure_storage 11 over win32). iOS minimum is 14.0.
+- **Zaidi:** a tile now opens its screen on top of Zaidi, so Back returns to Zaidi, not home.
+
+## Ripoti, Wasambazaji, Pokea mzigo redesigned (v0.46)
+Built from canvas boards 10–14.
+- **Ripoti** (`features/insights/report_screen.dart`; Zaidi → Ripoti, and a link in Fedha):
+  - Wiki / Mwezi / Miezi 3 / Mwaka.
+  - A dark verdict card: one sentence and four vitals (sales and net profit count up).
+  - **Mambo ya kufanya sasa:** each action opens where it's fixed (Agiza, Madeni, the product, the stock list on its filter).
+  - Where the profit goes (animated bars) and the 80/20 rule, with low top sellers in red.
+  - Profit by category, with the best one named.
+  - Money resting on shelves: value, turnover, days of cover, stock age.
+  - Losses and debts, customers, and buying prices that moved.
+  - **Share** sends a short summary to WhatsApp.
+- **Wasambazaji** (`features/suppliers/suppliers_screen.dart`):
+  - A dark card with the 90-day spend split by supplier, then search and sorting (by money, latest delivery, name).
+  - **Cards:** initials, contact, 90-day spend, last delivery, rhythm, orders waiting and when expected, with call, WhatsApp and **Agiza**.
+  - **One supplier:**
+    - Piga / WhatsApp / Agiza / **Pokea**, where Pokea opens a delivery with that supplier already chosen.
+    - Four numbers, and waiting orders.
+    - "Bidhaa na bei", with the last price and ↑/↓ change, and "Mizigo".
+    - Contacts you can tap.
+- **Pokea mzigo:**
+  - Three numbered steps:
+    1. the supplier, as avatars (tap again to clear);
+    2. the invoice: number, total with commas, and photo;
+    3. the products as cards, with EXP in amber under 6 months (swipe to delete).
+  - A dark bar at the bottom shows the total counting up, **Inalingana na ankara** or **Tofauti …**, and the one button.
+- **One product in a delivery:** packs are equal tiles with what's inside. A BEI box compares last time's price (↑/↓ %), the selling price and the profit per smallest unit. A dark bar shows "boksi 5 × TSh 18,200" with **Weka kwenye mzigo**.
+
+## Keyboard, calendar, Bima, photos, Madeni, Saola home (v0.46.1)
+- **Keyboard** (`core/keyboard.dart`):
+  - A short tap anywhere outside a text box closes it, even on buttons and rows.
+  - Coming back to a screen never reopens it, because `KeyboardObserver` is in `MaterialApp.navigatorObservers`.
+- **Dates are tapped, never typed:**
+  - `core/range_picker.dart` opens a dark month calendar with quick choices (Leo, Jana, Wiki hii, Mwezi huu, Mwezi uliopita, Siku 30). Tap the first and last day.
+  - It is used in Mauzo and Mizigo. Other date pickers open in calendar-only mode.
+- **Quantity dialog:** the name takes two small lines, and − / number / + sit in a row. Every dialog title is 18pt.
+- **Agiza → "Agiza bidhaa gani?":**
+  - Shows the shop's whole list A–Z with letter headers, stock dots, and a "Zinaisha tu" filter.
+  - Typing filters it. Tap several products, then **Ongeza n kwenye oda**.
+- **Empty shelves:** `core/empty_shelves.dart` draws the shelf with a box falling onto it, plus Pokea mzigo and Ingiza hisa ya mwanzo buttons.
+- **Uza:** a wide green button with a slow glow (`UzaButton` in `owner_home.dart`), full width on the helper's home.
+- **Saola workspace** (`widgets/saola_home.dart`): instead of shop sales, it shows the shops using Afya Njia, the ones to call this week, waiting requests and help (each opens the web panel), and "Maduka yangu". There is no bottom bar.
+- **Ingiza kwa wingi:** cards are labelled like the web sheet's columns (Kifungashio na idadi, Batch na EXP, Bei ya kununua kwa kifungashio) and show **Jumla** on each line.
+- **Ripoti → Chapisha au shiriki:**
+  - Open the A4 page to print or save as a PDF.
+  - Send to WhatsApp (a summary plus the link).
+  - Copy the link (it works for 3 days).
+- **Madeni redesigned:**
+  - A total card and two coloured tiles (new credit / paid back this month, compared with last month).
+  - An animated ring of how old the debts are, and the biggest debtors as swipe cards.
+  - Search and filters (Wanaodaiwa, Siku 30+, Wanasubiri idhini, Wote), with a ring on each row for the limit used.
+  - **One customer:** a dark card with Pokea malipo and **Kumbusha** (SMS, WhatsApp, call), took/paid tiles, and a history of cards.
+- **Bima** (`features/insurance/`):
+  - At checkout, any insurance payment asks for the insurer (chips), card number and patient. More fields (card holder, plan, expiry, authorization, doctor, facility, prescription number, diagnosis) sit under "Zaidi". You can skip and fill them later.
+  - **Zaidi → Madai ya bima** shows what insurers owe (by insurer), claims by status, Jaza/Hariri, and Imetumwa → Imelipwa (with the amount) or Imekataliwa.
+- **Product photos** (`core/product_photo.dart`, needs `image_picker`):
+  - Take or pick a photo from the product screen, or from the count sheet while stock-taking (one pass does both).
+  - Photos show in the stock list and the count list.
+- **Stock-take types** (`features/stock/count_plan_sheet.dart`): Kwa rafu (the aisle counted longest ago comes ticked), Zinazoleta pesa (A), Zinazoisha muda, Ukaguzi wa ghafla, Hesabu kamili. The count shows its type.
+- **`file_picker` 13:** `FilePicker.pickFile()` + `readAsBytes()`. 10.x clashes with flutter_secure_storage 11 over win32. The iOS minimum is 14.0.
+- **New packages:** `flutter pub add image_picker`. In `ios/Runner/Info.plist`, add `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription`.

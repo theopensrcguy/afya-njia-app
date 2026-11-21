@@ -225,10 +225,14 @@ class _OwnerHomeState extends State<OwnerHome> {
 
   // ------------------------------------------------------------ actions, tip
 
+  /// v0.46.1: selling is the point of the app, so Uza is no longer one circle
+  /// among four: a wide green button with a slow glow, the first thing the eye
+  /// lands on. The other actions stay as small circles beside it.
   Widget _actions() {
-    return Row(children: [
-      for (final a in widget.actions.take(4))
-        Expanded(
+    final list = widget.actions.take(4).toList();
+    final primary = list.where((a) => a.primary).firstOrNull;
+    final rest = list.where((a) => a != primary).take(3).toList();
+    Widget circle(({IconData icon, String label, VoidCallback onTap, bool primary}) a) => Expanded(
           child: Semantics(
             button: true,
             label: a.label,
@@ -237,17 +241,20 @@ class _OwnerHomeState extends State<OwnerHome> {
               onTap: a.onTap,
               child: Column(children: [
                 Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(color: a.primary ? kPrimary : Colors.white, shape: BoxShape.circle),
-                  child: Icon(a.icon, color: a.primary ? Colors.white : kInk, size: 23),
+                  width: 50,
+                  height: 50,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: Icon(a.icon, color: kInk, size: 21),
                 ),
-                const SizedBox(height: 7),
-                Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kInk)),
+                const SizedBox(height: 6),
+                Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: kInk)),
               ]),
             ),
           ),
-        ),
+        );
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (primary != null) ...[Expanded(flex: 5, child: UzaButton(label: primary.label, onTap: primary.onTap)), const SizedBox(width: 8)],
+      for (final a in rest) circle(a),
     ]);
   }
 
@@ -611,4 +618,83 @@ class _OwnerHomeState extends State<OwnerHome> {
           ),
         ]),
       );
+}
+
+
+/// The big Uza button (v0.46.1): green, wide, a cart, and a slow breathing
+/// glow so it reads as "start here". Still when the phone asks for less motion.
+class UzaButton extends StatefulWidget {
+  const UzaButton({super.key, required this.label, required this.onTap, this.height = 76});
+
+  final String label;
+  final VoidCallback onTap;
+  final double height;
+
+  @override
+  State<UzaButton> createState() => _UzaButtonState();
+}
+
+class _UzaButtonState extends State<UzaButton> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.value = .5;
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      excludeSemantics: true,
+      child: Pressable(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, child) => Container(
+            height: widget.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(colors: [Color(0xFF1F8A66), Color(0xFF0E5A44)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              boxShadow: [
+                BoxShadow(color: const Color(0xFF1F8A66).withValues(alpha: .22 + .18 * _c.value), blurRadius: 14 + 10 * _c.value, offset: const Offset(0, 6)),
+              ],
+            ),
+            child: child,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), borderRadius: BorderRadius.circular(14)),
+                child: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(widget.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, height: 1.1)),
+                  Text(tr('Anza mauzo'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ]),
+              ),
+              const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 }
