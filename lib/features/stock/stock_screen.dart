@@ -8,6 +8,7 @@ import '../../core/money.dart';
 import '../../core/permissions.dart';
 import '../../core/product_photo.dart';
 import '../../core/scan_once.dart';
+import '../../core/share_export.dart';
 import '../../core/session.dart';
 import '../../core/smooth.dart';
 import '../../core/empty_shelves.dart';
@@ -328,8 +329,27 @@ class _StockScreenState extends State<StockScreen> {
           const SizedBox(width: 8),
         ],
         _square(Icons.delete_sweep_outlined, tr('Maombi ya kufuta hisa'), () => _push(DeletionsScreen(session: widget.session)), badge: _deletions),
+        const SizedBox(width: 8),
+        _square(Icons.ios_share_rounded, tr('Pakua hisa (PDF / Excel)'), _export),
       ]),
     );
+  }
+
+  /// The stock as it stands, as PDF or Excel, with the filters on screen (v0.47).
+  void _export() {
+    final server = const {'chache': 'chache', 'hazipo': 'zimeisha', 'muda': 'muda', 'zimeisha': 'zimeisha_muda'}[_filter] ?? 'zote';
+    final status = _statusDefs.firstWhere((d) => d.$1 == _filter, orElse: () => _statusDefs.first);
+    final cats = {for (final c in ((_data?['categories'] as List?) ?? const []).cast<Map<String, dynamic>>()) asInt(c['id']): '${c['name']}'};
+    shareStock(context,
+        api: widget.session.api,
+        filter: server,
+        cats: _cats,
+        q: _q.text,
+        describe: [
+          if (server != 'zote') tr(status.$2),
+          for (final c in _cats) c == 0 ? tr('Bila aina') : (cats[c] ?? '…'),
+          if (_q.text.trim().isNotEmpty) '"${_q.text.trim()}"',
+        ]);
   }
 
   Widget _searchField() {

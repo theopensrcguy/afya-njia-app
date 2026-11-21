@@ -7,6 +7,7 @@ import '../../core/brand.dart';
 import '../../core/dialogs.dart';
 import '../../core/format.dart';
 import '../../core/range_picker.dart';
+import '../../core/share_export.dart';
 import '../../core/i18n.dart';
 import '../../core/money.dart';
 import '../../core/permissions.dart';
@@ -168,7 +169,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(_allSales ? tr('Mauzo') : tr('Mauzo yangu'),
+            child: Text(_allSales ? tr('Mauzo') : tr('Mauzo yangu'), maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: kInk, letterSpacing: -.4)),
           ),
           Semantics(
@@ -186,6 +187,23 @@ class _SalesListScreenState extends State<SalesListScreen> {
                   const SizedBox(width: 6),
                   Text(_periodText, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kInk)),
                 ]),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Share these sales (PDF / Excel) with someone outside the app (v0.47).
+          Semantics(
+            button: true,
+            label: tr('Shiriki mauzo'),
+            excludeSemantics: true,
+            child: Pressable(
+              onTap: () => shareSales(context, api: _api, from: _day, to: _to ?? _day,
+                  method: const ['cash', 'mobile', 'insurance', 'credit'].contains(_pay) ? _pay : null),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: kDeep, borderRadius: BorderRadius.circular(14)),
+                child: const Icon(Icons.ios_share_rounded, color: Colors.white, size: 20),
               ),
             ),
           ),
@@ -624,6 +642,29 @@ class _SalesListScreenState extends State<SalesListScreen> {
                 _line(tr('Malipo'), paymentText(s)),
               ]),
             ),
+            // The receipt again, any day after (v0.47): print, PDF, WhatsApp.
+            const SizedBox(height: 12),
+            Row(children: [
+              for (final (how, icon, label) in [
+                ('open', Icons.print_rounded, tr('Chapisha / PDF')),
+                ('wa', Icons.chat_rounded, tr('WhatsApp')),
+                ('copy', Icons.link_rounded, tr('Kiungo')),
+              ]) ...[
+                if (how != 'open') const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(46),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () => shareReceipt(sheet, api: _api, saleId: asInt(s['id']), how: how),
+                    icon: Icon(icon, size: 18),
+                    label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+            ]),
             if (voided) ...[
               const SizedBox(height: 12),
               Container(

@@ -9,6 +9,7 @@ import '../../core/i18n.dart';
 import '../../core/loader.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/smooth.dart';
 import 'customer_consent.dart';
 import 'register_customer.dart';
 
@@ -118,11 +119,50 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (changed == true || mounted) _load();
   }
 
+  // ------------------------------------------------------------ v0.47 look
+  //
+  // Layout A (agreed on the canvas): one white card with the counts on top
+  // and today's reminders right under them in an amber band, then search,
+  // filter chips and the customers as rows with coloured pills (as in the
+  // ShopZen reference): reminders on / remind today / none / owes.
+
+  String _filter = 'all'; // all | remind | today | debt | new
+  bool _allDue = false;
+
+  Set<int> get _dueIds => {for (final g in _groups('due')) asInt((g['customer'] as Map)['id'])};
+
+  int? _daysSince(Map<String, dynamic> c) {
+    final d = parseDate(c['last_sale_at']);
+    return d == null ? null : DateTime.now().difference(d.toLocal()).inDays;
+  }
+
+  bool _isNew(Map<String, dynamic> c) {
+    final d = parseDate(c['joined_at']);
+    return d != null && DateTime.now().difference(d.toLocal()).inDays <= 30;
+  }
+
   List<Map<String, dynamic>> get _shown {
     final q = _q.text.trim().toLowerCase();
-    if (q.isEmpty) return _customers;
     final digits = q.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^0'), '');
-    return _customers.where((c) => '${c['name']}'.toLowerCase().contains(q) || (digits.length >= 3 && '${c['phone'] ?? ''}'.contains(digits))).toList();
+    final due = _dueIds;
+    return _customers.where((c) {
+      final ok = switch (_filter) {
+        'remind' => c['reminders_on'] == true,
+        'today' => due.contains(asInt(c['id'])),
+        'debt' => asInt(c['owes']) > 0,
+        'new' => _isNew(c),
+        _ => true,
+      };
+      return ok && (q.isEmpty || '${c['name']}'.toLowerCase().contains(q) || (digits.length >= 3 && '${c['phone'] ?? ''}'.contains(digits)));
+    }).toList()
+      ..sort((a, b) => (parseDate(b['last_sale_at']) ?? DateTime(2000)).compareTo(parseDate(a['last_sale_at']) ?? DateTime(2000)));
+  }
+
+  Future<void> _register() async {
+    if (await registerCustomer(context, api: _api) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: T('Mteja amesajiliwa.')));
+      _load();
+    }
   }
 
   @override
@@ -130,114 +170,331 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final due = _groups('due');
     final upcoming = _groups('upcoming');
     final sent = _groups('sent');
-    final today = '${_board['today'] ?? ''}';
+    final buyers = _customers.where((c) => asInt(c['sales']) > 0).length;
+    final back = _customers.where((c) => asInt(c['sales']) > 1).length;
+    final shown = _shown;
+    final counts = {
+      'all': _customers.length,
+      'remind': _customers.where((c) => c['reminders_on'] == true).length,
+      'today': due.length,
+      'debt': _customers.where((c) => asInt(c['owes']) > 0).length,
+      'new': _customers.where(_isNew).length,
+    };
     return Scaffold(
-      appBar: AppBar(backgroundColor: pageBackground, title: const T('Wateja', style: TextStyle(fontWeight: FontWeight.w800))),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          // this.context: the State's own context, which the `mounted` check covers
-          // (plain `context` here is build()'s parameter).
-          if (await registerCustomer(context, api: _api) && mounted) {
-            ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: T('Mteja amesajiliwa.')));
-            _load();
-          }
-        },
-        backgroundColor: brandGreen,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.person_add_alt_1_rounded),
-        label: const T('Sajili mteja'),
-      ),
-      body: _loading
-          ? const Center(child: AfyaLoader())
-          : _error != null
-              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: dangerRed))))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 32), children: [
-                    _title(tr('Wa kukumbushwa leo'), due.length),
-                    const T('Ujumbe hautaji jina la dawa: simu inaweza kusomwa na mtu mwingine.', style: TextStyle(color: mutedText, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    if (due.isEmpty) _empty(tr('Hakuna wa kukumbushwa leo.')),
-                    for (final g in due)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('${g['customer']['name']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                            Text(phoneText(g['customer']['phone']), style: const TextStyle(color: mutedText)),
-                            const SizedBox(height: 6),
-                            Wrap(spacing: 6, runSpacing: 6, children: [
-                              for (final r in (g['reminders'] as List).cast<Map<String, dynamic>>())
-                                InputChip(
-                                  label: Text('${r['product']} · ${'${r['runs_out_on']}'.compareTo(today) < 0 ? tr('iliisha :d', {'d': dayText('${r['runs_out_on']}')}) : tr('inaisha :d', {'d': dayText('${r['runs_out_on']}')})}',
-                                      style: const TextStyle(fontSize: 13)),
-                                  onDeleted: () => _skip(r),
-                                  deleteButtonTooltipMessage: tr('Ondoa kikumbusho hiki'),
-                                  visualDensity: VisualDensity.compact,
+      backgroundColor: const Color(0xFFF2F6F4),
+      body: SafeArea(
+        bottom: false,
+        child: _loading
+            ? const Center(child: AfyaLoader())
+            : _error != null
+                ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: dangerRed))))
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+                      children: [
+                        Row(children: [
+                          Pressable(
+                            onTap: () => Navigator.of(context).maybePop(),
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                              child: const Icon(Icons.chevron_left_rounded, color: _ink),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(child: T('Wateja', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _ink))),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(backgroundColor: _deep, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                            onPressed: _register,
+                            icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                            label: const T('Sajili'),
+                          ),
+                        ]),
+                        const SizedBox(height: 14),
+                        ...staggered([
+                          _summary(due, buyers == 0 ? null : (back / buyers * 100).round()),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _q,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.search_rounded),
+                              hintText: tr('Tafuta jina au simu'),
+                              isDense: true,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(children: [
+                              for (final (k, label) in [
+                                ('all', tr('Wote')),
+                                ('remind', tr('Vikumbusho')),
+                                if (counts['today']! > 0) ('today', tr('Kumbusha leo')),
+                                if (counts['debt']! > 0) ('debt', tr('Wenye deni')),
+                                ('new', tr('Wapya')),
+                              ])
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Pressable(
+                                    onTap: () {
+                                      tick();
+                                      setState(() => _filter = k);
+                                    },
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 160),
+                                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                                      decoration: BoxDecoration(color: _filter == k ? _ink : Colors.white, borderRadius: BorderRadius.circular(99)),
+                                      child: Text('$label ${counts[k]}',
+                                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _filter == k ? Colors.white : _ink)),
+                                    ),
+                                  ),
                                 ),
                             ]),
-                            const SizedBox(height: 8),
-                            Wrap(spacing: 8, runSpacing: 8, children: [
-                              FilledButton.icon(onPressed: () => _whatsapp(g), icon: const Icon(Icons.chat_outlined, size: 18), label: const T('Mkumbushe kwa WhatsApp')),
-                              if (_board['sms'] == true) OutlinedButton(onPressed: () => _sms(g), child: const T('Tuma SMS')),
-                            ]),
-                          ]),
-                        ),
-                      ),
-                    if (upcoming.isNotEmpty) ...[
-                      _title(tr('Vikumbusho vinavyokuja'), upcoming.length),
-                      for (final g in upcoming) _slim(g, tr('atakumbushwa :d', {'d': dayText('${g['due_on']}')})),
-                    ],
-                    if (sent.isNotEmpty) ...[
-                      _title(tr('Wamekumbushwa, hawajarudi'), sent.length),
-                      for (final g in sent)
-                        _slim(g, tr('alikumbushwa :d', {'d': dayText(parseDate(g['sent_at'])?.toLocal().toIso8601String())})),
-                    ],
-                    _title(tr('Wateja waliokubali'), _customers.length),
-                    if (_customers.isEmpty)
-                      _empty(tr('Bado hakuna mteja aliyekubali. Kwenye kikapu, bonyeza "Weka mteja" kabla ya kukamilisha mauzo.'))
-                    else ...[
-                      TextField(
-                        controller: _q,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Tafuta mteja: jina au simu…'), isDense: true),
-                      ),
-                      for (final c in _shown)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('${c['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: Text([
-                            phoneText(c['phone']),
-                            tr('manunuzi :n', {'n': c['sales']}),
-                            if (asInt(c['reminders']) > 0) tr('vikumbusho :n', {'n': c['reminders']}),
-                          ].where((x) => x.isNotEmpty).join(' · ')),
-                          trailing: Text(formatTsh(asInt(c['spent'])), style: const TextStyle(fontWeight: FontWeight.w600)),
-                          onTap: () => _open(c),
-                        ),
-                    ],
-                    const SizedBox(height: 16),
-                    const T('Anachonunua mtu duka la dawa ni taarifa ya afya yake. Zinahifadhiwa kwa aliyekubali tu, na mteja akisema ACHA, fungua jina lake uondoe ridhaa yake.',
-                        style: TextStyle(color: mutedText, fontSize: 12)),
-                  ]),
-                ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (_customers.isEmpty)
+                            _emptyCard()
+                          else if (shown.isEmpty)
+                            Padding(padding: const EdgeInsets.all(28), child: T('Hakuna mteja hapa.', textAlign: TextAlign.center, style: const TextStyle(color: mutedText)))
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                              child: Column(children: [
+                                for (var i = 0; i < shown.length; i++) _row(shown[i], last: i == shown.length - 1),
+                              ]),
+                            ),
+                          if (upcoming.isNotEmpty || sent.isNotEmpty) ...[
+                            const SizedBox(height: 18),
+                            Theme(
+                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                              child: Container(
+                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                                child: ExpansionTile(
+                                  shape: const RoundedRectangleBorder(),
+                                  title: Text(tr('Vikumbusho vinavyokuja · :n', {'n': upcoming.length}), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                                  subtitle: sent.isEmpty ? null : Text(tr('Wamekumbushwa, hawajarudi · :n', {'n': sent.length}), style: const TextStyle(fontSize: 12, color: mutedText)),
+                                  children: [
+                                    for (final g in upcoming) _slim(g, tr('atakumbushwa :d', {'d': dayText('${g['due_on']}')})),
+                                    for (final g in sent) _slim(g, tr('alikumbushwa :d', {'d': dayText(parseDate(g['sent_at'])?.toLocal().toIso8601String())})),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          const T('Anachonunua mtu duka la dawa ni taarifa ya afya yake. Zinahifadhiwa kwa aliyekubali tu, na mteja akisema ACHA, fungua jina lake uondoe ridhaa yake.',
+                              style: TextStyle(color: mutedText, fontSize: 12)),
+                        ]),
+                      ],
+                    ),
+                  ),
+      ),
     );
   }
 
-  Widget _title(String text, int n) => Padding(
-        padding: const EdgeInsets.only(top: 16, bottom: 4),
-        child: Text('$text · $n', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+  /// Counts on top; today's reminders in the amber band right under them.
+  Widget _summary(List<Map<String, dynamic>> due, int? backPct) {
+    Widget cell(String value, String label, {Color color = _ink, bool first = false}) => Expanded(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            decoration: BoxDecoration(border: first ? null : const Border(left: BorderSide(color: Color(0xFFE3EAE7)))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: color == _ink ? mutedText : color)),
+            ]),
+          ),
+        );
+    final list = _allDue ? due : due.take(3).toList();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        color: Colors.white,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              cell('${_customers.length}', tr('wateja'), first: true),
+              cell(backPct == null ? '—' : '$backPct%', tr('wanarudi')),
+              cell('${due.length}', tr('wa kukumbusha leo'), color: due.isEmpty ? _ink : _amber),
+            ]),
+          ),
+          Container(
+            decoration: const BoxDecoration(color: _amberSoft, border: Border(top: BorderSide(color: _amberLine))),
+            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            child: due.isEmpty
+                ? Row(children: [
+                    const Icon(Icons.check_circle_outline_rounded, size: 18, color: _amber),
+                    const SizedBox(width: 8),
+                    Expanded(child: T('Hakuna wa kukumbushwa leo.', style: const TextStyle(color: _amber, fontWeight: FontWeight.w600, fontSize: 13))),
+                  ])
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Text(tr('WA KUKUMBUSHA LEO'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: .5, color: _amber)),
+                    const SizedBox(height: 4),
+                    for (var i = 0; i < list.length; i++) _dueRow(list[i], top: i > 0),
+                    if (due.length > 3)
+                      TextButton(
+                        style: TextButton.styleFrom(alignment: Alignment.centerLeft, padding: EdgeInsets.zero, foregroundColor: _amber),
+                        onPressed: () => setState(() => _allDue = !_allDue),
+                        child: Text(_allDue ? tr('Onyesha wachache') : tr('Ona wote :n →', {'n': due.length}), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    T('Ujumbe hautaji jina la dawa: simu inaweza kusomwa na mtu mwingine.', style: const TextStyle(fontSize: 11, color: _amber)),
+                  ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _dueRow(Map<String, dynamic> g, {bool top = false}) {
+    final c = (g['customer'] as Map).cast<String, dynamic>();
+    final today = '${_board['today'] ?? ''}';
+    final rs = (g['reminders'] as List).cast<Map<String, dynamic>>();
+    final r0 = rs.isEmpty ? null : rs.first;
+    final when = r0 == null
+        ? ''
+        : ('${r0['runs_out_on']}'.compareTo(today) < 0 ? tr('iliisha :d', {'d': dayText('${r0['runs_out_on']}')}) : tr('inaisha :d', {'d': dayText('${r0['runs_out_on']}')}));
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      decoration: BoxDecoration(border: top ? const Border(top: BorderSide(color: _amberLine)) : null),
+      child: Row(children: [
+        _avatar('${c['name']}', 36),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _open({...c, 'consent': true}),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${c['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, color: _ink)),
+              Text([when, if (rs.length > 1) tr('dawa :n', {'n': rs.length})].where((e) => e.isNotEmpty).join(' · '),
+                  style: const TextStyle(fontSize: 11.5, color: _amber)),
+            ]),
+          ),
+        ),
+        // Which medicines, and taking one off (it was bought elsewhere, the course ended).
+        PopupMenuButton<Map<String, dynamic>>(
+          tooltip: tr('Dawa za kikumbusho'),
+          icon: const Icon(Icons.more_vert_rounded, size: 20, color: _amber),
+          onSelected: _skip,
+          itemBuilder: (_) => [
+            for (final r in rs)
+              PopupMenuItem(value: r, child: Text(tr('Ondoa: :p', {'p': r['product']}), maxLines: 2)),
+          ],
+        ),
+        if (_board['sms'] == true)
+          IconButton(tooltip: tr('Tuma SMS'), onPressed: () => _sms(g), icon: const Icon(Icons.sms_outlined, size: 20, color: _amber)),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF3DDC97), foregroundColor: _deep, visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          onPressed: () => _whatsapp(g),
+          icon: const Icon(Icons.chat_rounded, size: 16),
+          label: const T('Tuma', style: TextStyle(fontWeight: FontWeight.w800)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _row(Map<String, dynamic> c, {bool last = false}) {
+    final days = _daysSince(c);
+    final due = _dueIds.contains(asInt(c['id']));
+    final owes = asInt(c['owes']);
+    final pills = <Widget>[
+      if (due)
+        _pill(tr('Kumbusha leo'), const Color(0xFFFFF1D9), _amber, const Color(0xFFF2C57C))
+      else if (c['reminders_on'] == true)
+        _pill(tr('Vikumbusho'), const Color(0xFFE3F4EA), const Color(0xFF0E5A44), const Color(0xFF9FD9BC))
+      else
+        _pill(tr('Bila vikumbusho'), const Color(0xFFF3F1EC), const Color(0xFF5F5E5A), const Color(0xFFD3D1C7)),
+      if (owes > 0) _pill(tr('Deni :a', {'a': groupDigits(owes)}), const Color(0xFFFBE9E5), const Color(0xFFA8321F), const Color(0xFFF0B3A6)),
+    ];
+    return InkWell(
+      onTap: () => _open(c),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(border: last ? null : const Border(bottom: BorderSide(color: Color(0xFFE3EAE7)))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _avatar('${c['name']}', 40),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${c['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, color: _ink, fontSize: 15)),
+              Text([phoneText(c['phone']), tr('mara :n', {'n': c['sales'] ?? 0})].where((e) => e.isNotEmpty).join(' · '),
+                  style: const TextStyle(fontSize: 12, color: mutedText)),
+              const SizedBox(height: 5),
+              Wrap(spacing: 6, runSpacing: 4, children: pills),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(groupDigits(asInt(c['spent'])), style: const TextStyle(fontWeight: FontWeight.w800, color: _ink)),
+            Text(days == null ? tr('bado') : (days == 0 ? tr('leo') : tr('siku :n', {'n': days})),
+                style: TextStyle(fontSize: 12, color: (days ?? 0) > 60 ? _amber : mutedText)),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _pill(String text, Color bg, Color fg, Color line) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99), border: Border.all(color: line, width: .6)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 6, height: 6, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)),
+          const SizedBox(width: 5),
+          Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+        ]),
       );
 
-  Widget _empty(String text) => Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(text, style: const TextStyle(color: mutedText)));
+  Widget _emptyCard() => Container(
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+        child: Column(children: [
+          const Icon(Icons.groups_2_outlined, size: 44, color: mutedText),
+          const SizedBox(height: 10),
+          const T('Sajili mteja wako wa kwanza', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: _ink)),
+          const SizedBox(height: 4),
+          const T('Kwa aliyekubali tu: hapa, au kwenye kikapu kwa "Weka mteja" kabla ya kukamilisha mauzo.',
+              textAlign: TextAlign.center, style: TextStyle(color: mutedText, fontSize: 13)),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: _deep),
+            onPressed: _register,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            label: const T('Sajili mteja'),
+          ),
+        ]),
+      );
 
   Widget _slim(Map<String, dynamic> g, String when) => ListTile(
-        contentPadding: EdgeInsets.zero,
         dense: true,
+        leading: _avatar('${g['customer']['name']}', 32),
         title: Text('${g['customer']['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text((g['reminders'] as List).map((r) => r['product']).join(', ')),
-        trailing: Text(when, style: const TextStyle(color: mutedText)),
+        subtitle: Text((g['reminders'] as List).map((r) => r['product']).join(', '), maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: Text(when, style: const TextStyle(color: mutedText, fontSize: 12)),
       );
+}
+
+const _ink = Color(0xFF14211D);
+const _deep = Color(0xFF0E3B31);
+const _amber = Color(0xFF7A4A12);
+const _amberSoft = Color(0xFFFFF6E6);
+const _amberLine = Color(0xFFF2D9A8);
+
+/// Initials on a soft colour picked from the name.
+Widget _avatar(String name, double size) {
+  const colours = [Color(0xFFCDEFE0), Color(0xFFD9CCFF), Color(0xFFFFE0B8), Color(0xFFCFE3FF), Color(0xFFFBD5CF), Color(0xFFE4F79A)];
+  final n = name.trim();
+  final initials = n.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join();
+  return Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(color: colours[n.hashCode.abs() % colours.length], shape: BoxShape.circle),
+    alignment: Alignment.center,
+    child: Text(initials.isEmpty ? '·' : initials, style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * .34, color: _ink)),
+  );
 }
 
 /// One customer: what they bought here (newest first), their waiting
