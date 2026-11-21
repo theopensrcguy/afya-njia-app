@@ -99,7 +99,13 @@ class _ReorderScreenState extends State<ReorderScreen> {
       _error = null;
     });
     try {
-      if (widget.draftId != null && _draft == null) await _loadDraft();
+      if (widget.draftId != null && !_draftGone) {
+        if (_draft == null) {
+          await _loadDraft();
+        } else {
+          await _checkDraft();
+        }
+      }
       final d = await _api.get('reorder', query: {'cover': '$_cover', 'view': _view}) as Map<String, dynamic>;
       final open = (await _api.get('purchase-orders') as List).cast<Map<String, dynamic>>();
       if (!mounted) return;
@@ -118,9 +124,75 @@ class _ReorderScreenState extends State<ReorderScreen> {
     }
   }
 
+  /// The draft was deleted or sent somewhere else (Maagizo, the drafts list,
+  /// another phone): this screen stops showing it (v0.47.1).
+  bool _draftGone = false;
+
+  void _forgetDraft(String why) {
+    setState(() {
+      _draftGone = true;
+      _draft = null;
+      _draftLines.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(why)));
+  }
+
+  /// Still a draft? (Coming back from Maagizo, where it may have been deleted or sent.)
+  Future<void> _checkDraft() async {
+    try {
+      final o = await _api.get('purchase-orders/${widget.draftId}') as Map<String, dynamic>;
+      if (o['status'] != 'draft' && mounted) _forgetDraft(tr('Rasimu hii imeshatumwa.'));
+    } on ApiException catch (e) {
+      if (e.status == 404 && mounted) _forgetDraft(tr('Rasimu hii imefutwa.'));
+    }
+  }
+
+  /// Delete the open draft (asks first), then leave it.
+  Future<void> _deleteDraft() async {
+    final ok = await confirmDialog(context,
+        title: tr('Futa rasimu hii?'),
+        message: tr('Bidhaa :n zitaondoka kwenye rasimu. Hisa haibadiliki.', {'n': _draftLines.length}),
+        confirm: tr('Futa rasimu'),
+        danger: true);
+    if (ok != true || !mounted) return;
+    try {
+      await _api.delete('purchase-orders/${widget.draftId}');
+      if (!mounted) return;
+      _draftSaved = _draftSig; // nothing left to save: leave without asking
+      _forgetDraft(tr('Rasimu imefutwa.'));
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _deleteOtherDraft(int id) async {
+    final ok = await confirmDialog(context, title: tr('Futa rasimu hii?'), message: tr('Hisa haibadiliki.'), confirm: tr('Futa rasimu'), danger: true);
+    if (ok != true || !mounted) return;
+    try {
+      await _api.delete('purchase-orders/$id');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Rasimu imefutwa.'))));
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   /// The draft's products become lines like any other (same amount/packaging controls).
   Future<void> _loadDraft() async {
-    final o = await _api.get('purchase-orders/${widget.draftId}') as Map<String, dynamic>;
+    Map<String, dynamic>? found;
+    try {
+      found = await _api.get('purchase-orders/${widget.draftId}') as Map<String, dynamic>;
+    } on ApiException catch (e) {
+      if (e.status != 404) rethrow;
+    }
+    if (found == null) {
+      _draftGone = true;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Rasimu hii imefutwa.'))));
+      return;
+    }
+    final o = found;
     if (o['status'] != 'draft') {
       throw ApiException(tr('Agizo hili limeshatumwa; haliwezi kubadilishwa.'));
     }
@@ -603,7 +675,15 @@ class _ReorderScreenState extends State<ReorderScreen> {
                 ),
                 child: Row(children: [
                   Expanded(child: _draftSummary(o)),
-                  const SizedBox(width: 8),
+                  // Delete straight from the list (v0.47.1).
+                  IconButton(
+                    tooltip: tr('Futa rasimu'),
+                    icon: const Icon(Icons.delete_outline_rounded, color: dangerRed),
+                    onPressed: () {
+                      Navigator.of(sheet).pop();
+                      asInt(o['id']) == widget.draftId ? _deleteDraft() : _deleteOtherDraft(asInt(o['id']));
+                    },
+                  ),
                   asInt(o['id']) == widget.draftId
                       ? const T('Unaihariri sasa', style: TextStyle(fontSize: 12, color: Color(0xFF2F5FA8), fontWeight: FontWeight.w800))
                       : FilledButton(
@@ -943,6 +1023,11 @@ class _ReorderScreenState extends State<ReorderScreen> {
                 const T('Rasimu: endelea kuhariri', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF2F5FA8))),
                 Text(tr('Bidhaa :n · tuma kila msambazaji akiwa tayari', {'n': chosen}), style: const TextStyle(fontSize: 12, color: mutedText)),
               ]),
+            ),
+            IconButton(
+              tooltip: tr('Futa rasimu'),
+              onPressed: _savingDraft ? null : _deleteDraft,
+              icon: const Icon(Icons.delete_outline_rounded, color: dangerRed),
             ),
             // "Zote kutoka": one supplier for every product of the draft (each can still be changed).
             TextButton(

@@ -574,3 +574,24 @@ Built from canvas boards 10–14.
 
 ### v0.46.2: Uza row, layout A
 - On the owner's home, **Uza** now spans the full width (68 px, with the glow). **Pokea · Agiza · Skani** sit under it as three equal white tiles with even 10 px gaps, so they no longer hang beside Uza (`_actions` in `owner_home.dart`).
+
+## Wateja redesigned, sharing sales and stock, receipts again (v0.47)
+- **Wateja** (`customers_screen.dart`, layout A):
+  - **One white card:** customers, % who come back, and how many to remind today. Under the counts, in an amber band, today's reminders: name, when the medicine runs out, ⋮ to remove a medicine, SMS, and **Tuma** (WhatsApp). The band shows 3 people, then "Ona wote n".
+  - **The list:** search, then chips with counts (Wote / Vikumbusho / Kumbusha leo / Wenye deni / Wapya), then rows in one card:
+    - initials avatar, phone and number of visits;
+    - coloured pills (Vikumbusho, Kumbusha leo, Bila vikumbusho, Deni …);
+    - total spent and days since the last visit.
+  - Upcoming and already-sent reminders fold into one card below the list.
+- **Sajili mteja** (`register_customer.dart`): a full sheet with labels above the fields and the +255 joined to the number. The required "yes" is a card to tick; reminders are a separate switch. Ghairi / Sajili mteja sit at the bottom.
+- **Sharing** (`core/share_export.dart`):
+  - **Mauzo → share button:** the period (calendar), categories, payment and seller, with the live count and total, then PDF or Excel. **Fungua** opens the page to print or save as PDF, or downloads the Excel. **WhatsApp** sends the summary plus the link. **Nakili kiungo** copies the link (3 days).
+  - **Hisa → share button:** the stock as the list is filtered now, or all of it, as PDF or Excel.
+  - **Any sale → Chapisha / PDF · WhatsApp · Kiungo:** the receipt again, any day later.
+
+### v0.47.1: deleting a draft
+- **The bug:** a draft deleted somewhere else (in Maagizo, or the drafts list) stayed on Agiza as "Rasimu: endelea kuhariri", because the screen loaded it once and kept it.
+- **The fix:** every reload now checks the draft still exists. If it was deleted (404) or already sent, the card disappears with a message.
+- **Futa rasimu is easier to reach:**
+  - a 🗑 on the draft card itself (asks first, then the card goes);
+  - a 🗑 on each draft in the floating **Rasimu** list.
