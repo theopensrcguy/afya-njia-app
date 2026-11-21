@@ -202,8 +202,9 @@ class _SalesListScreenState extends State<SalesListScreen> {
               child: Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: kDeep, borderRadius: BorderRadius.circular(14)),
-                child: const Icon(Icons.ios_share_rounded, color: Colors.white, size: 20),
+                // Quiet, like Hisa's top-bar squares (v0.47.2: the dark one shouted).
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                child: const Icon(Icons.ios_share_rounded, color: kPrimary, size: 20),
               ),
             ),
           ),

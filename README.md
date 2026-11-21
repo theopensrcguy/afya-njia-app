@@ -595,3 +595,6 @@ Built from canvas boards 10–14.
 - **Futa rasimu is easier to reach:**
   - a 🗑 on the draft card itself (asks first, then the card goes);
   - a 🗑 on each draft in the floating **Rasimu** list.
+
+### v0.47.2: a quieter share button
+- **Mauzo:** the share button is now white with a green icon, like the squares on Hisa's top bar. The dark one drew more attention than the date beside it.
