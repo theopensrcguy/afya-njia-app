@@ -754,3 +754,21 @@ Built from canvas boards 10–14.
   - **When a code already belongs to another product** (counter, product page): the app says whose it is. If you may fix it, it offers **Hamisha hapa**; otherwise it says who can.
   - `core/barcode_tools.dart`: `scanOneCode()` and `linkOrMoveBarcode()`. `ApiClient.delete` now takes an optional body.
 - Checked with the Dart analyzer only. For TestFlight, raise the build number (e.g. `0.48.5+<last+1>`).
+
+## v0.49: buying cost with one decimal; a new basket
+- **Buying price, one decimal** (`core/money.dart`):
+  - `CostInput` (commas, and one digit after the point), `costValue()`, `costText()`, `formatCost()` and `asCost()`.
+  - Used in a delivery line's BEI (the iPhone shows the decimal keypad), Ingiza kwa wingi, a buying trip's "bei uliyolipa", a product's margins, and Agiza's line costs.
+  - `ReceiveLine.packCost` is a `num`; its `total` is rounded to whole shillings. Selling prices stay whole.
+- **Basket at Kamilisha** (`sale/checkout_screen.dart`), as drawn:
+  - "Bidhaa 3 · vipande 14" and **Futa zote** above the lines.
+  - Each line is a card:
+    - the photo (or a pill icon) and the name;
+    - a pale-red **×** in a circle;
+    - the units as chips with their prices (tap to switch kidonge ↔ kadi ↔ boksi; a unit the shelf can't fill is struck through);
+    - **"zimebaki 2 tu"** in amber when the shelf is nearly out;
+    - a **− n +** pill (tap n to type it; − on 1 removes the line);
+    - "kadi 2 × 500" and the line total.
+  - Swipe left to remove too. × , swipe and Futa zote all offer **Rudisha** for 4 seconds (`Cart.takeAllLines()` / `restoreLines()`).
+  - The payment panel below is unchanged.
+- Checked with the Dart analyzer only.

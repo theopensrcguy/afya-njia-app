@@ -963,7 +963,7 @@ class _ReorderScreenState extends State<ReorderScreen> {
     if (l['pack_cost'] == null) return null;
     final size = asInt(l['pack_size']) < 1 ? 1 : asInt(l['pack_size']);
     final (_, cur) = _pack(l);
-    return (asInt(l['pack_cost']) / size * cur).round() * _chosen(l);
+    return (asCost(l['pack_cost']) / size * cur * _chosen(l)).round();
   }
 
   List<Map<String, dynamic>> get _cartLines => [for (final e in _cart.values) (e['line'] as Map).cast<String, dynamic>()];

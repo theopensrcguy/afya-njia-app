@@ -14,6 +14,9 @@ import 'cart.dart';
 import 'quantity_dialog.dart';
 import '../../core/i18n.dart';
 import '../insurance/insurance_form.dart';
+import '../../core/product_photo.dart';
+import '../../core/smooth.dart';
+import '../../models/product.dart';
 
 /// Checkout: the basket in full, quantities, discount, payment, "Kamilisha".
 ///
@@ -325,13 +328,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               style: TextStyle(color: warnAmber, fontWeight: FontWeight.w600),
             ),
           ),
-        // The lines get all the space that's left, and scroll if there are many.
+        // v0.49: count + "Futa zote" above the lines, which get the space left and scroll.
+        _linesHeader(),
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             itemCount: _cart.lines.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, i) => _line(_cart.lines[i]),
+            itemBuilder: (context, i) {
+              final line = _cart.lines[i];
+              return Dismissible(
+                key: ValueKey('line-${line.product.id}'),
+                direction: _cart.canEdit ? DismissDirection.endToStart : DismissDirection.none,
+                background: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 22),
+                  decoration: BoxDecoration(color: dangerSoft, borderRadius: BorderRadius.circular(18)),
+                  child: const Icon(Icons.delete_outline_rounded, color: dangerRed),
+                ),
+                onDismissed: (_) => _removeLine(line),
+                child: Appear(index: i.clamp(0, 6), child: _line(line)),
+              );
+            },
           ),
         ),
         _buildPayPanel(),
@@ -339,62 +357,216 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// "Bidhaa 3 · vipande 14" and Futa zote (with Rudisha).
+  Widget _linesHeader() {
+    final pieces = _cart.lines.fold<int>(0, (n, l) => n + l.quantity);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+      child: Row(children: [
+        Expanded(
+          child: Text(tr('Bidhaa :n · vipande :m', {'n': _cart.itemCount, 'm': pieces}),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+        ),
+        TextButton.icon(
+          onPressed: _cart.canEdit ? _clearLines : null,
+          style: TextButton.styleFrom(foregroundColor: dangerRed, visualDensity: VisualDensity.compact),
+          icon: const Icon(Icons.delete_sweep_outlined, size: 19),
+          label: const T('Futa zote'),
+        ),
+      ]),
+    );
+  }
+
+  void _clearLines() {
+    HapticFeedback.mediumImpact();
+    final was = _cart.takeAllLines();
+    if (was.isEmpty) return;
+    _undo(tr('Kikapu kimeondolewa'), () => _cart.restoreLines(was));
+  }
+
+  /// × or swipe: the whole line out, with Rudisha for 4 seconds.
+  void _removeLine(CartLine line) {
+    HapticFeedback.selectionClick();
+    final was = CartLine(line.product, line.unit, line.quantity);
+    _cart.setQuantity(line.product.id, 0);
+    _undo(tr(':name imeondolewa', {'name': line.product.name}), () => _cart.restoreLines([was]));
+  }
+
+  void _undo(String text, VoidCallback undo) {
+    if (!mounted) return;
+    final m = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    showUndoSnack(m, SnackBar(
+      behavior: SnackBarBehavior.floating,
+      content: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+      action: SnackBarAction(label: tr('Rudisha'), onPressed: undo),
+    ));
+  }
+
+  /// One line (v0.49): photo, name and ×; the units as chips with their
+  /// price (tap to switch kidonge ↔ kadi ↔ boksi); "zimebaki 2 tu" when the
+  /// shelf is nearly out; − n + (tap n to type it), and the line total.
   Widget _line(CartLine line) {
     final p = line.product;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text('${formatTsh(line.unit.price)} × ${line.quantity} ${unitLabel(line.unit.name, line.quantity)}',
-                    style: const TextStyle(fontSize: 12, color: mutedText)),
-              ],
-            ),
+    final max = Cart.maxOf(p, line.unit);
+    final left = max - line.quantity; // more of this unit the shelf still allows
+    final edit = _cart.canEdit;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        ProductThumb(
+          url: p.photoUrl,
+          size: 46,
+          radius: 13,
+          fallback: Container(
+            color: const Color(0xFFEFF4F2),
+            child: const Icon(Icons.medication_outlined, color: Color(0xFF0E3B31), size: 22),
           ),
-          IconButton(
-            tooltip: line.quantity == 1 ? tr('Ondoa') : tr('Punguza'),
-            onPressed: _cart.canEdit ? () => _cart.setQuantity(p.id, line.quantity - 1) : null,
-            icon: Icon(line.quantity == 1 ? Icons.delete_outline : Icons.remove_circle_outline),
-          ),
-          // Tap the number to type an exact amount (e.g. 21 for a 7-day course).
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: _cart.canEdit ? () => _typeQuantity(line) : null,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 36),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: const Color(0xFFE7F1EC), borderRadius: BorderRadius.circular(8)),
-              child: Text('${line.quantity}', style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w700, fontSize: 16)),
-            ),
-          ),
-          IconButton(
-            tooltip: tr('Ongeza'),
-            onPressed: _cart.canEdit
-                ? () {
-                    if (!_cart.setQuantity(p.id, line.quantity + 1)) {
-                      _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': p.name, 'a': describeStock(p.onHand, p.units)}));
-                    }
-                  }
-                : null,
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-          SizedBox(
-            width: 80,
-            child: Text(formatTsh(line.lineTotal), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ),
-          // × : the whole line out, whatever the quantity.
-          IconButton(
-            tooltip: tr('Ondoa'),
-            visualDensity: VisualDensity.compact,
-            onPressed: _cart.canEdit ? () => _cart.setQuantity(p.id, 0) : null,
-            icon: const Icon(Icons.close, size: 20, color: mutedText),
-          ),
-        ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, height: 1.25)),
+              ),
+              const SizedBox(width: 6),
+              // The × : the whole line out, whatever the quantity.
+              Semantics(
+                button: true,
+                label: tr('Ondoa'),
+                child: GestureDetector(
+                  onTap: edit ? () => _removeLine(line) : null,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: const BoxDecoration(color: dangerSoft, shape: BoxShape.circle),
+                    child: const Icon(Icons.close_rounded, size: 16, color: dangerRed),
+                  ),
+                ),
+              ),
+            ]),
+            if (p.units.length > 1) ...[
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  for (final u in p.units)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: _unitChip(line, u),
+                    ),
+                ]),
+              ),
+            ],
+            if (left <= 2)
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(
+                  left <= 0
+                      ? tr('Ndizo zote zilizopo')
+                      : tr('zimebaki :n tu', {'n': '${unitLabel(line.unit.name, left)} $left'}),
+                  style: const TextStyle(fontSize: 11.5, color: warnAmber, fontWeight: FontWeight.w700),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Row(children: [
+              _stepper(line, max),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('${unitLabel(line.unit.name, line.quantity)} ${line.quantity} × ${groupDigits(line.unit.price)}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: mutedText)),
+              ),
+              const SizedBox(width: 6),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                transitionBuilder: (c, a) => FadeTransition(opacity: a, child: c),
+                child: Text(groupDigits(line.lineTotal),
+                    key: ValueKey(line.lineTotal), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
+              ),
+            ]),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _unitChip(CartLine line, ProductUnit u) {
+    final on = line.unit.sameAs(u);
+    final fits = Cart.maxOf(line.product, u) > 0;
+    return GestureDetector(
+      onTap: !_cart.canEdit || on
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              if (!_cart.setUnit(line.product.id, u)) {
+                _showMessage(tr('Hisa haitoshi kwa :u moja.', {'u': unitLabel(u.name)}));
+              }
+            },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: on ? brandGreen : Colors.white,
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: on ? brandGreen : const Color(0xFFDCE5E1)),
+        ),
+        child: Text('${unitLabel(u.name)} ${groupDigits(u.price)}',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+              color: on ? Colors.white : (fits ? mutedText : const Color(0xFFB8C4C0)),
+              decoration: fits || on ? null : TextDecoration.lineThrough,
+            )),
       ),
+    );
+  }
+
+  /// − n + in one pill; tap n to type an exact amount (e.g. 21 for a 7-day course).
+  Widget _stepper(CartLine line, int max) {
+    final edit = _cart.canEdit;
+    Widget btn(IconData icon, VoidCallback? onTap) => InkResponse(
+          onTap: onTap,
+          radius: 20,
+          child: SizedBox(
+            width: 34,
+            height: 32,
+            child: Icon(icon, size: 18, color: onTap == null ? const Color(0xFFB8C4C0) : const Color(0xFF0E3B31)),
+          ),
+        );
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(color: const Color(0xFFEFF4F2), borderRadius: BorderRadius.circular(99)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        btn(Icons.remove_rounded, !edit
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                if (line.quantity <= 1) {
+                  _removeLine(line);
+                } else {
+                  _cart.setQuantity(line.product.id, line.quantity - 1);
+                }
+              }),
+        GestureDetector(
+          onTap: edit ? () => _typeQuantity(line) : null,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 26),
+            alignment: Alignment.center,
+            child: Text('${line.quantity}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+          ),
+        ),
+        btn(Icons.add_rounded, !edit || line.quantity >= max
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                if (!_cart.setQuantity(line.product.id, line.quantity + 1)) {
+                  _showMessage(tr('Hisa haitoshi: :name (zilizopo :a).', {'name': line.product.name, 'a': describeStock(line.product.onHand, line.product.units)}));
+                }
+              }),
+      ]),
     );
   }
 

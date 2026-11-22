@@ -104,7 +104,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
       });
       _count = l.packs;
       _batch.text = l.batch;
-      _cost.text = groupDigits(l.packCost);
+      _cost.text = costText(l.packCost);
       // From a buying trip the box hasn't been read yet (0): ask for it.
       _year = l.expiryYear == 0 ? null : l.expiryYear;
       _month = l.expiryMonth == 0 ? null : l.expiryMonth;
@@ -288,7 +288,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final pack = _pack;
     if (last == null || pack == null) return;
     final sameSize = asInt(last['pack_size']) == pack.size;
-    _cost.text = groupDigits(sameSize ? asInt(last['pack_cost']) : asInt(last['unit_cost']) * pack.size);
+    _cost.text = costText(sameSize ? asCost(last['pack_cost']) : asCost(last['unit_cost']) * pack.size);
   }
 
   Future<void> _otherPack() async {
@@ -311,7 +311,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
 
   void _save() {
     final batch = _batch.text.trim().toUpperCase();
-    final cost = moneyValue(_cost.text);
+    final cost = costValue(_cost.text);
     String? error;
     if (_pack == null) {
       error = tr('Chagua kimekuja kwa kifungashio gani.');
@@ -499,8 +499,8 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
     final p = _product!;
     final base = p.units.first.name;
     final pack = _pack;
-    final cost = moneyValue(_cost.text) ?? 0;
-    final total = cost * _count;
+    final cost = costValue(_cost.text) ?? 0;
+    final total = (cost * _count).round();
 
     return Column(children: [
       Expanded(
@@ -572,7 +572,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
                     'pack': _last!['pack_name'] == null ? unitLabel(base, 2) : unitLabel('${_last!['pack_name']}'),
                     'base': unitLabel(base, 2),
                     'size': _last!['pack_size'],
-                    'cost': formatTsh(asInt(_last!['pack_cost'])),
+                    'cost': formatCost(asCost(_last!['pack_cost'])),
                   }),
                   style: const TextStyle(fontSize: 12, color: mutedText),
                 ),
@@ -681,8 +681,9 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
               _label('BEI'),
               TextField(
                 controller: _cost,
-                keyboardType: TextInputType.number,
-                inputFormatters: const [MoneyInput()],
+                // The decimal pad: an iPhone's number pad has no point (one decimal allowed, v0.49).
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: const [CostInput()],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: tr('Bei ya kununua kwa :a (TSh)', {'a': pack == null ? tr('kifungashio') : unitLabel(pack.name)}),
@@ -725,7 +726,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
             Expanded(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
-                  pack == null || cost == 0 ? tr('Jumla ya bidhaa hii') : '${unitLabel(pack.name, _count)} $_count × ${formatTsh(cost)}',
+                  pack == null || cost == 0 ? tr('Jumla ya bidhaa hii') : '${unitLabel(pack.name, _count)} $_count × ${formatCost(cost)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, color: Color(0xFFB7C7C1)),
@@ -760,18 +761,18 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
 
   /// Last time's price for this pack, the selling price and the profit per
   /// smallest unit: the three things to check before accepting a price.
-  List<(String, String, Color)>? _compare(int cost) {
+  List<(String, String, Color)>? _compare(num cost) {
     final pack = _pack;
     if (pack == null || _product == null) return null;
     final base = _product!.units.first;
     final out = <(String, String, Color)>[];
     final last = _last;
-    if (last != null && asInt(last['pack_size']) == pack.size && asInt(last['pack_cost']) > 0) {
-      final lc = asInt(last['pack_cost']);
+    if (last != null && asInt(last['pack_size']) == pack.size && asCost(last['pack_cost']) > 0) {
+      final lc = asCost(last['pack_cost']);
       final diff = cost == 0 ? 0 : ((cost - lc) * 100 / lc).round();
       out.add((
         last['from_this_supplier'] == true ? tr('Mara ya mwisho (:s)', {'s': widget.supplierName ?? tr('msambazaji huyu')}) : tr('Mzigo wa mwisho'),
-        '${formatTsh(lc)}${diff == 0 ? '' : (diff > 0 ? '  ↑ $diff%' : '  ↓ ${-diff}%')}',
+        '${formatCost(lc)}${diff == 0 ? '' : (diff > 0 ? '  ↑ $diff%' : '  ↓ ${-diff}%')}',
         diff > 0 ? dangerRed : inkColor,
       ));
     }
@@ -791,7 +792,7 @@ class _ReceiveLineScreenState extends State<ReceiveLineScreen> {
   }
 
   /// "TSh 20 kwa kidonge · unauza TSh 50": is this delivery worth it?
-  String? _sellingHint(int cost) {
+  String? _sellingHint(num cost) {
     final pack = _pack;
     if (pack == null || cost == 0) return null;
     final perBase = cost / pack.size;

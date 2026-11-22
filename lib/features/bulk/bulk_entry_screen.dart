@@ -205,7 +205,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
         ..packs.text = at(3).replaceAll(RegExp(r'[^0-9]'), '')
         ..batch.text = at(4)
         ..exp.text = at(5)
-        ..cost.text = at(6).replaceAll(RegExp(r'[^0-9]'), '');
+        ..cost.text = costValue(at(6)) == null ? '' : costText(costValue(at(6))!);
       _rows.add(r);
       // Only an exact name (ignoring capitals) is matched; anything else waits
       // for a person to pick it. Names are never guessed.
@@ -268,7 +268,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
             ..packs.text = '${x['packs'] ?? ''}'
             ..batch.text = '${x['batch'] ?? ''}'
             ..exp.text = '${x['exp'] ?? ''}'
-            ..cost.text = moneyValue('${x['cost'] ?? ''}') == null ? '' : groupDigits(moneyValue('${x['cost']}')!)
+            ..cost.text = costValue('${x['cost'] ?? ''}') == null ? '' : costText(costValue('${x['cost']}')!)
             ..noBatch = x['no_batch'] == true
             ..packName = normalUnitName('${x['pack_name'] ?? ''}')
             ..packSize = asInt(x['pack_size']) < 1 ? 1 : asInt(x['pack_size']);
@@ -359,7 +359,7 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
       'pack_name': r.packName,
       'pack_size': r.packSize,
       'packs': int.parse(r.packs.text),
-      'pack_cost': moneyValue(r.cost.text) ?? 0,
+      'pack_cost': costValue(r.cost.text) ?? 0,
     };
   }
 
@@ -739,8 +739,8 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
             _label(tr('Bei ya kununua (kwa kifungashio)')),
             TextField(
               controller: r.cost,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [MoneyInput()],
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: const [CostInput()],
               onChanged: (_) => setState(() {}),
               decoration: dec(
                 tr('TSh kwa :a', {'a': r.packName.isEmpty ? tr('kifungashio') : unitLabel(r.packName)}),
@@ -875,8 +875,8 @@ class _BulkEntryScreenState extends State<BulkEntryScreen> {
           cell(5, _expField(r, dec('06/2028'))),
           cell(6, TextField(
             controller: r.cost,
-            keyboardType: TextInputType.number,
-            inputFormatters: const [MoneyInput()],
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: const [CostInput()],
             onChanged: (_) => setState(() {}),
             // Enter on the last typed cell: next row.
             onSubmitted: (_) {
@@ -978,7 +978,7 @@ class _Row {
     return e.$1 < now.year || (e.$1 == now.year && e.$2 < now.month);
   }
 
-  int get lineTotal => (int.tryParse(packs.text) ?? 0) * (moneyValue(cost.text) ?? 0);
+  int get lineTotal => ((int.tryParse(packs.text) ?? 0) * (costValue(cost.text) ?? 0)).round();
 
   String get packLabel {
     if (product == null) return tr('Chagua bidhaa kwanza');
@@ -1008,7 +1008,7 @@ class _Row {
       final months = (e.$1 - now.year) * 12 + e.$2 - now.month;
       if (months < 2) return tr('Inaisha karibuni (:a/:b): iuze kwanza', {'a': e.$2, 'b': e.$1});
     }
-    final c = moneyValue(cost.text);
+    final c = costValue(cost.text);
     if (costs && c != null && product != null && packSize > 0) {
       final perBase = c / packSize;
       final p = draft != null ? (draft!.units.first.price ?? 0) : product!.units.first.price;

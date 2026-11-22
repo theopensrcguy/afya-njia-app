@@ -581,7 +581,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 const SizedBox(width: 8),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   Text(formatTsh(l.total), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
-                  Text('${formatTsh(l.packCost)} / ${unitLabel(l.packName)}', style: const TextStyle(fontSize: 11.5, color: mutedText)),
+                  Text('${formatCost(l.packCost)} / ${unitLabel(l.packName)}', style: const TextStyle(fontSize: 11.5, color: mutedText)),
                 ]),
               ]),
             ),

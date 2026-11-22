@@ -547,7 +547,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                 Text(formatTsh(u.price), style: const TextStyle(fontWeight: FontWeight.w800)),
                 if (margin != null)
                   Text(
-                    losing ? tr('Hasara! gharama :a', {'a': formatTsh(asInt(raw['cost']))}) : tr('Faida :margin% · gharama :a', {'margin': margin, 'a': formatTsh(asInt(raw['cost']))}),
+                    losing ? tr('Hasara! gharama :a', {'a': formatCost(asCost(raw['cost']))}) : tr('Faida :margin% · gharama :a', {'margin': margin, 'a': formatCost(asCost(raw['cost']))}),
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: losing ? dangerRed : brandGreen),
                   ),
               ]),

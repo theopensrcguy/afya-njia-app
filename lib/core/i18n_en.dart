@@ -2371,4 +2371,11 @@ const en = <String, String>{
   'Ni bidhaa gani hasa?': 'Which product is it really?',
   'REKEBISHA BARCODE': 'FIX BARCODE',
   'Si bidhaa hii? Rekebisha barcode': 'Not this product? Fix the barcode',
+  // v0.49
+  ':name imeondolewa': ':name removed',
+  'Bidhaa :n · vipande :m': ':n products · :m pieces',
+  'Futa zote': 'Clear all',
+  'Hisa haitoshi kwa :u moja.': 'Not enough stock for one :u.',
+  'Ndizo zote zilizopo': 'That\'s all there is',
+  'zimebaki :n tu': 'only :n left',
 };

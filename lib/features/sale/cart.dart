@@ -157,6 +157,28 @@ class Cart extends ChangeNotifier {
     return true;
   }
 
+  /// "Futa zote" (v0.49): every line out, the rest of the sale (payment,
+  /// customer) kept. Returns what was there, so "Rudisha" can put it back.
+  List<CartLine> takeAllLines() {
+    if (!canEdit) return const [];
+    final was = [for (final l in _lines.values) CartLine(l.product, l.unit, l.quantity)];
+    _lines.clear();
+    _clampDiscount();
+    notifyListeners();
+    return was;
+  }
+
+  /// Put lines back (undo of × or Futa zote), in their order, as far as the shelf allows.
+  void restoreLines(List<CartLine> lines) {
+    if (!canEdit) return;
+    for (final l in lines) {
+      final max = maxOf(l.product, l.unit);
+      if (max > 0) _lines[l.product.id] = CartLine(l.product, l.unit, l.quantity.clamp(1, max));
+    }
+    _clampDiscount();
+    notifyListeners();
+  }
+
   void setPaymentMethod(String method) {
     if (!canEdit) return;
     paymentMethod = method;

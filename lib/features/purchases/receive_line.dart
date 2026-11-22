@@ -48,8 +48,8 @@ class ReceiveLine {
   int packSize;
   int packs;
 
-  /// TSh for ONE pack, as on the invoice.
-  int packCost;
+  /// TSh for ONE pack, as on the invoice: one decimal allowed (v0.49).
+  num packCost;
   String batch;
   int expiryYear;
   int expiryMonth;
@@ -58,7 +58,8 @@ class ReceiveLine {
   bool get unfinished => batch.trim().isEmpty || expiryYear == 0;
 
   int get quantity => packs * packSize;
-  int get total => packs * packCost;
+  /// Whole shillings: the money that changes hands.
+  int get total => (packs * packCost).round();
 
   /// "5 boksi (vidonge 100) = 50 kadi"
   String describe() {

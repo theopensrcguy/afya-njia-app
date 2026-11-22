@@ -78,26 +78,26 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
 
   Future<void> _price(Map<String, dynamic> i) async {
     final last = i['expected_pack_cost'];
-    final c = TextEditingController(text: i['paid_pack_cost'] == null ? (last == null ? '' : groupDigits(asInt(last))) : groupDigits(asInt(i['paid_pack_cost'])));
-    final v = await showDialog<int>(
+    final c = TextEditingController(text: i['paid_pack_cost'] == null ? (last == null ? '' : costText(asCost(last))) : costText(asCost(i['paid_pack_cost'])));
+    final v = await showDialog<num>(
       context: context,
       builder: (d) => AlertDialog(
         title: Text(tr('Bei ya :a moja', {'a': unitLabel('${i['pack_name']}')})),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${i['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-          if (last != null) Text(tr('Mara ya mwisho: :a', {'a': formatTsh(asInt(last))}), style: const TextStyle(color: mutedText, fontSize: 13)),
+          if (last != null) Text(tr('Mara ya mwisho: :a', {'a': formatCost(asCost(last))}), style: const TextStyle(color: mutedText, fontSize: 13)),
           const SizedBox(height: 10),
           TextField(
             controller: c,
             autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: const [MoneyInput()],
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: const [CostInput()],
             decoration: InputDecoration(labelText: tr('Bei uliyolipa (TSh)')),
           ),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.of(d).pop(), child: const T('Ghairi')),
-          FilledButton(onPressed: () => Navigator.of(d).pop(moneyValue(c.text)), child: const T('Hifadhi')),
+          FilledButton(onPressed: () => Navigator.of(d).pop(costValue(c.text)), child: const T('Hifadhi')),
         ],
       ),
     );
@@ -116,7 +116,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           packName: '${i['pack_name']}',
           packSize: asInt(i['pack_size']) < 1 ? 1 : asInt(i['pack_size']),
           packs: asInt(i['bought_packs'] ?? i['packs']),
-          packCost: asInt(i['paid_pack_cost'] ?? i['expected_pack_cost']),
+          packCost: asCost(i['paid_pack_cost'] ?? i['expected_pack_cost']),
           batch: '',
           expiryYear: 0,
           expiryMonth: 0,
@@ -252,8 +252,8 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     final done = state == 'bought';
     final missing = state == 'missing';
     final busy = _busy.contains(asInt(i['id']));
-    final last = i['expected_pack_cost'] == null ? null : asInt(i['expected_pack_cost']);
-    final paid = i['paid_pack_cost'] == null ? null : asInt(i['paid_pack_cost']);
+    final last = i['expected_pack_cost'] == null ? null : asCost(i['expected_pack_cost']);
+    final paid = i['paid_pack_cost'] == null ? null : asCost(i['paid_pack_cost']);
     final packs = asInt(i['bought_packs'] ?? i['packs']);
     // Paid more or less than last time, in words people check at the counter.
     String? diff;
@@ -305,7 +305,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: const Color(0xFFF2F6F4), borderRadius: BorderRadius.circular(12)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(paid != null ? groupDigits(paid) : (last != null ? groupDigits(last) : tr('Bei?')),
+                Text(paid != null ? costText(paid) : (last != null ? costText(last) : tr('Bei?')),
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: paid != null ? inkColor : mutedText)),
                 Text(diff ?? (paid == null ? (last == null ? tr('weka') : tr('mwisho')) : tr('uliyolipa')),
                     style: TextStyle(fontSize: 10.5, color: diffColor, fontWeight: FontWeight.w700)),
