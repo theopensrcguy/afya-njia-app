@@ -12,6 +12,7 @@ import '../../models/product.dart';
 import 'cart.dart';
 import 'sell_unit.dart';
 import '../../core/i18n.dart';
+import '../../core/barcode_tools.dart';
 
 /// Scan at the counter, with the phone's own camera.
 ///
@@ -59,7 +60,7 @@ class _ScanScreenState extends State<ScanScreen> {
     try {
       final res = await widget.api.get('products/barcode/$code') as Map<String, dynamic>;
       if (!mounted) return;
-      await _sellSheet(Product.fromJson(res), printedOn: res['barcode_unit'] as String?, usual: res['usual_unit'] as String?);
+      await _sellSheet(Product.fromJson(res), printedOn: res['barcode_unit'] as String?, usual: res['usual_unit'] as String?, code: code);
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.code == 'unknown_barcode') {
@@ -74,9 +75,10 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   /// Known product: the unit is pre-chosen, the count is 1. Usually one tap.
-  Future<void> _sellSheet(Product p, {String? printedOn, String? usual}) async {
+  Future<void> _sellSheet(Product p, {String? printedOn, String? usual, String? code}) async {
     var unit = pickSellUnit(p, usual: usual, printedOn: printedOn);
     var qty = 1;
+    var wrong = false; // "Si bidhaa hii?": the code was linked to the wrong product
     final added = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -127,6 +129,17 @@ class _ScanScreenState extends State<ScanScreen> {
                       ? tr('Hisa haitoshi')
                       : tr('Ongeza :qty :a · :b', {'qty': qty, 'a': unitLabel(unit.name, qty), 'b': formatTsh(qty * unit.price)})),
                 ),
+                // A wrong link sells the wrong medicine at every scan: fix it right here (v0.48.5).
+                if (code != null)
+                  TextButton.icon(
+                    onPressed: () {
+                      wrong = true;
+                      Navigator.of(sheet).pop();
+                    },
+                    icon: const Icon(Icons.report_gmailerrorred_rounded, size: 18),
+                    label: const T('Si bidhaa hii? Rekebisha barcode'),
+                    style: TextButton.styleFrom(foregroundColor: dangerRed),
+                  ),
               ]),
             ),
           );
@@ -134,10 +147,33 @@ class _ScanScreenState extends State<ScanScreen> {
       ),
     );
     if (!mounted) return;
+    if (wrong && code != null) return _fixWrong(code, p);
     if (added == true) {
       _toast('✓ ${p.name}: $qty ${unitLabel(unit.name, qty)}');
     } else if (added == false) {
       _toast(tr('Hisa haitoshi: :name.', {'name': p.name}), error: true);
+    }
+  }
+
+  /// The code opened the wrong product: pick the right one, and the code moves there.
+  Future<void> _fixWrong(String code, Product wrongOne) async {
+    final picked = await showModalBottomSheet<(Product, String?)>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: cardColor,
+      builder: (_) => _TeachSheet(api: widget.api, code: code, wrongName: wrongOne.name),
+    );
+    if (picked == null || !mounted) return;
+    final (product, printedOn) = picked;
+    if (product.id == wrongOne.id) return;
+    try {
+      await widget.api.post('barcodes/move', {'code': code, 'product_id': product.id, 'unit_name': ?printedOn});
+      if (!mounted) return;
+      _toast(tr('Barcode sasa ni ya :name.', {'name': product.name}));
+      await _sellSheet(product, printedOn: printedOn, code: code);
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
     }
   }
 
@@ -152,14 +188,9 @@ class _ScanScreenState extends State<ScanScreen> {
     );
     if (picked == null || !mounted) return;
     final (product, printedOn) = picked;
-    try {
-      await widget.api.post('products/${product.id}/barcodes', {'code': code, 'unit_name': ?printedOn});
-      if (!mounted) return;
-      _toast(tr('Imeunganishwa. Ukiiskani tena, :name itajulikana yenyewe.', {'name': product.name}));
-      await _sellSheet(product, printedOn: printedOn);
-    } on ApiException catch (e) {
-      _toast(e.message, error: true);
-    }
+    // Another phone may have linked it meanwhile: linkOrMoveBarcode says whose, and offers to move it.
+    final ok = await linkOrMoveBarcode(context, api: widget.api, code: code, productId: product.id, productName: product.name, unitName: printedOn);
+    if (ok && mounted) await _sellSheet(product, printedOn: printedOn, code: code);
   }
 
   void _toast(String text, {bool error = false}) {
@@ -220,10 +251,13 @@ class _ScanScreenState extends State<ScanScreen> {
 /// "Ni bidhaa gani?": search the shop's products, pick one, and say what the
 /// code is printed on (the box, the strip...). Returns (product, unit name).
 class _TeachSheet extends StatefulWidget {
-  const _TeachSheet({required this.api, required this.code});
+  const _TeachSheet({required this.api, required this.code, this.wrongName});
 
   final ApiClient api;
   final String code;
+
+  /// Fixing a wrong link (v0.48.5): the product it opened by mistake.
+  final String? wrongName;
 
   @override
   State<_TeachSheet> createState() => _TeachSheetState();
@@ -263,9 +297,15 @@ class _TeachSheetState extends State<_TeachSheet> {
       padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const T('BARCODE MPYA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: warnAmber, letterSpacing: 0.4)),
-          const T('Ni bidhaa gani?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const T('Chagua mara moja tu. Ukiiskani tena itajulikana yenyewe.', style: TextStyle(color: mutedText)),
+          T(widget.wrongName == null ? 'BARCODE MPYA' : 'REKEBISHA BARCODE',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: warnAmber, letterSpacing: 0.4)),
+          T(widget.wrongName == null ? 'Ni bidhaa gani?' : 'Ni bidhaa gani hasa?', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          Text(
+            widget.wrongName == null
+                ? tr('Chagua mara moja tu. Ukiiskani tena itajulikana yenyewe.')
+                : tr('Imefungua :a kimakosa. Chagua sahihi: barcode itahamia huko.', {'a': widget.wrongName}),
+            style: const TextStyle(color: mutedText),
+          ),
           const SizedBox(height: 12),
           if (p == null) ...[
             TextField(

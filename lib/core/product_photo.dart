@@ -12,48 +12,82 @@ import 'i18n.dart';
 /// Returns the new photo link, '' when the photo was removed, or null when
 /// nothing changed.
 Future<String?> editProductPhoto(BuildContext context, {required ApiClient api, required int productId, String? current}) async {
+  final has = current != null && current.isNotEmpty;
+  // v0.48.5: scroll-controlled with a smaller preview, so "Ondoa" is never
+  // pushed below the screen (a 9/16 sheet hid it on most iPhones).
   final choice = await showModalBottomSheet<String>(
     context: context,
+    isScrollControlled: true,
     showDragHandle: true,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
     builder: (sheet) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (current != null && current.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+          Text(tr(has ? 'Picha ya bidhaa' : 'Weka picha ya bidhaa'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const T('Boksi mbele, mwanga mzuri, jina lisomeke', style: TextStyle(fontSize: 12.5, color: Color(0xFF5B6F69))),
+          const SizedBox(height: 14),
+          if (has)
+            GestureDetector(
+              onTap: () => _zoom(sheet, current),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(18),
-                child: AspectRatio(aspectRatio: 4 / 3, child: Image.network(current, fit: BoxFit.cover)),
+                child: SizedBox(
+                  height: 170,
+                  child: Stack(fit: StackFit.expand, children: [
+                    Image.network(current, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: const Color(0xFFEFF4F2))),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(99)),
+                        child: const Icon(Icons.zoom_out_map_rounded, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ]),
+                ),
               ),
             ),
-          ListTile(
-            leading: const Icon(Icons.photo_camera_outlined),
-            title: T(current == null || current.isEmpty ? 'Piga picha' : 'Piga picha mpya'),
-            subtitle: const T('Boksi mbele, mwanga mzuri, jina lisomeke'),
-            onTap: () => Navigator.of(sheet).pop('camera'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: const T('Chagua kwenye picha za simu'),
-            onTap: () => Navigator.of(sheet).pop('gallery'),
-          ),
-          if (current != null && current.isNotEmpty)
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Color(0xFFA8321F)),
-              title: const T('Ondoa picha', style: TextStyle(color: Color(0xFFA8321F))),
-              onTap: () => Navigator.of(sheet).pop('remove'),
-            ),
+          if (has) const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: _action(sheet, Icons.photo_camera_outlined, tr(has ? 'Piga mpya' : 'Piga picha'), 'camera')),
+            const SizedBox(width: 10),
+            Expanded(child: _action(sheet, Icons.photo_library_outlined, tr('Chagua picha'), 'gallery')),
+            if (has) ...[
+              const SizedBox(width: 10),
+              Expanded(child: _action(sheet, Icons.delete_outline_rounded, tr('Ondoa'), 'remove', danger: true)),
+            ],
+          ]),
         ]),
       ),
     ),
   );
+  if (choice == 'remove' && context.mounted) {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const T('Ondoa picha?'),
+        content: const T('Bidhaa itaonyesha alama ya kifungashio badala ya picha. Unaweza kuweka nyingine wakati wowote.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(d).pop(false), child: const T('Hapana')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC2412D)),
+            onPressed: () => Navigator.of(d).pop(true),
+            child: const T('Ondoa'),
+          ),
+        ],
+      ),
+    );
+    if (sure != true) return null;
+  }
   if (choice == null || !context.mounted) return null;
   try {
     if (choice == 'remove') {
       await api.delete('products/$productId/photo');
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Picha imeondolewa.'))));
       return '';
     }
     // Small enough to send on a slow line, big enough for a shop page later.
@@ -78,6 +112,36 @@ Future<String?> editProductPhoto(BuildContext context, {required ApiClient api, 
   }
   return null;
 }
+
+Widget _action(BuildContext sheet, IconData icon, String label, String value, {bool danger = false}) {
+  final fg = danger ? const Color(0xFFC2412D) : const Color(0xFF0E3B31);
+  return Material(
+    color: danger ? const Color(0xFFFBE9E5) : const Color(0xFFEFF4F2),
+    borderRadius: BorderRadius.circular(18),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () => Navigator.of(sheet).pop(value),
+      child: SizedBox(
+        height: 84,
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: fg, size: 26),
+          const SizedBox(height: 6),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: fg)),
+        ]),
+      ),
+    ),
+  );
+}
+
+/// The photo full screen, pinch to zoom.
+void _zoom(BuildContext context, String url) => Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+        body: Center(child: InteractiveViewer(maxScale: 5, child: Image.network(url))),
+      ),
+    ));
 
 /// The product's photo in a rounded square, or [fallback] (the pack icon)
 /// when there is none or it can't load. [onTap] opens the photo editor.

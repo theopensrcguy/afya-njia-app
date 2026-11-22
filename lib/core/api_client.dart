@@ -64,9 +64,10 @@ class ApiClient {
     return _send(() => _http.patch(uri, headers: _headers(), body: jsonEncode(body ?? {})), saving: true);
   }
 
-  Future<dynamic> delete(String path) {
+  /// [body] is optional (e.g. a reason, v0.48.5); without it nothing is sent, as before.
+  Future<dynamic> delete(String path, [Map<String, dynamic>? body]) {
     final uri = Uri.parse('$apiBaseUrl/$path');
-    return _send(() => _http.delete(uri, headers: _headers()), saving: true);
+    return _send(() => _http.delete(uri, headers: _headers(), body: body == null ? null : jsonEncode(body)), saving: true);
   }
 
   Future<dynamic> put(String path, [Map<String, dynamic>? body]) {

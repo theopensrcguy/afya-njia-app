@@ -741,3 +741,16 @@ Built from canvas boards 10–14.
   - A done screen leads back to sign-in with the number filled in.
 - **English check widened:** texts written as `T(a ? '…' : '…')` are now caught, which found and fixed 6 untranslated texts (including "Chagua zote").
 - Checked with the Dart analyzer only. No server changes.
+
+### v0.48.5: product photos you can change or remove; fixing wrong barcodes
+- **Photo sheet** (`core/product_photo.dart`):
+  - **The bug:** the sheet opened at the default 9/16 of the screen, and the large preview pushed **Ondoa picha** below the edge on most iPhones.
+  - **Now:** it is scroll-controlled, with a smaller preview (tap to zoom and pinch) and three clear tiles: **Piga picha / Piga mpya**, **Chagua picha** and **Ondoa** (red).
+  - Removing asks first, then shows "Picha imeondolewa".
+  - It's the same sheet everywhere: the product page, stock-take, and a delivery line.
+- **Barcodes:**
+  - **The product page has a Barcode card.** Each code shows the pack it's printed on and who added it and when. A pale-red × removes it, for whoever may, with an optional reason. **+ Skani** scans the box, asks which pack the code is on, and links it. "Zilizoondolewa" shows the history.
+  - **At the counter:** after a scan, the sell sheet has **"Si bidhaa hii? Rekebisha barcode"**. Pick the right product and the code moves there (`POST barcodes/move`), then the sell sheet opens on the right product.
+  - **When a code already belongs to another product** (counter, product page): the app says whose it is. If you may fix it, it offers **Hamisha hapa**; otherwise it says who can.
+  - `core/barcode_tools.dart`: `scanOneCode()` and `linkOrMoveBarcode()`. `ApiClient.delete` now takes an optional body.
+- Checked with the Dart analyzer only. For TestFlight, raise the build number (e.g. `0.48.5+<last+1>`).

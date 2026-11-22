@@ -15,6 +15,7 @@ import '../../models/product.dart';
 import 'units_editor_screen.dart';
 import '../../core/i18n.dart';
 import '../../core/product_photo.dart';
+import '../../core/barcode_tools.dart';
 
 /// One product: what's on the shelf, how it's sold, its batches, and every
 /// change to its stock (who, when, why). Owner only.
@@ -35,6 +36,7 @@ class ProductStockScreen extends StatefulWidget {
 class _ProductStockScreenState extends State<ProductStockScreen> {
   Map<String, dynamic>? _p;
   String? _error;
+  Map<String, dynamic>? _codes; // v0.48.5: its barcodes, and the ones removed
 
   ApiClient get _api => widget.session.api;
   bool _can(String p) => widget.session.user!.can(p);
@@ -59,8 +61,65 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
         }
       }
       if (mounted) setState(() => _p = p);
+      _loadCodes();
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _loadCodes() async {
+    try {
+      final c = await _api.get('products/${widget.productId}/barcodes') as Map<String, dynamic>;
+      if (mounted) setState(() => _codes = c);
+    } on ApiException {
+      // An older server: the card just doesn't show.
+    }
+  }
+
+  /// Scan a box: which pack is the code printed on, then link (or move it here).
+  Future<void> _addCode() async {
+    final code = await scanOneCode(context, title: tr('Skani barcode ya :name', {'name': widget.name}));
+    if (code == null || !mounted) return;
+    final units = _units;
+    String? unit;
+    if (units.length > 1) {
+      unit = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        backgroundColor: Colors.white,
+        builder: (sheet) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(tr('Barcode :c imechapishwa kwenye nini?', {'c': code}), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+            for (final u in units)
+              ListTile(leading: const Icon(Icons.inventory_2_outlined), title: Text(unitLabel(u.name)), onTap: () => Navigator.of(sheet).pop(u.name)),
+            ListTile(leading: const Icon(Icons.help_outline_rounded), title: const T('Sijui'), onTap: () => Navigator.of(sheet).pop('')),
+          ]),
+        ),
+      );
+      if (unit == null || !mounted) return;
+    }
+    final ok = await linkOrMoveBarcode(context,
+        api: _api, code: code, productId: widget.productId, productName: widget.name, unitName: unit == null || unit.isEmpty ? null : unit);
+    if (ok) _loadCodes();
+  }
+
+  Future<void> _removeCode(Map<String, dynamic> b) async {
+    final reason = await askText(context,
+        title: tr('Ondoa barcode :c?', {'c': '${b['code']}'}),
+        message: tr('Ikiskaniwa tena, app itauliza ni bidhaa gani. Itabaki kwenye kumbukumbu.'),
+        label: tr('Sababu (si lazima)'),
+        danger: true,
+        confirm: tr('Ondoa'));
+    if (reason == null) return;
+    try {
+      final r = await _api.delete('products/${widget.productId}/barcodes/${b['id']}', {if (reason.trim().isNotEmpty) 'reason': reason.trim()}) as Map<String, dynamic>;
+      _toast('${r['message'] ?? tr('Imeondolewa.')}');
+      _loadCodes();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
     }
   }
 
@@ -217,6 +276,7 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
                   const SizedBox(height: 14),
                   _unitsCard(),
                   const SizedBox(height: 14),
+                  if (_codes != null) ...[_codesCard(), const SizedBox(height: 14)],
                   _priceHistoryCard(),
                   const SizedBox(height: 14),
                   _batchesCard(),
@@ -293,6 +353,103 @@ class _ProductStockScreenState extends State<ProductStockScreen> {
         ),
       ),
     );
+  }
+
+  /// Barcodes (v0.48.5): the codes that open this product at a scan. A wrong one
+  /// sells the wrong medicine, so each can be removed (by whoever may).
+  Widget _codesCard() {
+    final list = ((_codes!['barcodes'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final removed = ((_codes!['removed'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final canAdd = _can(Perm.sell) || _can(Perm.receive);
+    return _card(children: [
+      Row(children: [
+        const Icon(Icons.qr_code_scanner_rounded, size: 20, color: Color(0xFF0E3B31)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(tr('Barcode · :n', {'n': list.length}), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+        if (canAdd)
+          TextButton.icon(onPressed: _addCode, icon: const Icon(Icons.add_rounded, size: 18), label: const T('Skani')),
+      ]),
+      if (list.isEmpty)
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: T('Hakuna bado. Skani boksi lake: ikiskaniwa kaunta, bidhaa hii inafunguka yenyewe.', style: TextStyle(color: mutedText, fontSize: 13)),
+        ),
+      for (final b in list)
+        Container(
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          decoration: BoxDecoration(color: const Color(0xFFF4F8F6), borderRadius: BorderRadius.circular(14)),
+          child: Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Flexible(
+                    child: Text('${b['code']}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: .5)),
+                  ),
+                  if (b['unit_name'] != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(99)),
+                      child: Text(unitLabel('${b['unit_name']}'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: brandGreen)),
+                    ),
+                  ],
+                ]),
+                Text(
+                  [
+                    if (b['added_by'] != null) tr('na :a', {'a': '${b['added_by']}'}),
+                    if (DateTime.tryParse('${b['added_at']}') case final at?) timeAgo(at),
+                  ].join(' · '),
+                  style: const TextStyle(fontSize: 11.5, color: mutedText),
+                ),
+              ]),
+            ),
+            if (b['can_remove'] == true)
+              IconButton(
+                tooltip: tr('Ondoa'),
+                onPressed: () => _removeCode(b),
+                icon: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: const BoxDecoration(color: Color(0xFFFBE9E5), shape: BoxShape.circle),
+                  child: const Icon(Icons.close_rounded, size: 16, color: dangerRed),
+                ),
+              ),
+          ]),
+        ),
+      if (removed.isNotEmpty)
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(tr('Zilizoondolewa · :n', {'n': removed.length}), style: const TextStyle(fontSize: 13, color: mutedText, fontWeight: FontWeight.w700)),
+            children: [
+              for (final r in removed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(children: [
+                    const Icon(Icons.remove_circle_outline_rounded, size: 16, color: mutedText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        [
+                          '${r['code']}',
+                          if (r['moved_to'] != null) tr('→ :p', {'p': '${r['moved_to']}'}),
+                          if (r['by'] != null) '${r['by']}',
+                          if (r['reason'] != null) '"${r['reason']}"',
+                        ].join(' · '),
+                        style: const TextStyle(fontSize: 12, color: mutedText),
+                      ),
+                    ),
+                  ]),
+                ),
+            ],
+          ),
+        ),
+    ]);
   }
 
   Widget _onHandCard() {
