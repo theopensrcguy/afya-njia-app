@@ -12,6 +12,8 @@ import '../../core/smooth.dart';
 import '../../core/units.dart';
 import '../../models/product.dart';
 import 'cart.dart';
+import '../stock/stock_look.dart';
+import '../../core/product_photo.dart';
 import 'checkout_screen.dart';
 import 'quantity_dialog.dart';
 import 'scan_screen.dart';
@@ -58,6 +60,48 @@ class _CounterScreenState extends State<CounterScreen> {
   final _harakaKey = GlobalKey();
   bool _strip = false; // the tiles have scrolled away: show the slim strip
   bool _harakaOpen = UiMemory.get('counter.haraka', true);
+
+  /// v0.49: products as a list with photos (default) or as a photo grid; remembered.
+  bool _grid = UiMemory.get('counter.grid', false);
+
+  /// Photos taken right here at the counter, until the next search brings them.
+  final Map<int, String?> _photos = {};
+
+  String? _photoOf(Product p) => _photos.containsKey(p.id) ? _photos[p.id] : p.photoUrl;
+
+  /// The same people who may photograph a product elsewhere (server: ProductPhotoController::MAY).
+  bool get _mayPhoto {
+    final u = widget.session.user!;
+    return u.can(Perm.editPrices) || u.can(Perm.createProducts) || u.can(Perm.receive) || u.can(Perm.countStock);
+  }
+
+  Future<void> _takePhoto(Product p) async {
+    final r = await editProductPhoto(context, api: widget.session.api, productId: p.id, current: _photoOf(p));
+    if (r != null && mounted) setState(() => _photos[p.id] = r.isEmpty ? null : r);
+  }
+
+  /// The product's photo, or its pack drawn in its form. With no photo yet, a
+  /// small camera mark: tap it and photograph the box while selling.
+  Widget _thumb(Product p, double size, {double radius = 12, bool out = false}) {
+    final url = _photoOf(p);
+    final none = url == null || url.isEmpty;
+    return ProductThumb(
+      url: url,
+      size: size,
+      radius: radius,
+      badge: none && _mayPhoto,
+      onTap: none && _mayPhoto ? () => _takePhoto(p) : null,
+      fallback: Container(
+        decoration: BoxDecoration(
+          color: out ? Colors.white : const Color(0xFFEFF4F2),
+          border: out ? Border.all(color: const Color(0xFFB8C4C0)) : null,
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        alignment: Alignment.center,
+        child: PackIcon(form: p.form, color: out ? const Color(0xFFB8C4C0) : const Color(0xFF0E3B31), size: size * .42, empty: out),
+      ),
+    );
+  }
 
   ApiClient get _api => widget.session.api;
 
@@ -379,8 +423,9 @@ class _CounterScreenState extends State<CounterScreen> {
       body: Stack(children: [
         Column(children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+            child: Row(children: [
+              Expanded(child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
               textInputAction: TextInputAction.search,
@@ -408,7 +453,11 @@ class _CounterScreenState extends State<CounterScreen> {
                             },
                           ),
               ),
-            ),
+            )),
+              const SizedBox(width: 6),
+              // List (with photos) ↔ photo grid; the choice is remembered.
+              _viewSwitch(),
+            ]),
           ),
           // Tiles scrolled away: the same products as one slim strip.
           ListenableBuilder(
@@ -450,6 +499,133 @@ class _CounterScreenState extends State<CounterScreen> {
     );
   }
 
+  Widget _viewSwitch() => Container(
+        height: 48,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFDCE5E1))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          for (final (grid, icon, tip) in [(false, Icons.view_agenda_outlined, 'Orodha'), (true, Icons.grid_view_rounded, 'Picha')])
+            Tooltip(
+              message: tr(tip),
+              child: GestureDetector(
+                onTap: () {
+                  if (_grid == grid) return;
+                  tick();
+                  setState(() => _grid = grid);
+                  UiMemory.set('counter.grid', grid);
+                },
+                child: AnimatedContainer(
+                  duration: Motion.of(context, Motion.fast),
+                  width: 38,
+                  height: double.infinity,
+                  decoration: BoxDecoration(color: _grid == grid ? const Color(0xFFE3F4EC) : Colors.transparent, borderRadius: BorderRadius.circular(11)),
+                  child: Icon(icon, size: 20, color: _grid == grid ? brandGreen : mutedText),
+                ),
+              ),
+            ),
+        ]),
+      );
+
+  /// Grid view (v0.49): two photo cards a row, + adds one, the count and
+  /// "×n in the basket" on the photo. Out of stock: tap = "mteja ameulizia".
+  Widget _gridCard(Product p) {
+    final out = p.onHand == 0;
+    final n = _cart.quantityOf(p.id);
+    final unit = _cart.unitOf(p.id) ?? p.defaultUnit;
+    final left = Cart.maxOf(p, unit);
+    final url = _photoOf(p);
+    final none = url == null || url.isEmpty;
+    return Opacity(
+      opacity: out ? .6 : 1,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: p.suggested ? const BorderSide(color: warnAmber) : (n > 0 ? const BorderSide(color: brandGreen, width: 1.6) : BorderSide.none),
+        ),
+        child: InkWell(
+          onTap: out ? () => _asked(product: p) : () => _addToCart(p),
+          onLongPress: out || n == 0 ? null : () => _typeQuantity(p, n),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(
+              child: Stack(fit: StackFit.expand, children: [
+                if (!none)
+                  Image.network(url, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: const Color(0xFFEFF4F2)))
+                else
+                  GestureDetector(
+                    onTap: _mayPhoto ? () => _takePhoto(p) : null,
+                    child: Container(
+                      color: out ? const Color(0xFFF4F6F5) : const Color(0xFFEFF4F2),
+                      alignment: Alignment.center,
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        PackIcon(form: p.form, color: out ? const Color(0xFFB8C4C0) : const Color(0xFF0E3B31), size: 34, empty: out),
+                        if (_mayPhoto) ...[
+                          const SizedBox(height: 6),
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.photo_camera_outlined, size: 13, color: mutedText),
+                            const SizedBox(width: 4),
+                            Text(tr('Weka picha'), style: const TextStyle(fontSize: 11, color: mutedText, fontWeight: FontWeight.w600)),
+                          ]),
+                        ],
+                      ]),
+                    ),
+                  ),
+                if (!out)
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: _badge(
+                      left <= 2 ? tr(':n tu', {'n': left}) : '${p.onHand ~/ unit.baseQuantity}',
+                      left <= 2 ? const Color(0xFF8A5300) : inkColor,
+                      left <= 2 ? const Color(0xFFFFF4DC) : Colors.white.withValues(alpha: .92),
+                    ),
+                  ),
+                if (n > 0) Positioned(right: 8, top: 8, child: _badge('×$n', Colors.white, brandGreen)),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, height: 1.2)),
+                    const SizedBox(height: 2),
+                    out
+                        ? Text(tr('Imeisha · ameulizia?'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: dangerRed, fontWeight: FontWeight.w600))
+                        : Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: groupDigits(unit.price), style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
+                              TextSpan(text: ' / ${unitLabel(unit.name)}', style: const TextStyle(color: mutedText, fontSize: 11)),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                  ]),
+                ),
+                if (!out)
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(color: n > 0 ? brandGreen : const Color(0xFFE3F4EC), shape: BoxShape.circle),
+                    child: Icon(Icons.add_rounded, size: 19, color: n > 0 ? Colors.white : brandGreen),
+                  ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _badge(String text, Color fg, Color bg) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+        child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
+      );
+
   List<Widget> _buildResults() {
     if (_searchError != null) {
       return [
@@ -488,6 +664,23 @@ class _CounterScreenState extends State<CounterScreen> {
     // tapping must be a conscious choice, never automatic.)
     final suggesting = _results.isNotEmpty && _results.every((p) => p.suggested);
     final offset = suggesting ? 1 : 0;
+
+    if (_grid && !suggesting) {
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: MediaQuery.sizeOf(context).width >= 700 ? 4 : 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              mainAxisExtent: 110 + MediaQuery.textScalerOf(context).scale(66),
+            ),
+            delegate: SliverChildBuilderDelegate((context, i) => Appear(index: i.clamp(0, 6), child: _gridCard(_results[i])), childCount: _results.length),
+          ),
+        ),
+      ];
+    }
 
     return [
       SliverPadding(
@@ -539,8 +732,12 @@ class _CounterScreenState extends State<CounterScreen> {
             // Out: one tap writes down that a customer asked (Wanaouliza).
             onTap: outOfStock ? () => _asked(product: p) : () => _addToCart(p),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                // v0.49: the box's photo, or its pack drawn.
+                _thumb(p, 52, out: outOfStock),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
@@ -574,7 +771,8 @@ class _CounterScreenState extends State<CounterScreen> {
                   // In the basket and sold in more than one way: pick kidonge / kadi / boksi.
                   if (inBasket > 0 && p.units.length > 1) _unitChips(p, unit),
                 ],
-              ),
+              )),
+              ]),
             ),
           ),
         );
@@ -635,7 +833,7 @@ class _CounterScreenState extends State<CounterScreen> {
             crossAxisCount: 3,
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
-            mainAxisExtent: MediaQuery.textScalerOf(context).scale(96),
+            mainAxisExtent: 58 + MediaQuery.textScalerOf(context).scale(80),
           ),
           children: [
             for (final (p, usual) in _haraka)
@@ -653,16 +851,44 @@ class _CounterScreenState extends State<CounterScreen> {
                       if (_cart.quantityOf(p.id) > 0) await _typeQuantity(p, _cart.quantityOf(p.id));
                     },
                     child: Stack(children: [
-                      Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, height: 1.2)),
-                          const Spacer(),
-                          Text(unitLabel(unit.name), style: const TextStyle(fontSize: 11, color: mutedText, fontWeight: FontWeight.w700)),
-                          Text(formatTsh(unit.price), style: const TextStyle(fontSize: 13, color: brandGreen, fontWeight: FontWeight.w800)),
-                        ]),
-                      ),
+                      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        // v0.49: the photo on top (or the pack drawn).
+                        SizedBox(
+                          height: 58,
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            child: Builder(builder: (context) {
+                              final url = _photoOf(p);
+                              return url != null && url.isNotEmpty
+                                  ? Image.network(url, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: const Color(0xFFEFF4F2)))
+                                  : Container(
+                                      color: n > 0 ? const Color(0xFFCDEBDD) : const Color(0xFFEFF4F2),
+                                      alignment: Alignment.center,
+                                      child: PackIcon(form: p.form, color: const Color(0xFF0E3B31), size: 24),
+                                    );
+                            }),
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(9, 6, 9, 8),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, height: 1.2)),
+                              const Spacer(),
+                              Text.rich(
+                                TextSpan(children: [
+                                  TextSpan(text: groupDigits(unit.price), style: const TextStyle(color: brandGreen, fontWeight: FontWeight.w800)),
+                                  TextSpan(text: ' / ${unitLabel(unit.name)}', style: const TextStyle(color: mutedText, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                ]),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12.5),
+                              ),
+                            ]),
+                          ),
+                        ),
+                      ]),
                       if (n > 0)
                         Positioned(
                           top: 6,

@@ -772,3 +772,15 @@ Built from canvas boards 10–14.
   - Swipe left to remove too. × , swipe and Futa zote all offer **Rudisha** for 4 seconds (`Cart.takeAllLines()` / `restoreLines()`).
   - The payment panel below is unchanged.
 - Checked with the Dart analyzer only.
+
+### v0.49.1: the counter shows product photos
+- **List (the default):**
+  - Every product row has its photo on the left (52 px). With no photo it shows the pack drawn in its form (box, jar, bottle…), outlined when the product is out of stock.
+  - The Haraka tiles have the photo on top, and the price reads "100 / kidonge".
+- **Photo grid:** a switch next to the search box (☰ | ▦), remembered as `counter.grid`.
+  - Two photo cards a row (four on an iPad), each with a **+**.
+  - The stock count sits on the photo ("1 tu" in amber when nearly out), with "×n" once it's in the basket.
+  - Tap = add one; hold = type an amount; out of stock = "mteja ameulizia".
+  - "Je, ulimaanisha…?" suggestions always stay a list, so a look-alike name is read before it's tapped.
+- **Photos while selling:** a product with no photo shows a small camera mark (on the grid, "Weka picha"). Whoever may photograph products (prices, new products, receiving or stock-taking) can tap it and photograph the box right at the counter.
+- `Product.form` is read from the API (already sent). No server changes.

@@ -37,10 +37,14 @@ class Product {
     this.suggested = false,
     this.units = const [],
     this.photoUrl,
+    this.form,
   });
 
   /// The product's photo (v0.46.1), when it has one.
   final String? photoUrl;
+
+  /// tablet, capsule, syrup… (v0.49): which pack icon to draw when there's no photo.
+  final String? form;
 
   final int id;
   final String name;
@@ -73,6 +77,7 @@ class Product {
         suggested: json['suggested'] == true,
         units: _units(json),
         photoUrl: json['photo_url'] as String?,
+        form: json['form'] as String?,
       );
 
   /// An older server sends no units: sell by the base unit at the base price.

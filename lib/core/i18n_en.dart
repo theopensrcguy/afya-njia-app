@@ -2378,4 +2378,9 @@ const en = <String, String>{
   'Hisa haitoshi kwa :u moja.': 'Not enough stock for one :u.',
   'Ndizo zote zilizopo': 'That\'s all there is',
   'zimebaki :n tu': 'only :n left',
+  // v0.49 counter
+  ':n tu': 'only :n',
+  'Imeisha · ameulizia?': 'Out · was it asked for?',
+  'Weka picha': 'Add photo',
+  'Picha': 'Photo',
 };
