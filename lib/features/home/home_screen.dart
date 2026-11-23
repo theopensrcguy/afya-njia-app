@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../core/appearance.dart';
 import '../../core/loader.dart';
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
@@ -367,6 +368,10 @@ class _HomeScreenState extends State<HomeScreen> {
               if (_can(Perm.manageDevices))
                 item(Icons.phonelink_lock, tr('Vifaa'), tr('Simu na kompyuta zinazoruhusiwa'), () => go(DevicesScreen(session: s))),
               item(Icons.support_agent_rounded, tr('Msaada'), tr('Uliza Saola, ona majibu'), () => go(SupportScreen(session: s))),
+              item(Icons.text_fields_rounded, tr('Maandishi'), tr(':s · :f', {'s': Appearance.sizeLabel(appearance.size), 'f': Appearance.fontLabel(appearance.font)}), () {
+                Navigator.of(sheet).pop();
+                showAppearanceSheet(context);
+              }),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(children: [

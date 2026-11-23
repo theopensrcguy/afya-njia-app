@@ -423,9 +423,8 @@ class _CounterScreenState extends State<CounterScreen> {
       body: Stack(children: [
         Column(children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
-            child: Row(children: [
-              Expanded(child: TextField(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
               textInputAction: TextInputAction.search,
@@ -453,11 +452,7 @@ class _CounterScreenState extends State<CounterScreen> {
                             },
                           ),
               ),
-            )),
-              const SizedBox(width: 6),
-              // List (with photos) ↔ photo grid; the choice is remembered.
-              _viewSwitch(),
-            ]),
+            ),
           ),
           // Tiles scrolled away: the same products as one slim strip.
           ListenableBuilder(
@@ -480,6 +475,7 @@ class _CounterScreenState extends State<CounterScreen> {
                   slivers: [
                     if (_searchController.text.trim().isEmpty && _shelves.isNotEmpty) SliverToBoxAdapter(child: _buildShelves()),
                     if (_showHaraka) SliverToBoxAdapter(child: KeyedSubtree(key: _harakaKey, child: _buildHaraka())),
+                    if (_results.isNotEmpty && _searchError == null) SliverToBoxAdapter(child: _listHeader()),
                     ..._buildResults(),
                     // Room under the last product for the floating basket.
                     const SliverToBoxAdapter(child: SizedBox(height: 110)),
@@ -499,10 +495,28 @@ class _CounterScreenState extends State<CounterScreen> {
     );
   }
 
+  /// "Bidhaa 124 · ☰|▦": where the list starts, the count and the list/grid switch (v0.49.2).
+  Widget _listHeader() {
+    final typed = _searchController.text.trim().isNotEmpty;
+    final suggesting = _results.every((p) => p.suggested);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 6, 16, 8),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+            suggesting ? '' : (typed ? tr('Imepatikana :n', {'n': _results.length}) : tr('Bidhaa :n', {'n': _results.length})),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ),
+        if (!suggesting) _viewSwitch(),
+      ]),
+    );
+  }
+
   Widget _viewSwitch() => Container(
-        height: 48,
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFDCE5E1))),
+        height: 34,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(99), border: Border.all(color: const Color(0xFFDCE5E1))),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (grid, icon, tip) in [(false, Icons.view_agenda_outlined, 'Orodha'), (true, Icons.grid_view_rounded, 'Picha')])
             Tooltip(
@@ -516,10 +530,10 @@ class _CounterScreenState extends State<CounterScreen> {
                 },
                 child: AnimatedContainer(
                   duration: Motion.of(context, Motion.fast),
-                  width: 38,
+                  width: 40,
                   height: double.infinity,
-                  decoration: BoxDecoration(color: _grid == grid ? const Color(0xFFE3F4EC) : Colors.transparent, borderRadius: BorderRadius.circular(11)),
-                  child: Icon(icon, size: 20, color: _grid == grid ? brandGreen : mutedText),
+                  decoration: BoxDecoration(color: _grid == grid ? const Color(0xFFE3F4EC) : Colors.transparent, borderRadius: BorderRadius.circular(99)),
+                  child: Icon(icon, size: 17, color: _grid == grid ? brandGreen : mutedText),
                 ),
               ),
             ),
@@ -538,8 +552,8 @@ class _CounterScreenState extends State<CounterScreen> {
     return Opacity(
       opacity: out ? .6 : 1,
       child: Material(
+        // shape only (it has the corners): a Material given both shape and borderRadius asserts.
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -740,28 +754,29 @@ class _CounterScreenState extends State<CounterScreen> {
                 Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // v0.50: the name gets the whole width (two lines at most), so a long
+                  // name no longer stacks into five lines beside the price.
+                  Text(p.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.25, color: outOfStock ? mutedText : inkColor)),
+                  const SizedBox(height: 4),
                   Row(
-                    children: [
-                      Expanded(
-                        child: Text(p.name,
-                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: outOfStock ? mutedText : inkColor)),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Text('${formatTsh(unit.price)} / ${unitLabel(unit.name)}',
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
                         child: Text(
                           stockText,
-                          style: TextStyle(color: outOfStock ? dangerRed : (p.lowStock ? warnAmber : mutedText)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12.5, color: outOfStock ? dangerRed : (p.lowStock ? warnAmber : mutedText)),
                         ),
                       ),
+                      if (inBasket == 0)
+                        Text.rich(TextSpan(children: [
+                          TextSpan(text: formatTsh(unit.price), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: brandGreen)),
+                          TextSpan(text: ' / ${unitLabel(unit.name)}', style: const TextStyle(fontSize: 12, color: mutedText)),
+                        ])),
                       // In the basket: change the amount right here. The list
                       // never re-orders, so the next tap always lands on the
                       // same medicine.

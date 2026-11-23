@@ -773,6 +773,24 @@ Built from canvas boards 10–14.
   - The payment panel below is unchanged.
 - Checked with the Dart analyzer only.
 
+### v0.50: Maandishi (text size and font), quieter counter rows
+- **Why:** the app followed the phone's own text size (iPhone Settings → Display → Text Size). On a phone set large, every screen shouted, and on the counter a long medicine name stacked into five lines beside its price.
+- **Maandishi** (avatar → Maandishi; `core/appearance.dart`):
+  - **Size:** Ndogo (90%) · **Kawaida** (100%, the new default) · Kubwa (112%) · **Fuata simu** (the phone's own size, capped at 130% so rows and buttons can still hold their words).
+  - **Style:** Ya simu (San Francisco on iPhone) · Laini (Nunito) · Wazi (Inter).
+  - A preview counter row changes as you choose. The choice is kept on the phone (secure storage) and applies to every screen at once, with no restart (`MaterialApp.builder` sets the `textScaler`; the theme sets `fontFamily`).
+  - **New package:** `flutter pub add google_fonts`. Nunito and Inter download once and are then kept on the phone; with no internet the first time, the phone's own font shows until they arrive.
+- **Counter rows:** the name gets the full width, 15pt, two lines at most. Under it, stock (12.5pt, muted) sits on the left and the price on the right (green, 14pt, "/ kidonge" small).
+- Checked with the Dart analyzer only.
+
+### v0.49.2: the grid switch fixed and moved
+- **Crash fixed:** opening the photo grid failed an assertion (a card had both `shape` and `borderRadius`). The card now has only `shape`.
+- **The switch is in the list header,** not beside the search box:
+  - "Bidhaa 12" (or "Imepatikana 5" while searching), with a small ☰ | ▦ pill on the right.
+  - The search box is full width again.
+  - Hidden for "Je, ulimaanisha…?" suggestions.
+- No server changes needed.
+
 ### v0.49.1: the counter shows product photos
 - **List (the default):**
   - Every product row has its photo on the left (52 px). With no photo it shows the pack drawn in its form (box, jar, bottle…), outlined when the product is out of stock.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/appearance.dart';
 import 'core/loader.dart';
 import 'core/api_client.dart';
 import 'core/brand.dart';
@@ -17,6 +18,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // The language this phone showed last time, before the first screen draws.
   await lang.load();
+  // Text size and font chosen on this phone (v0.50), before the first screen draws.
+  await appearance.load();
 
   // One ApiClient and one Session for the whole app. They are created here,
   // once, and passed down to the screens that need them (no global variables).
@@ -45,6 +48,11 @@ class AfyaNjiaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Maandishi (v0.50): a new size or font redraws every screen as it is, with no restart.
+    return ListenableBuilder(listenable: appearance, builder: (context, _) => _app());
+  }
+
+  Widget _app() {
     return MaterialApp(
       title: 'Afya Njia',
       navigatorKey: navigatorKey,
@@ -55,14 +63,19 @@ class AfyaNjiaApp extends StatelessWidget {
       // innermost widget wins the tap, this only sees taps on empty space.
       // (v0.46.1: a raw-finger listener, so buttons and rows under the finger
       // no longer swallow the tap; see core/keyboard.dart.)
-      builder: (context, child) => KeyboardDismisser(
-        // The loading bar and the Afya Njia loader, over every screen.
-        child: ActivityLayer(child: child ?? const SizedBox()),
+      builder: (context, child) => MediaQuery(
+        // The app's own text size, not the phone's (unless "Fuata simu" is chosen).
+        data: MediaQuery.of(context).copyWith(textScaler: appearance.scaler(MediaQuery.of(context).textScaler)),
+        child: KeyboardDismisser(
+          // The loading bar and the Afya Njia loader, over every screen.
+          child: ActivityLayer(child: child ?? const SizedBox()),
+        ),
       ),
       // Coming back to a screen never reopens its keyboard.
       navigatorObservers: [keyboardObserver],
       theme: ThemeData(
         useMaterial3: true,
+        fontFamily: appearance.fontFamily,
         colorScheme: ColorScheme.fromSeed(seedColor: brandGreen, primary: brandGreen),
         scaffoldBackgroundColor: pageBackground,
         // Every dialog: a readable title, not the 24pt headline that a long
